@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -103,20 +103,31 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 复核现有 Account、Navigation、Review、Sync 与 Backup 测试后，确认 Account session restore/verify/offline/invalid、账户入口返回、Review stale snapshot 与 capture 交错、Sync outbox/profile switch 和 Backup validate 零写入已有边界测试保护。
+- 新增 `SyncRuntimeCharacterizationTest`，补齐此前没有直接测试的两条 Sync runtime 行为：只有 `ON_RESUME + SignedIn + Verified + sync enabled` 才允许立即同步；远端 profile 与本机绑定不一致时，在 push/pull 前返回 `SYNC_ACCOUNT_SWITCH_REQUIRED`。
+- 将现有纯函数 `shouldEnqueueLedgerSync` 从 `private` 放宽为 `internal`，仅作为同模块 characterization test seam；未移动 ownership、未修改业务分支。
+- Android 测试源码从历史基线 406 个 `@Test` 增至 408 个。
 
 ### Deviations From Plan
 
-无
+- 批准 Plan 记录的 406 个测试与执行前源码计数一致；确认 Sync runtime 存在两个真实保护缺口后新增 2 个测试，因此最终基线为 408，而不是固定沿用 406。
+- 因测试 resume gate 需要最小生产 seam，按 Validation Rules 额外运行了 Android Detekt。
+- 未运行 `assembleDebug`：本 Step 未涉及 Manifest、Resources、Gradle dependency、BuildConfig 或平台配置；Android 测试任务已成功完成 Debug 与 DebugUnitTest Kotlin/Java 编译。
 
 ### Test Results
 
-尚未执行
+- `:apps:android:testDebugUnitTest --tests "com.bks.SyncRuntimeCharacterizationTest"`：通过，2/2。
+- `:apps:android:detekt`：通过，0 issues。
+- `:apps:android:testDebugUnitTest`：最终通过，74 suites、408 tests、0 failures、0 errors、0 skipped。
+- 首次全量运行曾出现既有 `MainActivityTest.reportsFollowTheSelectedLedgerBook` 未及时显示“旅行账本”的单次失败（407/408）；该用例单独重跑通过，随后完整 408/408 重跑通过。
+- `git diff --check`：通过。
+- `gradlew --stop`：已执行。
 
 ### Remaining Risks
 
-尚未执行
+- `MainActivityTest.reportsFollowTheSelectedLedgerBook` 在首次全量运行中暴露一次 Compose/Room 异步可见性波动；当前无法稳定复现，单测和完整重跑均通过，后续若再次出现应单独治理其等待条件。
+- 本 Step 按规则未运行 APK assemble、instrumentation 或真机验证；没有资源、Manifest、平台或可见行为改动要求这些验证。
 
 ### Final Status
 
-Pending
+Completed

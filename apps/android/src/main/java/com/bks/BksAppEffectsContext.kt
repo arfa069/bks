@@ -318,7 +318,7 @@ private fun BksCloudSettingsEffects(context: BksAppEffectsContext) {
     }
 }
 
-private fun shouldEnqueueLedgerSync(
+internal fun shouldEnqueueLedgerSync(
     event: Lifecycle.Event,
     accountSession: AccountSession?,
     accountRuntimeState: AccountRuntimeState,

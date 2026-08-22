@@ -49,7 +49,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 0.1 | [Baseline](./phase-0/step-0.1-baseline.md) | Pending |
+| 0.1 | [Baseline](./phase-0/step-0.1-baseline.md) | Completed |
 
 ### Phase 1 — Application Composition Root
 
