@@ -4,10 +4,7 @@ import android.content.Intent
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.bks.data.local.BksDatabaseProvider
-import com.bks.data.local.LocalLedgerRepository
-import com.bks.data.local.LocalPreferencesRepository
-import com.bks.feature.review.ReviewQueuePersistence
+import com.bks.bksAppContainer
 import com.ven.assists.AssistsCore
 import com.ven.assists.service.AssistsService
 import kotlinx.coroutines.CancellationException
@@ -23,15 +20,8 @@ class BillSyncAccessibilityService : AssistsService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val acceptedWindows = AcceptedWindowMemory()
     private var automaticBookkeepingEnabled = false
-    private val database by lazy { BksDatabaseProvider.get(this) }
-    private val preferencesRepository by lazy { LocalPreferencesRepository(database) }
-    private val processor by lazy {
-        BillSyncCaptureProcessor(
-            pipeline = BillSyncPipeline(),
-            reviewQueuePersistence = ReviewQueuePersistence(LocalLedgerRepository(database)),
-            preferencesRepository = preferencesRepository
-        )
-    }
+    private val preferencesRepository by lazy { bksAppContainer.preferencesRepository }
+    private val processor by lazy { bksAppContainer.createBillSyncCaptureProcessor() }
 
     override fun onCreate() {
         super.onCreate()

@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import com.bks.bksAppContainer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,9 +40,7 @@ fun DiagnosticLogsScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val repository = repositoryOverride ?: remember(context.applicationContext) {
-        DiagnosticLogs.get(context)
-    }
+    val repository = repositoryOverride ?: context.bksAppContainer.diagnosticLogs
     val enabled by repository.enabled.collectAsState()
     val events by repository.events.collectAsState()
     val stats by repository.stats.collectAsState()

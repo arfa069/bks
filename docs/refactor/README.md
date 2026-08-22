@@ -55,7 +55,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 1.1 | [Application Container](./phase-1/step-1.1-app-container.md) | Pending |
+| 1.1 | [Application Container](./phase-1/step-1.1-app-container.md) | Completed |
 
 ### Phase 2 — Account / Cloud Settings / Sync Runtime
 

@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bks.feature.account.AccountCredentials
@@ -44,7 +46,11 @@ fun BksApp(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val appState = rememberBksAppState()
-    val dependencies = rememberBksAppDependencies(overrides)
+    val applicationContext = LocalContext.current.applicationContext
+    val container = remember(applicationContext) { applicationContext.bksAppContainer }
+    val dependencies = remember(container, overrides) {
+        container.createAppDependencies(overrides)
+    }
     val runtime = rememberBksAppRuntimeState()
     val actions = androidx.compose.runtime.remember(dependencies, runtime, appState, coroutineScope) {
         BksAppActions(

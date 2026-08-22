@@ -1,0 +1,120 @@
+package com.bks
+
+import android.content.Context
+import androidx.activity.ComponentActivity
+import com.bks.data.local.BksDatabase
+import com.bks.data.local.BksDatabaseProvider
+import com.bks.data.local.LocalLedgerRepository
+import com.bks.data.local.LocalPreferencesRepository
+import com.bks.feature.account.AndroidWechatAuthGateway
+import com.bks.feature.account.HttpAccountRepository
+import com.bks.feature.account.InstallationIdStore
+import com.bks.feature.account.LocalModeSessionStore
+import com.bks.feature.account.SecureAccountSessionStore
+import com.bks.feature.account.WechatAuthGateway
+import com.bks.feature.account.WechatAvatarCache
+import com.bks.feature.billsync.BillSyncCaptureProcessor
+import com.bks.feature.billsync.BillSyncPipeline
+import com.bks.feature.billsync.BillSyncStateCoordinator
+import com.bks.feature.categorization.HttpAiCategorizationGateway
+import com.bks.feature.categorization.HttpCloudAiSettingsGateway
+import com.bks.feature.diagnostics.DiagnosticLogRepository
+import com.bks.feature.diagnostics.DiagnosticLogs
+import com.bks.feature.review.ReviewQueuePersistence
+import com.bks.feature.settings.LocalDataBackupRepository
+import com.bks.feature.sync.HttpLedgerSyncRepository
+import com.bks.feature.sync.LedgerSyncCoordinator
+import com.bks.feature.sync.LedgerSyncLocalStore
+
+internal class BksAppContainer(context: Context) {
+    private val applicationContext = context.applicationContext
+
+    val database: BksDatabase by lazy { BksDatabaseProvider.get(applicationContext) }
+    val ledgerRepository: LocalLedgerRepository by lazy { LocalLedgerRepository(database) }
+    val preferencesRepository: LocalPreferencesRepository by lazy { LocalPreferencesRepository(database) }
+    val dataBackupRepository: LocalDataBackupRepository by lazy { LocalDataBackupRepository(database) }
+    val ledgerSyncLocalStore: LedgerSyncLocalStore by lazy { LedgerSyncLocalStore(database) }
+    val localModeSessionStore: LocalModeSessionStore by lazy { LocalModeSessionStore(applicationContext) }
+    val secureAccountSessionStore: SecureAccountSessionStore by lazy {
+        SecureAccountSessionStore(applicationContext)
+    }
+    val installationIdStore: InstallationIdStore by lazy { InstallationIdStore(applicationContext) }
+    val accountRepository: HttpAccountRepository by lazy {
+        HttpAccountRepository(
+            backendUrl = BuildConfig.BKS_BACKEND_URL,
+            installationId = installationIdStore::getOrCreate,
+            allowHttp = BuildConfig.BKS_ALLOW_HTTP_LEDGER_SYNC
+        )
+    }
+    val aiCategorizationGateway: HttpAiCategorizationGateway by lazy {
+        HttpAiCategorizationGateway(
+            backendUrl = BuildConfig.BKS_BACKEND_URL,
+            allowHttp = BuildConfig.BKS_ALLOW_HTTP_LEDGER_SYNC
+        )
+    }
+    val cloudAiSettingsGateway: HttpCloudAiSettingsGateway by lazy {
+        HttpCloudAiSettingsGateway(
+            backendUrl = BuildConfig.BKS_BACKEND_URL,
+            allowHttp = BuildConfig.BKS_ALLOW_HTTP_LEDGER_SYNC
+        )
+    }
+    val ledgerSyncRepository: HttpLedgerSyncRepository by lazy {
+        HttpLedgerSyncRepository(
+            backendUrl = BuildConfig.BKS_BACKEND_URL,
+            allowHttp = BuildConfig.BKS_ALLOW_HTTP_LEDGER_SYNC
+        )
+    }
+    val wechatAuthGateway: WechatAuthGateway? by lazy {
+        BuildConfig.BKS_WECHAT_APP_ID
+            .takeIf(String::isNotBlank)
+            ?.let { appId -> AndroidWechatAuthGateway(applicationContext, appId) }
+    }
+    val wechatAvatarCache: WechatAvatarCache by lazy { WechatAvatarCache(applicationContext) }
+    val diagnosticLogs: DiagnosticLogRepository by lazy { DiagnosticLogs.get(applicationContext) }
+
+    fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies = BksAppDependencies(
+        context = applicationContext,
+        local = BksLocalDependencies(
+            database = database,
+            ledgerRepository = ledgerRepository,
+            preferencesRepository = preferencesRepository,
+            dataBackupRepository = dataBackupRepository,
+            reviewQueuePersistence = ReviewQueuePersistence(ledgerRepository)
+        ),
+        account = BksAccountDependencies(
+            accountRepository = overrides.accountRepository ?: accountRepository,
+            localModeSessionStore = localModeSessionStore,
+            secureAccountSessionStore = secureAccountSessionStore,
+            persistSessionOverride = overrides.persistAccountSession,
+            wechatAuthGateway = overrides.wechatAuthGateway ?: wechatAuthGateway,
+            wechatAvatarCache = wechatAvatarCache,
+            installationIdStore = installationIdStore
+        ),
+        sync = BksSyncDependencies(
+            localStore = ledgerSyncLocalStore,
+            coordinator = createLedgerSyncCoordinator(),
+            repository = ledgerSyncRepository
+        ),
+        aiCategorizationGateway = overrides.aiCategorizationGateway ?: aiCategorizationGateway,
+        cloudAiSettingsGateway = overrides.cloudAiSettingsGateway ?: cloudAiSettingsGateway,
+        diagnosticLogs = diagnosticLogs
+    )
+
+    fun createLedgerSyncCoordinator(): LedgerSyncCoordinator = LedgerSyncCoordinator(
+        localStore = ledgerSyncLocalStore,
+        repository = ledgerSyncRepository,
+        deviceId = installationIdStore::getOrCreate
+    )
+
+    fun createBillSyncCaptureProcessor(): BillSyncCaptureProcessor = BillSyncCaptureProcessor(
+        pipeline = BillSyncPipeline(),
+        reviewQueuePersistence = ReviewQueuePersistence(ledgerRepository),
+        preferencesRepository = preferencesRepository
+    )
+
+    fun createBillSyncStateCoordinator(activity: ComponentActivity): BillSyncStateCoordinator =
+        BillSyncStateCoordinator(activity)
+}
+
+internal val Context.bksAppContainer: BksAppContainer
+    get() = (applicationContext as BksApplication).appContainer

@@ -5,7 +5,6 @@ import com.bks.feature.diagnostics.DiagnosticComponent
 import com.bks.feature.diagnostics.DiagnosticEvent
 import com.bks.feature.diagnostics.DiagnosticEventMetadata
 import com.bks.feature.diagnostics.DiagnosticLevel
-import com.bks.feature.diagnostics.DiagnosticLogs
 import com.bks.feature.diagnostics.DiagnosticSensitiveField
 import com.bks.feature.diagnostics.DiagnosticSensitivePayload
 import com.bks.feature.diagnostics.DiagnosticSource
@@ -13,8 +12,11 @@ import com.bks.feature.diagnostics.toDiagnosticExceptionDetails
 import com.ven.assists.AssistsCore
 
 class BksApplication : Application() {
+    internal val appContainer: BksAppContainer by lazy { BksAppContainer(this) }
+
     override fun onCreate() {
         super.onCreate()
+        appContainer
         AssistsCore.init(this)
         installDiagnosticCrashHandler()
     }
@@ -23,7 +25,7 @@ class BksApplication : Application() {
         val original = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             runCatching {
-                DiagnosticLogs.get(this@BksApplication).record(
+                appContainer.diagnosticLogs.record(
                     DiagnosticEvent(
                         metadata = DiagnosticEventMetadata(
                             level = DiagnosticLevel.Error,

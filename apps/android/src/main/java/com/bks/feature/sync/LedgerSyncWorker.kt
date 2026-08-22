@@ -10,11 +10,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.bks.BuildConfig
-import com.bks.data.local.BksDatabaseProvider
+import com.bks.bksAppContainer
 import com.bks.feature.account.AccountSessionRestoreResult
-import com.bks.feature.account.InstallationIdStore
-import com.bks.feature.account.SecureAccountSessionStore
 import java.util.concurrent.TimeUnit
 
 class LedgerSyncWorker(
@@ -22,20 +19,14 @@ class LedgerSyncWorker(
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
-        val restored = SecureAccountSessionStore(applicationContext).restore()
+        val container = applicationContext.bksAppContainer
+        val restored = container.secureAccountSessionStore.restore()
             as? AccountSessionRestoreResult.Restored
             ?: return Result.success()
-        val database = BksDatabaseProvider.get(applicationContext)
-        val local = LedgerSyncLocalStore(database)
+        val local = container.ledgerSyncLocalStore
         if (!local.currentState().enabled) return Result.success()
-        val repository = HttpLedgerSyncRepository(
-            BuildConfig.BKS_BACKEND_URL,
-            BuildConfig.BKS_ALLOW_HTTP_LEDGER_SYNC
-        )
-        val installationId = InstallationIdStore(applicationContext)
         return when (
-            val result = LedgerSyncCoordinator(local, repository, installationId::getOrCreate)
-                .synchronize(restored.credentials.token)
+            val result = container.createLedgerSyncCoordinator().synchronize(restored.credentials.token)
         ) {
             is LedgerSyncOperationResult.Success -> Result.success()
             is LedgerSyncOperationResult.Failure -> if (result.retryable) Result.retry() else Result.failure()

@@ -7,9 +7,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthCallbackIntent
-import com.bks.feature.billsync.BillSyncStateCoordinator
+
 class MainActivity : ComponentActivity() {
-    private val coordinator by lazy { BillSyncStateCoordinator(this) }
+    private val coordinator by lazy { bksAppContainer.createBillSyncStateCoordinator(this) }
     private val pendingWechatAuthCallback = mutableStateOf<WechatAuthCallback?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {

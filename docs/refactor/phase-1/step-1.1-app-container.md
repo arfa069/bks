@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -117,20 +117,37 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 新增唯一生产 `BksAppContainer`，由 `BksApplication` 持有；Room Database、现有 Repository、Secure/Local Store、HTTP Gateway、头像缓存和 Diagnostic Repository 改为 Application-scoped lazy dependencies。
+- `BksApp` 不再创建生产 Database、Repository、Gateway 或 Store，只从 Application container 请求临时 `BksAppDependencies` facade；`BksAppOverrides` 仅覆盖指定测试接口并复用 container 的同一 Database graph。
+- Container 通过 factory 创建 composition-scoped `LedgerSyncCoordinator`、Activity-scoped `BillSyncStateCoordinator` 和 Service-scoped `BillSyncCaptureProcessor`，未把这些 owner 提升为 Application singleton。
+- `MainActivity`、`BillSyncAccessibilityService`、`LedgerSyncWorker` 与 `DiagnosticLogsScreen` 改为消费 Application container；生产代码中的 Database、Repository、Gateway 和 Store 组装入口已收敛到 container。
+- 保留 `BksAppDependencies` 作为旧消费者 facade，未提前执行后续 feature ownership 迁移；该 facade 仍按计划在 Step 7.1 删除。
+- 新增 `BksAppContainerTest`，覆盖 Application 持有的 container 稳定性、singleton Database graph、override overlay 和 factory 生命周期隔离。
 
 ### Deviations From Plan
 
-无
+- 未新增 `BksViewModelFactory`、`BksViewModelFactoryTest` 或 `lifecycle-viewmodel-compose` artifact：当前代码没有 ViewModel 或 Compose `viewModel()` 消费者，强行创建空壳 factory 会违反本 Plan 的非强制准入规则。现有 lifecycle-scoped owner 的 factory 边界改由 `BksAppContainerTest` 直接验证。
+- 未修改 `BksDatabaseProvider.kt` 或 `apps/android/build.gradle.kts`：现有 Provider 已提供唯一 Room instance，且当前依赖足够完成本 Step，没有 schema、migration、dependency 或版本变更。
+- `DiagnosticLogsScreen.kt` 不在 Plan 的候选文件列表中，但执行时确认它仍从 Compose 直接获取生产 Diagnostic Repository；为满足本 Step completion criterion，将其最小改为消费同一 Application container，未修改诊断行为、数据格式或采集范围。
+- 虽然没有 Gradle dependency、Manifest 或 Resource 改动，仍运行了 `assembleDebug`，因为实际迁移了 `BillSyncAccessibilityService` 的装配路径，适用的 `feature/billsync/AGENTS.md` 明确要求 Debug 构建验证。
 
 ### Test Results
 
-尚未执行
+- 专项命令（`BksAppContainerTest`、`MainActivityTest`、`BillSyncAccessibilityServiceHealthTest`、`com.bks.feature.diagnostics.*`）：通过，9 suites、52 tests、0 failures、0 errors、0 skipped。
+- `:apps:android:detekt`：通过，0 issues。
+- `:apps:android:assembleDebug`：通过。
+- `:apps:android:testDebugUnitTest`：通过，75 suites、411 tests、0 failures、0 errors、0 skipped。
+- 首次最终全量运行中，既有 `MainActivityTest.firstLocalModeSelectionNavigatesToHome` 在进入页动画期间仅能从 unmerged semantics tree 找到 `agreement-toggle`，单次失败（410/411）；该用例单独重跑通过，随后完整 411/411 重跑通过。
+- `git diff --check`：通过。
+- `gradlew --stop`：已执行。
 
 ### Remaining Risks
 
-尚未执行
+- `BksAppDependencies`、`BksAppRuntimeState` 与现有 Route/Screen God Layer 仍是有意保留的兼容边界，后续 Step 才迁移和删除；本 Step 未提前处理。
+- 本 Step 未运行 instrumentation、真机或真实后端同步；没有业务、Room schema、API、Manifest、Resource 或可见 UI 行为变更要求这些验证，Service 注册壳由现有 Robolectric 测试和 Debug APK 构建覆盖。
+- Factory 测试证明对象 identity 与同一 Database graph，但后续 feature owner 迁移仍需分别验证其 start/stop、重复启动和并发语义。
+- `MainActivityTest.firstLocalModeSelectionNavigatesToHome` 暴露一次 Compose transition/merged semantics 可见性波动；当前无法稳定复现，专项运行、单测和最终全量重跑均通过，若后续再次出现应单独收紧测试等待条件。
 
 ### Final Status
 
-Pending
+Completed
