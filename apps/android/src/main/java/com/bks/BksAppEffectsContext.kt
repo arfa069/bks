@@ -9,9 +9,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.bks.feature.account.AccountRuntimeState
 import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
-import com.bks.feature.account.cloudConfigAccountKey
-import com.bks.feature.categorization.AiCategorizationSettings
-import com.bks.feature.categorization.CloudAiSettingsGatewayResult
 import com.bks.feature.diagnostics.DiagnosticComponent
 import com.bks.feature.diagnostics.DiagnosticEvent
 import com.bks.feature.diagnostics.DiagnosticEventMetadata
@@ -40,7 +37,6 @@ internal fun BksAppEffects(context: BksAppEffectsContext) {
     BksSyncStateEffects(context)
     BksSyncLifecycleEffects(context)
     BksLocalPersistenceEffects(context)
-    BksCloudSettingsEffects(context)
 }
 
 @Composable
@@ -181,65 +177,6 @@ private fun BksLocalPersistenceEffects(context: BksAppEffectsContext) {
             if (runtime.accountSession !is AccountSession.SignedIn) {
                 runtime.aiSettings = preferences.aiSettings
             }
-        }
-    }
-}
-
-@Composable
-private fun BksCloudSettingsEffects(context: BksAppEffectsContext) {
-    val dependencies = context.dependencies
-    val runtime = context.runtime
-    LaunchedEffect(
-        runtime.accountSession,
-        runtime.accountRuntimeState.status,
-        runtime.accountDeletionState.isPending,
-        dependencies.cloudAiSettingsGateway
-    ) {
-        val signedIn = runtime.accountSession as? AccountSession.SignedIn
-        if (
-            signedIn == null ||
-            !runtime.accountRuntimeState.cloudWritesAllowed ||
-            !runtime.accountDeletionState.cloudWritesAllowed
-        ) {
-            runtime.aiSettings = AiCategorizationSettings()
-            runtime.cloudAiSettingsLoadedToken = null
-            runtime.aiSettingsSyncInFlight = false
-            return@LaunchedEffect
-        }
-        runtime.aiSettings = AiCategorizationSettings()
-        runtime.cloudAiSettingsLoadedToken = null
-        runtime.aiSettingsSyncInFlight = true
-        try {
-            val accountKey = signedIn.cloudConfigAccountKey()
-            val cached = accountKey?.let {
-                dependencies.local.preferencesRepository.getCachedDefaultFundingAccount(it)
-            }
-            dependencies.local.preferencesRepository.setDefaultFundingAccountSyncId(cached?.syncId)
-            val result = if (cached?.pendingUpload == true) {
-                dependencies.cloudAiSettingsGateway.writeDefaultFundingAccount(signedIn.token, cached.syncId)
-            } else {
-                dependencies.cloudAiSettingsGateway.read(signedIn.token)
-            }
-            when (result) {
-                is CloudAiSettingsGatewayResult.Success -> {
-                    runtime.aiSettings = result.settings
-                    runtime.cloudAiSettingsLoadedToken = signedIn.token
-                    dependencies.local.preferencesRepository.updateAiSettings(result.settings)
-                    if (accountKey != null && result.supportsDefaultFundingAccount) {
-                        dependencies.local.preferencesRepository.cacheDefaultFundingAccount(
-                            accountKey = accountKey,
-                            syncId = result.defaultFundingAccountSyncId,
-                            pendingUpload = false
-                        )
-                        dependencies.local.preferencesRepository.setDefaultFundingAccountSyncId(
-                            result.defaultFundingAccountSyncId
-                        )
-                    }
-                }
-                is CloudAiSettingsGatewayResult.Failure -> Unit
-            }
-        } finally {
-            runtime.aiSettingsSyncInFlight = false
         }
     }
 }

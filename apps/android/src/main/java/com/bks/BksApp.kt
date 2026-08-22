@@ -57,7 +57,9 @@ fun BksApp(
     }
     val runtime = rememberBksAppRuntimeState()
     val accountSessionCoordinator = dependencies.account.sessionCoordinator
+    val cloudSettingsCoordinator = dependencies.account.cloudSettingsCoordinator
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
+    val cloudSettingsState by cloudSettingsCoordinator.state.collectAsStateWithLifecycle()
     val actions = androidx.compose.runtime.remember(dependencies, runtime, appState, coroutineScope) {
         BksAppActions(
             dependencies = dependencies,
@@ -89,11 +91,14 @@ fun BksApp(
             )
         }
     }
-    LaunchedEffect(accountState) {
+    LaunchedEffect(accountState, cloudSettingsState) {
         runtime.accountSession = accountState.session
         runtime.isRestoringAccountSession = accountState.isRestoring
         runtime.accountRuntimeState = accountState.runtimeState
         runtime.accountDeletionState = accountState.deletionState
+        runtime.aiSettings = cloudSettingsState.aiSettings
+        runtime.cloudAiSettingsLoadedToken = cloudSettingsState.loadedToken
+        runtime.aiSettingsSyncInFlight = cloudSettingsState.settingsSyncInFlight
     }
 
     BksAppEffects(

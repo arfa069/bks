@@ -8,8 +8,8 @@ import androidx.compose.ui.Modifier
 import com.bks.api.LedgerSyncConflictChoiceContract
 import com.bks.data.local.FundingAccountDeleteResult as DataFundingAccountDeleteResult
 import com.bks.data.local.LedgerBookDeleteResult as DataLedgerBookDeleteResult
+import com.bks.feature.account.AccountCloudSettingsOperationResult
 import com.bks.feature.account.AccountSession
-import com.bks.feature.account.cloudConfigAccountKey
 import com.bks.feature.ledger.FundingAccountDeleteResult as UiFundingAccountDeleteResult
 import com.bks.feature.ledger.LedgerBookDeleteResult as UiLedgerBookDeleteResult
 import com.bks.feature.ledger.LedgerScreen
@@ -93,37 +93,13 @@ internal fun BksLedgerRoute(
             dependencies.local.ledgerRepository.updateFundingAccount(id, label, paymentSource)
         },
         onSetDefaultFundingAccount = { id ->
-            dependencies.local.ledgerRepository.setDefaultFundingAccount(id)
-            val signedIn = runtime.accountSession as? AccountSession.SignedIn
-            if (
-                signedIn != null &&
-                runtime.accountRuntimeState.cloudWritesAllowed &&
-                runtime.accountDeletionState.cloudWritesAllowed
-            ) {
-                val syncId = id?.let { accountId ->
-                    runtime.ledgerState.fundingAccounts.firstOrNull { it.id == accountId }?.syncId
-                }
-                val accountKey = signedIn.cloudConfigAccountKey()
-                if (accountKey != null) {
-                    dependencies.local.preferencesRepository.cacheDefaultFundingAccount(
-                        accountKey = accountKey,
-                        syncId = syncId,
-                        pendingUpload = true
-                    )
-                }
-                when (val result = dependencies.cloudAiSettingsGateway.writeDefaultFundingAccount(signedIn.token, syncId)) {
-                    is com.bks.feature.categorization.CloudAiSettingsGatewayResult.Success -> {
-                        if (accountKey != null && result.supportsDefaultFundingAccount) {
-                            dependencies.local.preferencesRepository.cacheDefaultFundingAccount(
-                                accountKey = accountKey,
-                                syncId = result.defaultFundingAccountSyncId,
-                                pendingUpload = false
-                            )
-                        }
-                    }
-                    is com.bks.feature.categorization.CloudAiSettingsGatewayResult.Failure ->
-                        context.appState.snackbarHostState.showSnackbar("默认账户已保存到本机，云端同步失败")
-                }
+            when (dependencies.account.cloudSettingsCoordinator.setDefaultFundingAccount(id)) {
+                is AccountCloudSettingsOperationResult.CloudFailure ->
+                    context.appState.snackbarHostState.showSnackbar("默认账户已保存到本机，云端同步失败")
+                AccountCloudSettingsOperationResult.CloudWritesBlocked,
+                AccountCloudSettingsOperationResult.InFlight,
+                AccountCloudSettingsOperationResult.Stale,
+                AccountCloudSettingsOperationResult.Success -> Unit
             }
         },
         onDeleteFundingAccount = { id ->

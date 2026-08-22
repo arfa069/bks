@@ -28,6 +28,14 @@ class BksAppContainerTest {
         assertSame(container.preferencesRepository, firstDependencies.local.preferencesRepository)
         assertSame(container.accountSessionCoordinator, firstDependencies.account.sessionCoordinator)
         assertSame(firstDependencies.account.sessionCoordinator, secondDependencies.account.sessionCoordinator)
+        assertSame(
+            container.accountCloudSettingsCoordinator,
+            firstDependencies.account.cloudSettingsCoordinator
+        )
+        assertSame(
+            firstDependencies.account.cloudSettingsCoordinator,
+            secondDependencies.account.cloudSettingsCoordinator
+        )
     }
 
     @Test
@@ -41,6 +49,10 @@ class BksAppContainerTest {
 
         assertSame(accountRepository, dependencies.account.accountRepository)
         assertNotSame(container.accountSessionCoordinator, dependencies.account.sessionCoordinator)
+        assertNotSame(
+            container.accountCloudSettingsCoordinator,
+            dependencies.account.cloudSettingsCoordinator
+        )
         assertSame(container.database, dependencies.local.database)
         assertSame(container.ledgerRepository, dependencies.local.ledgerRepository)
     }

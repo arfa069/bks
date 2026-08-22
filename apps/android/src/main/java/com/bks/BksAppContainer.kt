@@ -6,6 +6,7 @@ import com.bks.data.local.BksDatabase
 import com.bks.data.local.BksDatabaseProvider
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
+import com.bks.feature.account.AccountCloudSettingsCoordinator
 import com.bks.feature.account.AndroidWechatAuthGateway
 import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.HttpAccountRepository
@@ -18,6 +19,7 @@ import com.bks.feature.billsync.BillSyncCaptureProcessor
 import com.bks.feature.billsync.BillSyncPipeline
 import com.bks.feature.billsync.BillSyncStateCoordinator
 import com.bks.feature.categorization.HttpAiCategorizationGateway
+import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.categorization.HttpCloudAiSettingsGateway
 import com.bks.feature.diagnostics.DiagnosticLogRepository
 import com.bks.feature.diagnostics.DiagnosticLogs
@@ -80,36 +82,53 @@ internal class BksAppContainer(context: Context) {
     val accountSessionCoordinator: AccountSessionCoordinator by lazy {
         createAccountSessionCoordinator(BksAppOverrides())
     }
+    val accountCloudSettingsCoordinator: AccountCloudSettingsCoordinator by lazy {
+        createAccountCloudSettingsCoordinator(
+            sessionCoordinator = accountSessionCoordinator,
+            gateway = cloudAiSettingsGateway
+        )
+    }
 
-    fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies = BksAppDependencies(
-        context = applicationContext,
-        local = BksLocalDependencies(
-            database = database,
-            ledgerRepository = ledgerRepository,
-            preferencesRepository = preferencesRepository,
-            dataBackupRepository = dataBackupRepository,
-            reviewQueuePersistence = ReviewQueuePersistence(ledgerRepository)
-        ),
-        account = BksAccountDependencies(
-            accountRepository = overrides.accountRepository ?: accountRepository,
-            sessionCoordinator = if (overrides.hasAccountSessionOverrides()) {
-                createAccountSessionCoordinator(overrides).also { it.start() }
-            } else {
-                accountSessionCoordinator
-            },
-            wechatAuthGateway = overrides.wechatAuthGateway ?: wechatAuthGateway,
-            wechatAvatarCache = wechatAvatarCache,
-            installationIdStore = installationIdStore
-        ),
-        sync = BksSyncDependencies(
-            localStore = ledgerSyncLocalStore,
-            coordinator = createLedgerSyncCoordinator(),
-            repository = ledgerSyncRepository
-        ),
-        aiCategorizationGateway = overrides.aiCategorizationGateway ?: aiCategorizationGateway,
-        cloudAiSettingsGateway = overrides.cloudAiSettingsGateway ?: cloudAiSettingsGateway,
-        diagnosticLogs = diagnosticLogs
-    )
+    fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies {
+        val sessionCoordinator = if (overrides.hasAccountSessionOverrides()) {
+            createAccountSessionCoordinator(overrides).also { it.start() }
+        } else {
+            accountSessionCoordinator
+        }
+        val cloudSettingsCoordinator = if (overrides.hasCloudSettingsOverrides()) {
+            createAccountCloudSettingsCoordinator(
+                sessionCoordinator = sessionCoordinator,
+                gateway = overrides.cloudAiSettingsGateway ?: cloudAiSettingsGateway
+            ).also { it.start() }
+        } else {
+            accountCloudSettingsCoordinator
+        }
+        return BksAppDependencies(
+            context = applicationContext,
+            local = BksLocalDependencies(
+                database = database,
+                ledgerRepository = ledgerRepository,
+                preferencesRepository = preferencesRepository,
+                dataBackupRepository = dataBackupRepository,
+                reviewQueuePersistence = ReviewQueuePersistence(ledgerRepository)
+            ),
+            account = BksAccountDependencies(
+                accountRepository = overrides.accountRepository ?: accountRepository,
+                sessionCoordinator = sessionCoordinator,
+                cloudSettingsCoordinator = cloudSettingsCoordinator,
+                wechatAuthGateway = overrides.wechatAuthGateway ?: wechatAuthGateway,
+                wechatAvatarCache = wechatAvatarCache,
+                installationIdStore = installationIdStore
+            ),
+            sync = BksSyncDependencies(
+                localStore = ledgerSyncLocalStore,
+                coordinator = createLedgerSyncCoordinator(),
+                repository = ledgerSyncRepository
+            ),
+            aiCategorizationGateway = overrides.aiCategorizationGateway ?: aiCategorizationGateway,
+            diagnosticLogs = diagnosticLogs
+        )
+    }
 
     fun createLedgerSyncCoordinator(): LedgerSyncCoordinator = LedgerSyncCoordinator(
         localStore = ledgerSyncLocalStore,
@@ -139,10 +158,24 @@ internal class BksAppContainer(context: Context) {
                 wechatAvatarCache.clear()
             }
         )
+
+    private fun createAccountCloudSettingsCoordinator(
+        sessionCoordinator: AccountSessionCoordinator,
+        gateway: CloudAiSettingsGateway
+    ): AccountCloudSettingsCoordinator = AccountCloudSettingsCoordinator(
+        accountSessionState = sessionCoordinator.state,
+        preferencesRepository = preferencesRepository,
+        fundingAccountRepository = ledgerRepository,
+        cloudGateway = gateway,
+        applicationScope = applicationScope
+    )
 }
 
 private fun BksAppOverrides.hasAccountSessionOverrides(): Boolean =
     accountRepository != null || persistAccountSession != null
+
+private fun BksAppOverrides.hasCloudSettingsOverrides(): Boolean =
+    hasAccountSessionOverrides() || cloudAiSettingsGateway != null
 
 internal val Context.bksAppContainer: BksAppContainer
     get() = (applicationContext as BksApplication).appContainer

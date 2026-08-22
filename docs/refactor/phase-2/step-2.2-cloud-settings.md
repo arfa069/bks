@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -111,20 +111,34 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 新增 Application-scoped `AccountCloudSettingsCoordinator`，直接收集 Step 2.1 的 `AccountSessionCoordinator.StateFlow`，以 generation + token/account key scope 统一拥有 Cloud AI settings 加载/保存、同步中状态和默认资金账户 pending upload 编排；`start()` 使用原子门控保证幂等。
+- Session/token、`OfflineUnverified` 或注销冷静期变化会立即重置 Coordinator 稳定状态并使旧 generation 失效；AI settings 本地提交在最终发布点再次核对 operation scope，失效提交会恢复原本地值。Cloud operation 通过单一 `Mutex` 串行，取消路径通过 `finally` 释放同步中状态，避免 Activity 重建后永久阻断后续写入。
+- 默认资金账户现在由 Coordinator 调用既有 `FundingAccountRepository` 先完成本地事务，并在独立的短事务锁内按账户 key 写入 pending cache；云操作继续串行，但不会把本地写入排在网络请求之后。generation gate 会阻止较早的 initial load 覆盖新本地选择；云失败或调用方取消会保留本地默认值和 `pendingUpload=true`，后续 verified Session 启动会重试并在成功后清除 pending。
+- `BksAppContainer` 持有唯一生产 Coordinator，`BksApplication` 启动它；测试 override 使用与 override Session/Gateway 匹配的 Coordinator。`BksApp` lifecycle-aware 收集稳定 State，并只向尚未迁移的 Root runtime 写入单向 legacy projection。
+- 删除 `BksCloudSettingsEffects` 和 Root/Route 对 `CloudAiSettingsGateway` 的直接业务调用；`BksAppActions.persistAiSettings`、默认资金账户回调和本地数据清理只委托 Coordinator，既有用户反馈文案保持不变。
+- 新增 `AccountCloudSettingsCoordinatorTest`，扩展 `BksAppContainerTest`，覆盖幂等启动、token 切换、迟到写响应、取消后 in-flight 清理、慢 initial load 期间的本地优先写入、本地成功/云失败、pending 重试、offline/deletion gate 和生产 singleton/override owner。
 
 ### Deviations From Plan
 
-无
+- 当前代码显示默认资金账户的本地 source of truth 实际位于 `FundingAccountRepository`/`LocalLedgerRepository`，不是 `LocalPreferencesRepository`；因此 Coordinator 同时使用前者执行本地优先写入、后者维护既有账户隔离 cache/pending 语义，没有复制持久数据为第二真相。
+- 为建立真正的 Application owner 并迁移实际消费者，最小修改了 Plan 文件清单外的 `BksApplication.kt`、`BksAppContainer.kt`、`BksAppDependencies.kt`、`BksApp.kt`、`BksLedgerRoutes.kt` 和对应 Container 测试；未进入 Sync Runtime 或后续 Step。
+- `HttpCloudAiSettingsGateway.kt`、`LocalPreferencesRepository.kt` 与 `AccountSessionState.kt` 无需修改：当前 API、缓存格式、account key 与 gate 已满足本 Step，强行调整会扩大范围。
+- 未新增 Settings Manager、UseCase、wrapper、dependency、Effect Channel 或 SharedFlow；现有同步用户反馈继续由调用方 snackbar callback 呈现。
 
 ### Test Results
 
-尚未执行
+- Step 专项命令（`AccountCloudSettingsCoordinatorTest`、`HttpCloudAiSettingsGatewayTest`、`LocalPreferencesRepositoryTest`）：通过；三类共 22 tests、0 failures。另含 `BksAppContainerTest` 的同轮 focused 验证通过，合计 25 tests、0 failures。
+- `:apps:android:detekt`：通过，0 issues。首次运行仅报告 Coordinator 辅助函数数达到阈值；内联一个无价值只读 helper 后通过，未添加 suppression 或新 wrapper。
+- `:apps:android:testDebugUnitTest --max-workers=1`：通过，77 suites、424 tests、0 failures、0 errors、0 skipped。
+- 前两次额外全量尝试各出现一个不同的非稳定既有用例失败：`MainActivityTest.reportsFollowTheSelectedLedgerBook` 与 `SecureAccountSessionStoreTest.corruptedCiphertextIsClearedAndDowngradesSafely`；两者分别单独复跑通过，最终完整串行运行全绿，未修改或放宽这些无关测试。
+- `git diff --check`：通过。
 
 ### Remaining Risks
 
-尚未执行
+- `BksAppRuntimeState` 仍保留 AI settings、loaded token 和 in-flight 的只读 projection，供尚未迁移的 Route/Screen 使用；Cloud settings 正确性与写入已不依赖该 bridge，projection 按 Step 7.1 删除。
+- 无 `accountUuid` 且无 `accountId` 的 legacy SignedIn Session 仍无法建立账户隔离的默认资金账户 cache key；这是既有 `cloudConfigAccountKey()` 边界，本 Step 未改变认证契约或扩大 fallback。
+- 未运行 instrumentation、真机、真实后端或 `assembleDebug`：本 Step 未修改 Manifest、Resource、Gradle dependency、Cloud API、Room schema 或偏好格式；真实后端取消/响应时序仍需后续集成验收覆盖。
 
 ### Final Status
 
-Pending
+Completed

@@ -4,13 +4,13 @@ import android.content.Context
 import com.bks.data.local.BksDatabase
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
+import com.bks.feature.account.AccountCloudSettingsCoordinator
 import com.bks.feature.account.AccountRepository
 import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.InstallationIdStore
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.account.WechatAvatarCache
 import com.bks.feature.categorization.AiCategorizationGateway
-import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.diagnostics.DiagnosticLogRepository
 import com.bks.feature.review.ReviewQueuePersistence
 import com.bks.feature.settings.LocalDataBackupRepository
@@ -29,6 +29,7 @@ internal data class BksLocalDependencies(
 internal data class BksAccountDependencies(
     val accountRepository: AccountRepository,
     val sessionCoordinator: AccountSessionCoordinator,
+    val cloudSettingsCoordinator: AccountCloudSettingsCoordinator,
     val wechatAuthGateway: WechatAuthGateway?,
     val wechatAvatarCache: WechatAvatarCache,
     val installationIdStore: InstallationIdStore
@@ -46,6 +47,5 @@ internal data class BksAppDependencies(
     val account: BksAccountDependencies,
     val sync: BksSyncDependencies,
     val aiCategorizationGateway: AiCategorizationGateway,
-    val cloudAiSettingsGateway: CloudAiSettingsGateway,
     val diagnosticLogs: DiagnosticLogRepository
 )

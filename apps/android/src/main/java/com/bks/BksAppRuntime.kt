@@ -9,12 +9,12 @@ import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_NAME
 import com.bks.data.local.LedgerRepositoryState
 import com.bks.feature.account.AccountDeletionUiState
+import com.bks.feature.account.AccountCloudSettingsOperationResult
 import com.bks.feature.account.AccountRuntimeState
 import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
-import com.bks.feature.categorization.CloudAiSettingsGatewayResult
 import com.bks.feature.diagnostics.DiagnosticComponent
 import com.bks.feature.diagnostics.DiagnosticEvent
 import com.bks.feature.diagnostics.DiagnosticEventMetadata
@@ -121,34 +121,23 @@ internal class BksAppActions(
     }
 
     fun persistAiSettings(nextSettings: AiCategorizationSettings) {
-        if (runtime.aiSettingsSyncInFlight) return
-        val signedIn = runtime.accountSession as? AccountSession.SignedIn
-        if (
-            signedIn == null ||
-            !runtime.accountRuntimeState.cloudWritesAllowed ||
-            !runtime.accountDeletionState.cloudWritesAllowed
-        ) {
-            coroutineScope.launch {
-                appState.snackbarHostState.showSnackbar(
-                    if (signedIn == null) "登录后才能同步云端 AI 设置" else "账号当前不允许写入云端设置"
-                )
-            }
-            return
-        }
-        runtime.aiSettingsSyncInFlight = true
         coroutineScope.launch {
-            try {
-                when (val result = dependencies.cloudAiSettingsGateway.write(signedIn.token, nextSettings)) {
-                    is CloudAiSettingsGatewayResult.Success -> {
-                        runtime.aiSettings = result.settings
-                        runtime.cloudAiSettingsLoadedToken = signedIn.token
-                        dependencies.local.preferencesRepository.updateAiSettings(result.settings)
-                    }
-                    is CloudAiSettingsGatewayResult.Failure ->
-                        appState.snackbarHostState.showSnackbar(result.reason.toAiSettingsMessage())
-                }
-            } finally {
-                runtime.aiSettingsSyncInFlight = false
+            when (
+                val result = dependencies.account.cloudSettingsCoordinator.updateAiSettings(nextSettings)
+            ) {
+                is AccountCloudSettingsOperationResult.CloudFailure ->
+                    appState.snackbarHostState.showSnackbar(result.reason.toAiSettingsMessage())
+                AccountCloudSettingsOperationResult.CloudWritesBlocked ->
+                    appState.snackbarHostState.showSnackbar(
+                        if (runtime.accountSession !is AccountSession.SignedIn) {
+                            "登录后才能同步云端 AI 设置"
+                        } else {
+                            "账号当前不允许写入云端设置"
+                        }
+                    )
+                AccountCloudSettingsOperationResult.InFlight,
+                AccountCloudSettingsOperationResult.Stale,
+                AccountCloudSettingsOperationResult.Success -> Unit
             }
         }
     }
@@ -157,7 +146,7 @@ internal class BksAppActions(
         dependencies.account.wechatAvatarCache.clear()
         runtime.reviewState = ReviewQueueState()
         runtime.categorizationRules = emptyList()
-        runtime.aiSettings = AiCategorizationSettings()
+        dependencies.account.cloudSettingsCoordinator.clearLocalState()
         runtime.ledgerState = LedgerRepositoryState()
         coroutineScope.launch {
             try {
