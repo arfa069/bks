@@ -9,6 +9,7 @@ internal class TestAccountRepository : AccountRepository {
     var authenticationResult: AccountRepositoryResult<AccountCredentials> =
         AccountRepositoryResult.Success(AccountCredentials("13800138000", "token-1"))
     var verificationResult: AccountRepositoryResult<AccountCredentials> = authenticationResult
+    var verificationGate: CompletableDeferred<AccountRepositoryResult<AccountCredentials>>? = null
     var updateNicknameResult: AccountRepositoryResult<AccountCredentials>? = null
     var updateAvatarResult: AccountRepositoryResult<AccountCredentials>? = null
     var signOutResult: AccountRepositoryResult<Unit> = AccountRepositoryResult.Success(Unit)
@@ -47,6 +48,7 @@ internal class TestAccountRepository : AccountRepository {
     var lastUnlinkWechatIdentifier: String? = null
     var lastUnlinkWechatCode: String? = null
     var signOutCalls = 0
+    var verificationCalls = 0
     var requestDeletionCalls = 0
     var updateNicknameCalls = 0
     var updateAvatarCalls = 0
@@ -86,7 +88,10 @@ internal class TestAccountRepository : AccountRepository {
 
     override suspend fun verifySession(
         credentials: AccountCredentials
-    ): AccountRepositoryResult<AccountCredentials> = verificationResult
+    ): AccountRepositoryResult<AccountCredentials> {
+        verificationCalls += 1
+        return verificationGate?.await() ?: verificationResult
+    }
 
     override suspend fun updateNickname(
         credentials: AccountCredentials,

@@ -17,6 +17,7 @@ class BksApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         appContainer
+        appContainer.accountSessionCoordinator.start()
         AssistsCore.init(this)
         installDiagnosticCrashHandler()
     }

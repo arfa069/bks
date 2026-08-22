@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -123,20 +123,35 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 新增 Application-scoped `AccountSessionCoordinator` 与稳定 `StateFlow`，统一拥有 Session、restore、verify、offline/invalid runtime status 和 deletion state；`BksApplication` 启动生产 Coordinator，`start()` 通过原子门控保证重复调用只执行一次 restore/verify。
+- Coordinator 保持“安全存储成功后再发布 Session”顺序；刷新资料持久化失败时保留旧 Session 并进入 `OfflineUnverified`。所有 Session/deletion/持久化清理转换均推进 generation，迟到的 verified/offline/invalid 结果只有在 generation 未变化时才可应用，invalid 的确认、存储清理和 LocalMode 发布位于同一串行化边界。
+- `BksApp` 使用 `collectAsStateWithLifecycle()` 收集 Coordinator 稳定状态，Root gate 直接读取该状态；旧 `BksAppRuntimeState` 只保留单向 projection，Compose 中原有 restore/verify 业务 Effect 已删除，计划在 Step 7.1 随 legacy God Layer 一并删除 projection。
+- `BksAppState` 新增可恢复的 `AccountEntryMode` 与 `AccountEntryReturnTarget`。从账户管理打开登录/注册入口时保留真实 LocalMode/SignedIn Session，仅改变导航状态；返回时恢复账户管理层级。
+- Account Entry、账户管理、账号切换对话框的 Session 持久化、切换本地模式、invalid、deletion state 写入均委托 Coordinator；旧 `BksAppActions` 中的 Session 写方法及 account dependencies 中的 Store 写入口已移除。
+- 新增 `AccountSessionCoordinatorTest`，并扩展 `BksAppStateTest`、`MainActivityTest`、`BksAppContainerTest` 与测试 Repository，覆盖 restore/verified/offline/invalid、持久化失败、账户切换、同账户同 token 的迟到 verified/invalid、幂等启动、Application singleton、导航状态恢复及打开 Account Entry 不清空有效 LocalMode Session。
 
 ### Deviations From Plan
 
-无
+- 未创建 `BksAppViewModel`：没有发现独立 Root 状态模型满足准入条件，Application-scoped Coordinator 已直接提供所需稳定状态。
+- `AccountSessionState.kt`、`AccountSessionCommit.kt`、`SecureAccountSessionStore.kt` 与 `LocalModeSessionStore.kt` 无需修改；当前类型、提交辅助函数和存储格式已满足本 Step，强行调整会扩大范围。
+- 为建立真正跨 Activity recreation 的 Application owner，实际最小修改了 Plan 文件清单之外的 `BksApplication.kt`、`BksAppContainer.kt`、`BksAppDependencies.kt`、`BksRouteHost.kt`、`BksProfileRoutes.kt`、`BksDialogs.kt` 及对应测试；未进入 Cloud Settings 或 Sync Runtime 后续 Step。
+- 未新增 Lifecycle/Coroutines dependency：现有 `debugCompileClasspath` 已包含 `lifecycle-runtime-compose`，可直接使用 lifecycle-aware collection。
+- 生产 Coordinator 在 `BksApplication.onCreate()` 启动；带 account test override 的 Coordinator 由 container overlay 单独创建并幂等启动，以继续支持现有 Compose 测试，不改变生产 singleton 边界。
 
 ### Test Results
 
-尚未执行
+- Step 专项命令（`AccountSessionCoordinatorTest`、Secure/Local Store、`AccountSessionCommitTest`、`MainActivityTest`、`BksAppStateTest`）：通过，0 failures。
+- `:apps:android:detekt`：通过，0 issues。
+- `:apps:android:testDebugUnitTest`：通过，76 suites、417 tests、0 failures、0 errors、0 skipped。
+- `git diff --check`：通过。
+- 首轮新增 Coordinator 测试因测试任务误挂到 `backgroundScope`，6 个用例在初始状态断言失败；改为由当前 `TestScope` 持有任务后，同一窄集、Step 专项命令与最终全量均通过。生产代码未因该测试接线问题回退或放宽断言。
 
 ### Remaining Risks
 
-尚未执行
+- `BksAppRuntimeState` 仍承载尚未迁移 feature 的只读 Session projection；Root gate 与 Session 正确性已不依赖该 bridge，但 bridge 本身需按 Step 7.1 删除。
+- 带 account override 的测试 Coordinator 是按 composition 创建的 overlay，不是跨 Activity owner；生产路径始终使用 `BksApplication` 持有的唯一 Coordinator，相关 singleton 与重复 `start()` 已由测试覆盖。
+- 未运行 instrumentation、真机、真实后端或 `assembleDebug`：本 Step 未修改 Manifest、Resource、Gradle dependency、认证 API、存储格式、Room schema 或可见 UI 契约，Robolectric 导航测试与 Android JVM 全量测试覆盖本次边界变更。
 
 ### Final Status
 
-Pending
+Completed

@@ -64,7 +64,7 @@ internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
                         }
                     }
                     runtime.showLedgerSyncAccountSwitch = false
-                    context.actions.moveAccountToLocalMode()
+                    context.dependencies.account.sessionCoordinator.moveToLocalMode()
                 },
                 enabled = !runtime.ledgerSyncAccountSwitchBusy
             ) {

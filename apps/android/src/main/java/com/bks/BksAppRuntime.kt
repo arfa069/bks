@@ -8,12 +8,10 @@ import androidx.compose.runtime.setValue
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_NAME
 import com.bks.data.local.LedgerRepositoryState
-import com.bks.feature.account.AccountCredentials
 import com.bks.feature.account.AccountDeletionUiState
 import com.bks.feature.account.AccountRuntimeState
 import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
-import com.bks.feature.account.toSignedInSession
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
 import com.bks.feature.categorization.CloudAiSettingsGatewayResult
@@ -39,7 +37,6 @@ internal class BksAppRuntimeState {
     var automaticBookkeepingEnabled by mutableStateOf(false)
     var accountSession by mutableStateOf<AccountSession?>(null)
     var isRestoringAccountSession by mutableStateOf(true)
-    var accountEntryReturnSession by mutableStateOf<AccountSession?>(null)
     var accountDeletionState by mutableStateOf(AccountDeletionUiState())
     var accountRuntimeState by mutableStateOf(AccountRuntimeState(AccountRuntimeStatus.LocalMode))
     var aiSettings by mutableStateOf(AiCategorizationSettings())
@@ -65,39 +62,6 @@ internal class BksAppActions(
     private val appState: BksAppState,
     private val coroutineScope: CoroutineScope
 ) {
-    fun moveAccountToLocalMode() {
-        LedgerSyncScheduler.cancel(dependencies.context)
-        dependencies.account.secureAccountSessionStore.clear()
-        dependencies.account.wechatAvatarCache.clear()
-        dependencies.account.localModeSessionStore.confirmLocalMode()
-        runtime.accountSession = AccountSession.LocalMode
-        runtime.accountDeletionState = AccountDeletionUiState()
-        runtime.accountRuntimeState = AccountRuntimeState(AccountRuntimeStatus.LocalMode)
-    }
-
-    fun restoreAccountSession(credentials: AccountCredentials) {
-        runtime.accountSession = credentials.toSignedInSession()
-        runtime.accountDeletionState = credentials.deletionState
-        runtime.accountRuntimeState = AccountRuntimeState(AccountRuntimeStatus.Validating)
-    }
-
-    fun applyVerifiedCredentials(credentials: AccountCredentials) {
-        dependencies.account.wechatAvatarCache.prepareUrl(credentials.avatarUrl)
-        runtime.accountSession = credentials.toSignedInSession()
-        runtime.accountDeletionState = credentials.deletionState
-        runtime.accountRuntimeState = AccountRuntimeState(
-            if (credentials.deletionState.isPending) {
-                AccountRuntimeStatus.DeletionCoolingOff
-            } else {
-                AccountRuntimeStatus.Verified
-            }
-        )
-    }
-
-    fun persistAccountSession(credentials: AccountCredentials): Boolean =
-        dependencies.account.persistSessionOverride?.invoke(credentials)
-            ?: dependencies.account.secureAccountSessionStore.save(credentials)
-
     fun persistReviewState(nextState: ReviewQueueState) {
         if (runtime.reviewTransitionInFlight) {
             coroutineScope.launch {

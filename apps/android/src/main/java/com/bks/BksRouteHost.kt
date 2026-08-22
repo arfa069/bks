@@ -18,6 +18,7 @@ import com.bks.feature.account.AccountScreen
 import com.bks.feature.home.HomeScreen
 import com.bks.feature.ledger.ManualLedgerEntryScreen
 import com.bks.feature.profile.ProfileDestination
+import com.bks.ui.AccountEntryReturnTarget
 import com.bks.ui.components.AppBottomNavigationBar
 import com.bks.ui.components.SlidePageTransition
 import com.bks.ui.visual.AppWallpaper
@@ -27,41 +28,33 @@ internal fun BksAccountEntry(context: BksRouteContext) {
     val runtime = context.runtime
     val appState = context.appState
     val dependencies = context.dependencies
-    val actions = context.actions
-    val returnSession = runtime.accountEntryReturnSession
+    val sessionCoordinator = dependencies.account.sessionCoordinator
+    val returnTarget = appState.accountEntryReturnTarget.value
 
     AppWallpaper(R.drawable.aa_bg_account) {
         AccountScreen(
             accountRepository = dependencies.account.accountRepository,
-            persistSession = { credentials ->
-                val saved = actions.persistAccountSession(credentials)
-                if (saved) actions.applyVerifiedCredentials(credentials)
-                saved
-            },
-            clearPersistedSession = dependencies.account.secureAccountSessionStore::clear,
+            persistSession = sessionCoordinator::commit,
+            clearPersistedSession = sessionCoordinator::clearPersistedSession,
             wechatAuthGateway = dependencies.account.wechatAuthGateway,
             wechatAuthCallback = context.bindings.wechatAuthCallback,
             onWechatAuthCallbackConsumed = context.bindings.onWechatAuthCallbackConsumed,
             avatarCacheOverride = dependencies.account.wechatAvatarCache,
             onSessionChange = { session ->
-                if (session == AccountSession.LocalMode) {
-                    dependencies.account.localModeSessionStore.confirmLocalMode()
-                    runtime.accountRuntimeState =
-                        com.bks.feature.account.AccountRuntimeState(
-                            com.bks.feature.account.AccountRuntimeStatus.LocalMode
-                        )
-                }
-                runtime.accountSession = session
-                runtime.accountEntryReturnSession = null
+                if (session == AccountSession.LocalMode) sessionCoordinator.enterLocalMode()
+                appState.closeAccountEntry()
                 appState.selectedTab.value = null
                 appState.profileDestination.value = null
             },
-            onBack = returnSession?.let {
+            onBack = returnTarget?.let {
                 {
-                    runtime.accountSession = it
-                    runtime.accountEntryReturnSession = null
-                    appState.selectedTab.value = AppTab.Profile
-                    appState.profileDestination.value = ProfileDestination.AccountManagement
+                    appState.closeAccountEntry()
+                    when (it) {
+                        AccountEntryReturnTarget.AccountManagement -> {
+                            appState.selectedTab.value = AppTab.Profile
+                            appState.profileDestination.value = ProfileDestination.AccountManagement
+                        }
+                    }
                 }
             }
         )

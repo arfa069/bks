@@ -9,12 +9,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.bks.feature.account.AccountRuntimeState
 import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
-import com.bks.feature.account.AccountSessionRestoreResult
-import com.bks.feature.account.AccountSessionVerificationDecision
 import com.bks.feature.account.cloudConfigAccountKey
-import com.bks.feature.account.persistRefreshedAccountSession
-import com.bks.feature.account.resolveAccountSessionVerification
-import com.bks.feature.account.toCredentials
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CloudAiSettingsGatewayResult
 import com.bks.feature.diagnostics.DiagnosticComponent
@@ -27,10 +22,8 @@ import com.bks.feature.sync.LedgerSyncOperationResult
 import com.bks.feature.sync.LedgerSyncScheduler
 import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.ui.BksAppState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 internal data class BksAppEffectsContext(
     val dependencies: BksAppDependencies,
@@ -46,8 +39,6 @@ internal data class BksAppEffectsContext(
 internal fun BksAppEffects(context: BksAppEffectsContext) {
     BksSyncStateEffects(context)
     BksSyncLifecycleEffects(context)
-    BksRestoreEffect(context)
-    BksVerifyEffect(context)
     BksLocalPersistenceEffects(context)
     BksCloudSettingsEffects(context)
 }
@@ -155,71 +146,6 @@ private fun BksSyncLifecycleEffects(context: BksAppEffectsContext) {
         }
         context.lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { context.lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-}
-
-@Composable
-private fun BksRestoreEffect(context: BksAppEffectsContext) {
-    val dependencies = context.dependencies
-    val runtime = context.runtime
-    LaunchedEffect(dependencies.account.secureAccountSessionStore, dependencies.account.localModeSessionStore) {
-        when (
-            val restored = withContext(Dispatchers.IO) {
-                dependencies.account.secureAccountSessionStore.restore()
-            }
-        ) {
-            is AccountSessionRestoreResult.Restored -> context.actions.restoreAccountSession(restored.credentials)
-            AccountSessionRestoreResult.Corrupted -> {
-                withContext(Dispatchers.IO) {
-                    dependencies.account.localModeSessionStore.confirmLocalMode()
-                }
-                runtime.accountSession = AccountSession.LocalMode
-            }
-            AccountSessionRestoreResult.Empty -> {
-                runtime.accountSession = withContext(Dispatchers.IO) {
-                    dependencies.account.localModeSessionStore.restoreSession()
-                }
-            }
-        }
-        runtime.isRestoringAccountSession = false
-    }
-}
-
-@Composable
-private fun BksVerifyEffect(context: BksAppEffectsContext) {
-    val dependencies = context.dependencies
-    val runtime = context.runtime
-    val appState = context.appState
-    LaunchedEffect(runtime.accountSession, runtime.accountRuntimeState.status) {
-        val signedIn = runtime.accountSession as? AccountSession.SignedIn
-        if (signedIn == null || runtime.accountRuntimeState.status != AccountRuntimeStatus.Validating) {
-            return@LaunchedEffect
-        }
-        when (
-            val decision = resolveAccountSessionVerification(
-                dependencies.account.accountRepository.verifySession(
-                    signedIn.toCredentials(runtime.accountDeletionState)
-                )
-            )
-        ) {
-            is AccountSessionVerificationDecision.Verified -> {
-                val persisted = persistRefreshedAccountSession(
-                    credentials = decision.credentials,
-                    persistSession = context.actions::persistAccountSession,
-                    onSessionVerified = context.actions::applyVerifiedCredentials
-                )
-                if (!persisted) {
-                    runtime.accountRuntimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified)
-                    appState.snackbarHostState.showSnackbar("账号已验证，但最新资料未能保存到本机")
-                }
-            }
-            AccountSessionVerificationDecision.ClearInvalidSession -> {
-                context.actions.moveAccountToLocalMode()
-                appState.snackbarHostState.showSnackbar("登录状态已失效，已切换到本地模式")
-            }
-            AccountSessionVerificationDecision.KeepOfflineSession ->
-                runtime.accountRuntimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified)
-        }
     }
 }
 

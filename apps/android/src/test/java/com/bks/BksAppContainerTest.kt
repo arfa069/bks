@@ -26,6 +26,8 @@ class BksAppContainerTest {
         assertSame(firstDependencies.local.database, secondDependencies.local.database)
         assertSame(container.ledgerRepository, firstDependencies.local.ledgerRepository)
         assertSame(container.preferencesRepository, firstDependencies.local.preferencesRepository)
+        assertSame(container.accountSessionCoordinator, firstDependencies.account.sessionCoordinator)
+        assertSame(firstDependencies.account.sessionCoordinator, secondDependencies.account.sessionCoordinator)
     }
 
     @Test
@@ -38,6 +40,7 @@ class BksAppContainerTest {
         )
 
         assertSame(accountRepository, dependencies.account.accountRepository)
+        assertNotSame(container.accountSessionCoordinator, dependencies.account.sessionCoordinator)
         assertSame(container.database, dependencies.local.database)
         assertSame(container.ledgerRepository, dependencies.local.ledgerRepository)
     }

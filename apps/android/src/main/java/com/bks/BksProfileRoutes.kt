@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.bks.feature.account.AccountManagementScreen
-import com.bks.feature.account.AccountRuntimeState
-import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
 import com.bks.feature.categorization.CategorizationAiUiState
 import com.bks.feature.categorization.CategorizationRulesActions
@@ -17,6 +15,8 @@ import com.bks.feature.monitoring.AutomaticBookkeepingScreen
 import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.profile.ProfileOverviewScreen
 import com.bks.feature.settings.DataAndBackupScreen
+import com.bks.ui.AccountEntryMode
+import com.bks.ui.AccountEntryReturnTarget
 
 @Composable
 internal fun BksProfileRoute(
@@ -81,48 +81,36 @@ private fun BksAccountManagementRoute(
     val runtime = context.runtime
     val bindings = context.bindings
     val dependencies = context.dependencies
-    val actions = context.actions
     val appState = context.appState
+    val sessionCoordinator = dependencies.account.sessionCoordinator
     AccountManagementScreen(
         session = session,
         runtimeState = runtime.accountRuntimeState,
         deletionState = runtime.accountDeletionState,
         accountRepository = dependencies.account.accountRepository,
         onSignInOrRegister = {
-            runtime.accountEntryReturnSession = session
+            appState.openAccountEntry(
+                mode = AccountEntryMode.SignInOrRegister,
+                returnTarget = AccountEntryReturnTarget.AccountManagement
+            )
             appState.profileDestination.value = null
-            runtime.accountSession = null
-            runtime.accountRuntimeState = AccountRuntimeState(AccountRuntimeStatus.LocalMode)
         },
-        onSessionVerified = actions::applyVerifiedCredentials,
+        onSessionVerified = {},
         onInvalidSession = {
-            actions.moveAccountToLocalMode()
+            sessionCoordinator.moveToLocalMode()
             appState.profileDestination.value = null
         },
-        persistSession = { credentials ->
-            val saved = actions.persistAccountSession(credentials)
-            if (saved) actions.applyVerifiedCredentials(credentials)
-            saved
-        },
-        clearPersistedSession = dependencies.account.secureAccountSessionStore::clear,
+        persistSession = sessionCoordinator::commit,
+        clearPersistedSession = sessionCoordinator::clearPersistedSession,
         wechatAuthGateway = dependencies.account.wechatAuthGateway,
         wechatAuthCallback = bindings.wechatAuthCallback,
         onWechatAuthCallbackConsumed = bindings.onWechatAuthCallbackConsumed,
         avatarCacheOverride = dependencies.account.wechatAvatarCache,
         onSignedOut = {
-            actions.moveAccountToLocalMode()
+            sessionCoordinator.moveToLocalMode()
             appState.profileDestination.value = null
         },
-        onDeletionStateChange = { deletionState ->
-            runtime.accountDeletionState = deletionState
-            runtime.accountRuntimeState = AccountRuntimeState(
-                if (deletionState.isPending) {
-                    AccountRuntimeStatus.DeletionCoolingOff
-                } else {
-                    AccountRuntimeStatus.Verified
-                }
-            )
-        },
+        onDeletionStateChange = sessionCoordinator::updateDeletionState,
         onBack = { appState.profileDestination.value = null },
         modifier = Modifier
             .padding(innerPadding)

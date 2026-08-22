@@ -5,9 +5,8 @@ import com.bks.data.local.BksDatabase
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
 import com.bks.feature.account.AccountRepository
+import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.InstallationIdStore
-import com.bks.feature.account.LocalModeSessionStore
-import com.bks.feature.account.SecureAccountSessionStore
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.account.WechatAvatarCache
 import com.bks.feature.categorization.AiCategorizationGateway
@@ -29,9 +28,7 @@ internal data class BksLocalDependencies(
 
 internal data class BksAccountDependencies(
     val accountRepository: AccountRepository,
-    val localModeSessionStore: LocalModeSessionStore,
-    val secureAccountSessionStore: SecureAccountSessionStore,
-    val persistSessionOverride: ((com.bks.feature.account.AccountCredentials) -> Boolean)?,
+    val sessionCoordinator: AccountSessionCoordinator,
     val wechatAuthGateway: WechatAuthGateway?,
     val wechatAvatarCache: WechatAvatarCache,
     val installationIdStore: InstallationIdStore

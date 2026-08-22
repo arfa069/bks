@@ -25,6 +25,7 @@ import com.bks.data.local.PendingEntryEntity
 import com.bks.data.local.TransactionKind
 import com.bks.feature.account.LOCAL_MODE_SESSION_PREFERENCES
 import com.bks.feature.account.FakeAccountRepository
+import com.bks.feature.account.AccountSession
 import com.bks.feature.account.LocalModeSessionStore
 import com.bks.feature.account.SecureAccountSessionStore
 import com.bks.feature.ledger.LedgerTestTags
@@ -51,6 +52,7 @@ class MainActivityTest {
     fun enterLocalMode() {
         clearPersistedSession()
         LocalModeSessionStore(context).confirmLocalMode()
+        context.bksAppContainer.accountSessionCoordinator.enterLocalMode()
     }
 
     @After
@@ -88,7 +90,11 @@ class MainActivityTest {
     fun firstLocalModeSelectionNavigatesToHome() {
         clearPersistedSession()
         composeRule.setContent {
-            BksApp()
+            BksApp(
+                overrides = BksAppOverrides(
+                    accountRepository = FakeAccountRepository()
+                )
+            )
         }
 
         composeRule.onNodeWithTag("agreement-toggle").performScrollTo().performClick()
@@ -348,6 +354,10 @@ class MainActivityTest {
         openProfileTab()
         composeRule.onNodeWithTag("profile-account-status-card").performClick()
         composeRule.onNodeWithText("登录或注册").performClick()
+        assertEquals(
+            AccountSession.LocalMode,
+            context.bksAppContainer.accountSessionCoordinator.state.value.session
+        )
         composeRule.onNodeWithText("登录").performClick()
 
         composeRule.runOnIdle {

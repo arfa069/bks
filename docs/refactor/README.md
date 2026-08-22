@@ -61,7 +61,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 2.1 | [Account Session](./phase-2/step-2.1-account-session.md) | Pending |
+| 2.1 | [Account Session](./phase-2/step-2.1-account-session.md) | Completed |
 | 2.2 | [Cloud Settings](./phase-2/step-2.2-cloud-settings.md) | Pending |
 | 2.3 | [Sync Runtime](./phase-2/step-2.3-sync-runtime.md) | Pending |
 

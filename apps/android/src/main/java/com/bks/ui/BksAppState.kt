@@ -27,7 +27,9 @@ internal class BksAppState(
     val tabs: List<AppTab>,
     val selectedTab: MutableState<AppTab?>,
     val manualEntryOpen: MutableState<Boolean>,
-    val profileDestination: MutableState<ProfileDestination?>
+    val profileDestination: MutableState<ProfileDestination?>,
+    val accountEntryMode: MutableState<AccountEntryMode?>,
+    val accountEntryReturnTarget: MutableState<AccountEntryReturnTarget?>
 ) {
 
     val bottomNavigationItems: List<AppBottomNavigationItem> = tabs.map { tab ->
@@ -37,6 +39,24 @@ internal class BksAppState(
             iconRes = tab.iconRes
         )
     }
+
+    fun openAccountEntry(mode: AccountEntryMode, returnTarget: AccountEntryReturnTarget?) {
+        accountEntryMode.value = mode
+        accountEntryReturnTarget.value = returnTarget
+    }
+
+    fun closeAccountEntry() {
+        accountEntryMode.value = null
+        accountEntryReturnTarget.value = null
+    }
+}
+
+internal enum class AccountEntryMode {
+    SignInOrRegister
+}
+
+internal enum class AccountEntryReturnTarget {
+    AccountManagement
 }
 
 @Composable
@@ -53,6 +73,12 @@ internal fun rememberBksAppState(
     val profileDestination = rememberSaveable(
         stateSaver = nullableEnumStateSaver(ProfileDestination::valueOf)
     ) { mutableStateOf(null) }
+    val accountEntryMode = rememberSaveable(
+        stateSaver = nullableEnumStateSaver(AccountEntryMode::valueOf)
+    ) { mutableStateOf(null) }
+    val accountEntryReturnTarget = rememberSaveable(
+        stateSaver = nullableEnumStateSaver(AccountEntryReturnTarget::valueOf)
+    ) { mutableStateOf(null) }
     return remember(
         snackbarHostState,
         ledgerEntryListState,
@@ -60,7 +86,9 @@ internal fun rememberBksAppState(
         tabs,
         selectedTab,
         manualEntryOpen,
-        profileDestination
+        profileDestination,
+        accountEntryMode,
+        accountEntryReturnTarget
     ) {
         BksAppState(
             snackbarHostState = snackbarHostState,
@@ -69,7 +97,9 @@ internal fun rememberBksAppState(
             tabs = tabs,
             selectedTab = selectedTab,
             manualEntryOpen = manualEntryOpen,
-            profileDestination = profileDestination
+            profileDestination = profileDestination,
+            accountEntryMode = accountEntryMode,
+            accountEntryReturnTarget = accountEntryReturnTarget
         )
     }
 }

@@ -7,6 +7,7 @@ import com.bks.data.local.BksDatabaseProvider
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
 import com.bks.feature.account.AndroidWechatAuthGateway
+import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.HttpAccountRepository
 import com.bks.feature.account.InstallationIdStore
 import com.bks.feature.account.LocalModeSessionStore
@@ -25,9 +26,14 @@ import com.bks.feature.settings.LocalDataBackupRepository
 import com.bks.feature.sync.HttpLedgerSyncRepository
 import com.bks.feature.sync.LedgerSyncCoordinator
 import com.bks.feature.sync.LedgerSyncLocalStore
+import com.bks.feature.sync.LedgerSyncScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 internal class BksAppContainer(context: Context) {
     private val applicationContext = context.applicationContext
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val database: BksDatabase by lazy { BksDatabaseProvider.get(applicationContext) }
     val ledgerRepository: LocalLedgerRepository by lazy { LocalLedgerRepository(database) }
@@ -71,6 +77,9 @@ internal class BksAppContainer(context: Context) {
     }
     val wechatAvatarCache: WechatAvatarCache by lazy { WechatAvatarCache(applicationContext) }
     val diagnosticLogs: DiagnosticLogRepository by lazy { DiagnosticLogs.get(applicationContext) }
+    val accountSessionCoordinator: AccountSessionCoordinator by lazy {
+        createAccountSessionCoordinator(BksAppOverrides())
+    }
 
     fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies = BksAppDependencies(
         context = applicationContext,
@@ -83,9 +92,11 @@ internal class BksAppContainer(context: Context) {
         ),
         account = BksAccountDependencies(
             accountRepository = overrides.accountRepository ?: accountRepository,
-            localModeSessionStore = localModeSessionStore,
-            secureAccountSessionStore = secureAccountSessionStore,
-            persistSessionOverride = overrides.persistAccountSession,
+            sessionCoordinator = if (overrides.hasAccountSessionOverrides()) {
+                createAccountSessionCoordinator(overrides).also { it.start() }
+            } else {
+                accountSessionCoordinator
+            },
             wechatAuthGateway = overrides.wechatAuthGateway ?: wechatAuthGateway,
             wechatAvatarCache = wechatAvatarCache,
             installationIdStore = installationIdStore
@@ -114,7 +125,24 @@ internal class BksAppContainer(context: Context) {
 
     fun createBillSyncStateCoordinator(activity: ComponentActivity): BillSyncStateCoordinator =
         BillSyncStateCoordinator(activity)
+
+    private fun createAccountSessionCoordinator(overrides: BksAppOverrides): AccountSessionCoordinator =
+        AccountSessionCoordinator(
+            accountRepository = overrides.accountRepository ?: accountRepository,
+            secureSessionStore = secureAccountSessionStore,
+            localModeSessionStore = localModeSessionStore,
+            applicationScope = applicationScope,
+            persistSession = overrides.persistAccountSession ?: secureAccountSessionStore::save,
+            onCredentialsAccepted = { credentials -> wechatAvatarCache.prepareUrl(credentials.avatarUrl) },
+            onMoveToLocalMode = {
+                LedgerSyncScheduler.cancel(applicationContext)
+                wechatAvatarCache.clear()
+            }
+        )
 }
+
+private fun BksAppOverrides.hasAccountSessionOverrides(): Boolean =
+    accountRepository != null || persistAccountSession != null
 
 internal val Context.bksAppContainer: BksAppContainer
     get() = (applicationContext as BksApplication).appContainer

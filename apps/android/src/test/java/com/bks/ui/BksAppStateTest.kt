@@ -31,6 +31,10 @@ class BksAppStateTest {
             state.get().selectedTab.value = AppTab.Reports
             state.get().manualEntryOpen.value = true
             state.get().profileDestination.value = ProfileDestination.AccountManagement
+            state.get().openAccountEntry(
+                mode = AccountEntryMode.SignInOrRegister,
+                returnTarget = AccountEntryReturnTarget.AccountManagement
+            )
         }
 
         restorationTester.emulateSavedInstanceStateRestore()
@@ -39,6 +43,11 @@ class BksAppStateTest {
             assertEquals(AppTab.Reports, state.get().selectedTab.value)
             assertTrue(state.get().manualEntryOpen.value)
             assertEquals(ProfileDestination.AccountManagement, state.get().profileDestination.value)
+            assertEquals(AccountEntryMode.SignInOrRegister, state.get().accountEntryMode.value)
+            assertEquals(
+                AccountEntryReturnTarget.AccountManagement,
+                state.get().accountEntryReturnTarget.value
+            )
         }
     }
 }
