@@ -6,6 +6,7 @@
 
 - [产品需求文档 (PRD)](./PRD.md)
 - [系统架构设计草案](./ARCHITECTURE.md)
+- [Android 系统性架构重构执行计划](./refactor/README.md)
 - [UI 设计规范](./UI-DESIGN.md)
 - [合规与隐私评估草案](./COMPLIANCE.md)
 - [开发切片规划 (Development Slices)](./DEVELOPMENT-SLICES.md)
