@@ -42,10 +42,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.TransactionKind
 import com.bks.ui.components.Button
@@ -155,7 +153,7 @@ internal fun ManualAmountCard(
 @Composable
 internal fun ManualTransactionCard(
     state: LedgerEntryFormState,
-    categoryOptions: List<CategoryEntity>,
+    categoryOptions: List<LedgerCategoryUiModel>,
     onStateChange: (LedgerEntryFormState) -> Unit,
     onSelectTime: () -> Unit
 ) {
@@ -229,7 +227,7 @@ internal fun ManualTransactionCard(
 @Composable
 internal fun ManualAccountCard(
     state: LedgerEntryFormState,
-    fundingAccounts: List<FundingAccountEntity>,
+    fundingAccounts: List<FundingAccountUiModel>,
     allowCreateFundingAccount: Boolean,
     onStateChange: (LedgerEntryFormState) -> Unit
 ) {

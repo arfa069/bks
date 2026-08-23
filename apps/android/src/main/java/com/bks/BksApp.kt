@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bks.feature.account.AccountCloudSettingsCoordinator
 import com.bks.feature.account.AccountCredentials
 import com.bks.feature.account.AccountRepository
 import com.bks.feature.account.AccountSessionNotice
@@ -24,6 +25,7 @@ import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.CloudAiSettingsGateway
+import com.bks.feature.ledger.LedgerViewModel
 import com.bks.feature.sync.LedgerSyncViewModel
 import com.bks.ui.components.SlidePageTransition
 import com.bks.ui.rememberBksAppState
@@ -62,6 +64,7 @@ fun BksApp(
     val runtime = rememberBksAppRuntimeState()
     val accountSessionCoordinator = dependencies.account.sessionCoordinator
     val cloudSettingsCoordinator = dependencies.account.cloudSettingsCoordinator
+    val ledgerViewModel: LedgerViewModel = viewModel(factory = ledgerFactory(dependencies, cloudSettingsCoordinator))
     val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -74,24 +77,27 @@ fun BksApp(
     )
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
     val cloudSettingsState by cloudSettingsCoordinator.state.collectAsStateWithLifecycle()
+    val ledgerUiState by ledgerViewModel.uiState.collectAsStateWithLifecycle()
     val ledgerSyncUiState by ledgerSyncViewModel.uiState.collectAsStateWithLifecycle()
-    val actions = androidx.compose.runtime.remember(dependencies, runtime, appState, coroutineScope) {
+    val actions = androidx.compose.runtime.remember(dependencies, runtime, appState, coroutineScope, ledgerViewModel) {
         BksAppActions(
             dependencies = dependencies,
             runtime = runtime,
             appState = appState,
-            coroutineScope = coroutineScope
+            coroutineScope = coroutineScope,
+            ledgerViewModel = ledgerViewModel
         )
     }
-    val presentation = rememberBksAppPresentation(runtime)
     val routeContext = BksRouteContext(
         dependencies = dependencies,
         runtime = runtime,
-        presentation = presentation,
+        presentation = rememberBksAppPresentation(runtime),
         bindings = bindings,
         actions = actions,
         appState = appState,
         coroutineScope = coroutineScope,
+        ledgerViewModel = ledgerViewModel,
+        ledgerUiState = ledgerUiState,
         ledgerSyncViewModel = ledgerSyncViewModel,
         ledgerSyncUiState = ledgerSyncUiState
     )
@@ -125,8 +131,7 @@ fun BksApp(
             runtime = runtime,
             actions = actions,
             appState = appState,
-            lifecycleOwner = lifecycleOwner,
-            presentation = presentation
+            lifecycleOwner = lifecycleOwner
         )
     )
 
@@ -154,4 +159,15 @@ fun BksApp(
         }
     }
     BksLedgerSyncAccountSwitchDialog(routeContext)
+}
+
+private fun ledgerFactory(
+    dependencies: BksAppDependencies,
+    cloudSettingsCoordinator: AccountCloudSettingsCoordinator
+) = object : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerViewModel(
+        repository = dependencies.local.ledgerRepository,
+        cloudSettingsCoordinator = cloudSettingsCoordinator
+    ) as T
 }

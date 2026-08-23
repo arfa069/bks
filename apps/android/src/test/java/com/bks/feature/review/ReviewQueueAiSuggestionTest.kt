@@ -10,7 +10,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.ConfidenceState
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.LocalLedgerRepository
@@ -22,6 +21,7 @@ import com.bks.feature.categorization.AiCategorizationGatewayResult
 import com.bks.feature.categorization.AiCategorizationPayload
 import com.bks.feature.categorization.AiCategorizationResponse
 import com.bks.feature.categorization.AiCategorizationSettings
+import com.bks.feature.ledger.LedgerCategoryUiModel
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
@@ -45,8 +45,8 @@ class ReviewQueueAiSuggestionTest {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(
-                    category("food", "餐饮", TransactionKind.EXPENSE, 10),
-                    category("transport", "交通", TransactionKind.EXPENSE, 20)
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("transport", "交通", TransactionKind.EXPENSE)
                 ),
                 accountSession = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
@@ -112,15 +112,12 @@ class ReviewQueueAiSuggestionTest {
                     pendingEntries = listOf(sampleEntry().copy(category = ""))
                 ),
                 categories = listOf(
-                    category("food", "餐饮", TransactionKind.EXPENSE, 10),
-                    category("salary", "工资", TransactionKind.INCOME, 20),
-                    CategoryEntity(
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("salary", "工资", TransactionKind.INCOME),
+                    LedgerCategoryUiModel(
                         id = LocalLedgerRepository.DEFAULT_CATEGORY_ID,
                         name = "未分类",
-                        kind = null,
-                        sortOrder = Int.MAX_VALUE,
-                        isSystem = true,
-                        createdAtEpochMillis = NOW
+                        kind = null
                     )
                 ),
                 accountSession = AccountSession.SignedIn(
@@ -153,8 +150,8 @@ class ReviewQueueAiSuggestionTest {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(
-                    category("food", "餐饮", TransactionKind.EXPENSE, 10),
-                    category("transport", "交通", TransactionKind.EXPENSE, 20)
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("transport", "交通", TransactionKind.EXPENSE)
                 ),
                 accountSession = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
@@ -189,7 +186,7 @@ class ReviewQueueAiSuggestionTest {
         composeRule.setContent {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
-                categories = listOf(category("food", "餐饮", TransactionKind.EXPENSE, 10)),
+                categories = listOf(category("food", "餐饮", TransactionKind.EXPENSE)),
                 accountSession = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
                 aiCategorizationGateway = FixedAiCategorizationGateway(
@@ -211,15 +208,11 @@ class ReviewQueueAiSuggestionTest {
     private fun category(
         id: String,
         name: String,
-        kind: TransactionKind,
-        sortOrder: Int
-    ): CategoryEntity = CategoryEntity(
+        kind: TransactionKind
+    ): LedgerCategoryUiModel = LedgerCategoryUiModel(
         id = id,
         name = name,
-        kind = kind,
-        sortOrder = sortOrder,
-        isSystem = true,
-        createdAtEpochMillis = NOW
+        kind = kind
     )
 
     private fun scrollToFirstPendingEntry() {

@@ -13,7 +13,6 @@ import com.bks.feature.diagnostics.DiagnosticLevel
 import com.bks.feature.diagnostics.DiagnosticSource
 import com.bks.feature.review.ReviewQueueState
 import com.bks.ui.BksAppState
-import kotlinx.coroutines.launch
 
 internal data class BksAppEffectsContext(
     val dependencies: BksAppDependencies,
@@ -21,8 +20,7 @@ internal data class BksAppEffectsContext(
     val runtime: BksAppRuntimeState,
     val actions: BksAppActions,
     val appState: BksAppState,
-    val lifecycleOwner: LifecycleOwner,
-    val presentation: BksAppPresentation
+    val lifecycleOwner: LifecycleOwner
 )
 
 @Composable
@@ -48,11 +46,6 @@ private fun BksSyncLifecycleEffects(context: BksAppEffectsContext) {
 private fun BksLocalPersistenceEffects(context: BksAppEffectsContext) {
     val dependencies = context.dependencies
     val runtime = context.runtime
-    LaunchedEffect(dependencies.local.ledgerRepository) {
-        dependencies.local.ledgerRepository.ensureDefaultLedgerBook()
-        dependencies.local.ledgerRepository.seedSystemCategories()
-        dependencies.local.ledgerRepository.purgeExpiredDeletedLedgerEntries()
-    }
     LaunchedEffect(dependencies.local.reviewQueuePersistence) {
         dependencies.local.reviewQueuePersistence.observeState().collect { persistedState ->
             runtime.reviewState = persistedState.copy(
@@ -61,9 +54,6 @@ private fun BksLocalPersistenceEffects(context: BksAppEffectsContext) {
                 undoEventSequence = runtime.reviewState.undoEventSequence
             )
         }
-    }
-    LaunchedEffect(dependencies.local.ledgerRepository) {
-        dependencies.local.ledgerRepository.state.collect { state -> runtime.ledgerState = state }
     }
     LaunchedEffect(dependencies.local.preferencesRepository) {
         dependencies.local.preferencesRepository.categorizationRules.collect {

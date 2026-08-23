@@ -28,10 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource
@@ -40,6 +38,8 @@ import com.bks.data.local.defaultFlowDirection
 import com.bks.feature.categorization.AiCategorizationFailureReason
 import com.bks.feature.categorization.AiCategorizationResult
 import com.bks.feature.categorization.AiCategorizationSkipReason
+import com.bks.feature.ledger.FundingAccountUiModel
+import com.bks.feature.ledger.LedgerCategoryUiModel
 import com.bks.feature.ledger.LedgerEntryFormState
 import com.bks.feature.ledger.ledgerCategoryOptions
 import kotlinx.coroutines.CancellationException
@@ -49,8 +49,8 @@ private data class AiSuggestionRequest(
     val entry: ReviewQueueEntry,
     val draft: LedgerEntryFormState,
     val input: LedgerEntryInput,
-    val categories: List<CategoryEntity>,
-    val fundingAccounts: List<FundingAccountEntity>,
+    val categories: List<LedgerCategoryUiModel>,
+    val fundingAccounts: List<FundingAccountUiModel>,
     val categoryCandidates: List<String>,
     val actions: ReviewEditorToolActions
 )
@@ -59,8 +59,8 @@ private data class AiSuggestionRequest(
 internal fun ReviewEditorTools(
     entry: ReviewQueueEntry,
     draft: LedgerEntryFormState,
-    categories: List<CategoryEntity>,
-    fundingAccounts: List<FundingAccountEntity>,
+    categories: List<LedgerCategoryUiModel>,
+    fundingAccounts: List<FundingAccountUiModel>,
     actions: ReviewEditorToolActions
 ) {
     var showEvidence by remember(entry.id) { mutableStateOf(false) }
@@ -78,7 +78,7 @@ internal fun ReviewEditorTools(
             transactionKind = draft.transactionKind
         ).asSequence()
             .filterNot { it.id == LocalLedgerRepository.DEFAULT_CATEGORY_ID }
-            .map(CategoryEntity::reviewDisplayName)
+            .map(LedgerCategoryUiModel::reviewDisplayName)
             .distinct()
             .toList()
     }
@@ -229,8 +229,8 @@ internal fun AiCategorizationResult.toUserMessage(): String = when {
 }
 
 internal fun ReviewQueueEntry.toLedgerEntryFormState(
-    categories: List<CategoryEntity>,
-    fundingAccounts: List<FundingAccountEntity>
+    categories: List<LedgerCategoryUiModel>,
+    fundingAccounts: List<FundingAccountUiModel>
 ): LedgerEntryFormState {
     val transactionKind = kindLabel.toTransactionKind()
     val selectedCategoryId = categoryId
@@ -257,7 +257,7 @@ internal fun ReviewQueueEntry.toLedgerEntryFormState(
     )
 }
 
-internal fun String?.toReviewCategoryName(categories: List<CategoryEntity>): String =
+internal fun String?.toReviewCategoryName(categories: List<LedgerCategoryUiModel>): String =
     this?.let { id ->
         DefaultCategories.nameForId(id)
             ?: categories.firstOrNull { it.id == id }?.name

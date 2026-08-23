@@ -32,9 +32,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.TransactionKind
@@ -42,8 +40,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun ManualLedgerEntryScreen(
-    categories: List<CategoryEntity>,
-    fundingAccounts: List<FundingAccountEntity>,
+    categories: List<LedgerCategoryUiModel>,
+    fundingAccounts: List<FundingAccountUiModel>,
     onExit: () -> Unit,
     onCreateEntry: suspend (LedgerEntryInput) -> Unit,
     modifier: Modifier = Modifier
@@ -83,8 +81,8 @@ internal fun ManualLedgerEntryScreen(
 internal fun SharedLedgerEntryForm(
     title: String,
     initial: LedgerEntryFormState,
-    categories: List<CategoryEntity>,
-    fundingAccounts: List<FundingAccountEntity>,
+    categories: List<LedgerCategoryUiModel>,
+    fundingAccounts: List<FundingAccountUiModel>,
     config: LedgerEntryFormConfig
 ) {
     var state by rememberSaveable(initial, stateSaver = LedgerEntryFormState.Saver) {
@@ -200,8 +198,8 @@ internal fun SharedLedgerEntryForm(
 internal fun LedgerEntryForm(
     title: String,
     initial: LedgerEntryFormState,
-    categories: List<CategoryEntity>,
-    fundingAccounts: List<FundingAccountEntity>,
+    categories: List<LedgerCategoryUiModel>,
+    fundingAccounts: List<FundingAccountUiModel>,
     config: LedgerEntryFormConfig
 ) {
     SharedLedgerEntryForm(
@@ -219,10 +217,10 @@ internal fun LedgerEntryForm(
 }
 
 internal fun ledgerCategoryOptions(
-    categories: List<CategoryEntity>,
+    categories: List<LedgerCategoryUiModel>,
     flowDirection: FlowDirection,
     transactionKind: TransactionKind
-): List<CategoryEntity> {
+): List<LedgerCategoryUiModel> {
     val matchingCategories = categories.filter { category ->
         when {
             category.kind == null -> true
@@ -232,13 +230,10 @@ internal fun ledgerCategoryOptions(
             else -> true
         }
     }
-    return (matchingCategories + CategoryEntity(
+    return (matchingCategories + LedgerCategoryUiModel(
         id = LocalLedgerRepository.DEFAULT_CATEGORY_ID,
         name = "未分类",
-        kind = null,
-        sortOrder = Int.MAX_VALUE,
-        isSystem = true,
-        createdAtEpochMillis = 0
+        kind = null
     )).distinctBy { it.id }
 }
 

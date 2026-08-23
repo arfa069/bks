@@ -20,9 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.DefaultCategories
-import com.bks.data.local.FundingAccountEntity
 import com.bks.feature.account.AccountSession
 import com.bks.feature.categorization.AiCategorizationClient
 import com.bks.feature.categorization.AiCategorizationGateway
@@ -30,6 +28,9 @@ import com.bks.feature.categorization.AiCategorizationResult
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.AiCategorizationSkipReason
 import com.bks.feature.categorization.CategorizationRule
+import com.bks.feature.ledger.FundingAccountUiModel
+import com.bks.feature.ledger.LedgerCategoryUiModel
+import com.bks.feature.ledger.toLedgerCategoryUiModel
 
 @Composable
 @Suppress("LongParameterList")
@@ -37,8 +38,8 @@ fun ReviewQueueScreen(
     modifier: Modifier = Modifier,
     initialState: ReviewQueueState = ReviewQueueState(),
     targetLedgerName: String = "默认账本",
-    categories: List<CategoryEntity> = emptyList(),
-    fundingAccounts: List<FundingAccountEntity> = emptyList(),
+    categories: List<LedgerCategoryUiModel> = emptyList(),
+    fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
     onCategorizationRuleRequested: (CategorizationRule) -> Unit = {},
     accountSession: AccountSession? = null,
@@ -69,8 +70,8 @@ fun ReviewQueueScreen(
     state: ReviewQueueState,
     onStateChange: (ReviewQueueState) -> Unit,
     targetLedgerName: String = "默认账本",
-    categories: List<CategoryEntity> = emptyList(),
-    fundingAccounts: List<FundingAccountEntity> = emptyList(),
+    categories: List<LedgerCategoryUiModel> = emptyList(),
+    fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
     modifier: Modifier = Modifier,
     onCategorizationRuleRequested: (CategorizationRule) -> Unit = {},
@@ -141,7 +142,9 @@ fun ReviewQueueScreen(
         }
     } else {
         val availableCategories = remember(categories) {
-            categories.ifEmpty { DefaultCategories.systemDefaults(0) }
+            categories.ifEmpty {
+                DefaultCategories.systemDefaults(0).map { it.toLedgerCategoryUiModel() }
+            }
         }
         ReviewPendingEntryEditor(
             entry = activeEdit,

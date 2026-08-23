@@ -152,8 +152,8 @@ private fun BksDataAndBackupRoute(
     val runtime = context.runtime
     val dependencies = context.dependencies
     DataAndBackupScreen(
-        ledgerEntries = context.presentation.ledgerEntries,
-        currentLedgerName = context.presentation.activeLedgerName,
+        ledgerEntries = context.ledgerUiState.entries,
+        currentLedgerName = context.ledgerUiState.activeLedgerName,
         onExportEncryptedBackup = { passphrase ->
             dependencies.local.dataBackupRepository.exportEncryptedBackup(passphrase)
         },
@@ -167,6 +167,7 @@ private fun BksDataAndBackupRoute(
         onDeleteLocalData = context.actions::clearLocalData,
         onBack = { context.appState.profileDestination.value = null },
         snackbarHostState = context.appState.snackbarHostState,
+        localDataReplacementInFlight = context.ledgerUiState.localDataReplacementInFlight,
         ledgerSyncState = context.ledgerSyncUiState,
         ledgerSyncActions = com.bks.feature.settings.LedgerSyncSectionActions(
             onPreview = context.ledgerSyncViewModel::preview,

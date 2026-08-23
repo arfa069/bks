@@ -3,8 +3,11 @@ package com.bks.feature.ledger
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.runtime.saveable.listSaver
+import com.bks.data.local.CategoryEntity
+import com.bks.data.local.DEFAULT_LEDGER_BOOK_NAME
 import com.bks.data.local.EntryOrigin
 import com.bks.data.local.FlowDirection
+import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource
@@ -15,6 +18,45 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
+
+internal data class LedgerUiState(
+    val entries: List<LedgerUiEntry> = emptyList(),
+    val deletedEntries: List<LedgerUiEntry> = emptyList(),
+    val categories: List<LedgerCategoryUiModel> = emptyList(),
+    val fundingAccounts: List<FundingAccountUiModel> = emptyList(),
+    val ledgerBooks: List<LedgerBookUiModel> = emptyList(),
+    val activeLedgerBookId: String? = null,
+    val activeLedgerName: String = DEFAULT_LEDGER_BOOK_NAME,
+    val defaultFundingAccountSyncId: String? = null,
+    val report: LedgerReportUiModel = LedgerReportUiModel(),
+    val localDataReplacementInFlight: Boolean = false
+)
+
+data class LedgerCategoryUiModel(
+    val id: String,
+    val name: String,
+    val kind: TransactionKind?
+)
+
+data class FundingAccountUiModel(
+    val id: Long,
+    val syncId: String?,
+    val paymentSource: PaymentSource?,
+    val label: String
+)
+
+internal fun CategoryEntity.toLedgerCategoryUiModel() = LedgerCategoryUiModel(
+    id = id,
+    name = name,
+    kind = kind
+)
+
+internal fun FundingAccountEntity.toFundingAccountUiModel() = FundingAccountUiModel(
+    id = id,
+    syncId = syncId,
+    paymentSource = paymentSource,
+    label = label
+)
 
 internal enum class LedgerView {
     LIST,

@@ -40,6 +40,7 @@ import com.bks.feature.sync.LedgerSyncOperationResult
 import com.bks.feature.sync.LedgerSyncPreview
 import com.bks.feature.sync.LedgerSyncUiState
 import java.io.ByteArrayInputStream
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -397,6 +398,41 @@ class DataAndBackupScreenTest {
         composeRule.waitForIdle()
 
         assertTrue(deleted)
+    }
+
+    @Test
+    fun deleteDialogStaysLockedUntilLocalDataReplacementCompletes() {
+        val allowDeleteToFinish = CompletableDeferred<Unit>()
+        var deletionStarted = false
+        composeRule.setContent {
+            DataAndBackupScreen(
+                ledgerEntries = emptyList(),
+                onExportEncryptedBackup = { "backup" },
+                onValidateEncryptedBackup = { _, _ -> },
+                onImportEncryptedBackup = { _, _ -> },
+                onDeleteLocalData = {
+                    deletionStarted = true
+                    allowDeleteToFinish.await()
+                },
+                onBack = {}
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("删除本机数据").performScrollTo().performClick()
+        composeRule.onNodeWithText("我已了解并完成需要的备份").performClick()
+        composeRule.onNodeWithText("输入 删除本机数据").performTextInput("删除本机数据")
+        composeRule.onNodeWithText("确认删除").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { deletionStarted }
+
+        composeRule.onNodeWithText("正在删除…").assertIsDisplayed().assertIsNotEnabled()
+        composeRule.onNodeWithText("取消").assertIsNotEnabled()
+        composeRule.onNodeWithText("我已了解并完成需要的备份").assertIsNotEnabled()
+
+        allowDeleteToFinish.complete(Unit)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("正在删除…").fetchSemanticsNodes().isEmpty()
+        }
     }
 
     private fun setContentWithBackupFile(content: String, screen: @Composable () -> Unit) {

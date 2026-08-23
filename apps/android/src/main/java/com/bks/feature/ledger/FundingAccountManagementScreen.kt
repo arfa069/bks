@@ -42,12 +42,11 @@ import com.bks.ui.components.EmptyStatePanel
 import com.bks.ui.components.OutlinedTextField
 import com.bks.ui.components.TextButton
 import kotlinx.coroutines.launch
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.PaymentSource
 
 @Composable
 internal fun FundingAccountManagementContent(
-    fundingAccounts: List<FundingAccountEntity>,
+    fundingAccounts: List<FundingAccountUiModel>,
     defaultFundingAccountSyncId: String? = null,
     snackbarHostState: SnackbarHostState,
     actions: FundingAccountManagementActions
@@ -58,11 +57,11 @@ internal fun FundingAccountManagementContent(
         fundingAccounts.firstOrNull { it.id == editingAccountId }
     }
     var editorError by remember { mutableStateOf<String?>(null) }
-    var pendingDelete by remember { mutableStateOf<FundingAccountEntity?>(null) }
+    var pendingDelete by remember { mutableStateOf<FundingAccountUiModel?>(null) }
     var blockedDeleteMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    fun deleteFundingAccount(account: FundingAccountEntity) {
+    fun deleteFundingAccount(account: FundingAccountUiModel) {
         scope.launch {
             val result = runCatching { actions.onDeleteFundingAccount(account.id) }
                 .getOrElse {
@@ -80,7 +79,7 @@ internal fun FundingAccountManagementContent(
         }
     }
 
-    fun openEditor(account: FundingAccountEntity?) {
+    fun openEditor(account: FundingAccountUiModel?) {
         editingAccountId = account?.id
         editorError = null
         showEditor = true
@@ -153,11 +152,11 @@ internal fun FundingAccountManagementContent(
 
 @Composable
 private fun FundingAccountGrid(
-    fundingAccounts: List<FundingAccountEntity>,
+    fundingAccounts: List<FundingAccountUiModel>,
     defaultFundingAccountSyncId: String?,
     actions: FundingAccountManagementActions,
-    onEdit: (FundingAccountEntity?) -> Unit,
-    onRequestDelete: (FundingAccountEntity) -> Unit
+    onEdit: (FundingAccountUiModel?) -> Unit,
+    onRequestDelete: (FundingAccountUiModel) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val defaultAccount = remember(fundingAccounts, defaultFundingAccountSyncId) {
@@ -250,7 +249,7 @@ private fun FundingAccountHeader(
 @Composable
 private fun FundingAccountOverview(
     accountCount: Int,
-    defaultAccount: FundingAccountEntity?
+    defaultAccount: FundingAccountUiModel?
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -303,7 +302,7 @@ private fun FundingAccountOverview(
 
 private suspend fun handleFundingAccountDeleteResult(
     result: FundingAccountDeleteResult,
-    account: FundingAccountEntity,
+    account: FundingAccountUiModel,
     snackbarHostState: SnackbarHostState,
     onBlocked: (String) -> Unit
 ) {
@@ -318,7 +317,7 @@ private suspend fun handleFundingAccountDeleteResult(
 @Composable
 @Suppress("LongMethod")
 private fun FundingAccountCard(
-    account: FundingAccountEntity,
+    account: FundingAccountUiModel,
     isDefault: Boolean,
     onSetDefault: () -> Unit,
     onEdit: () -> Unit,
@@ -426,7 +425,7 @@ private fun FundingAccountCard(
 
 @Composable
 private fun FundingAccountDeleteDialog(
-    account: FundingAccountEntity,
+    account: FundingAccountUiModel,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -468,7 +467,7 @@ private fun FundingAccountBlockedDeleteDialog(
 
 @Composable
 private fun FundingAccountEditorDialog(
-    account: FundingAccountEntity?,
+    account: FundingAccountUiModel?,
     errorMessage: String?,
     onInputChanged: () -> Unit,
     onDismiss: () -> Unit,

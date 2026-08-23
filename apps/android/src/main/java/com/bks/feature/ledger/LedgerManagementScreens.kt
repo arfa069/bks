@@ -2,7 +2,6 @@ package com.bks.feature.ledger
 
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.PaymentSource
 
 
@@ -67,7 +66,7 @@ internal fun LedgerBookManagementScreen(
 
 @Composable
 internal fun FundingAccountManagementScreen(
-    fundingAccounts: List<FundingAccountEntity>,
+    fundingAccounts: List<FundingAccountUiModel>,
     defaultFundingAccountSyncId: String? = null,
     snackbarHostState: SnackbarHostState,
     actions: FundingAccountManagementActions

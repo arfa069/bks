@@ -64,7 +64,6 @@ internal fun BksAccountEntry(context: BksRouteContext) {
 @Composable
 internal fun BksRouteHost(context: BksRouteContext) {
     val runtime = context.runtime
-    val presentation = context.presentation
     val bindings = context.bindings
     val dependencies = context.dependencies
     val actions = context.actions
@@ -179,19 +178,15 @@ private fun BksManualEntryRoute(
     innerPadding: PaddingValues,
     onManualEntryClosed: () -> Unit
 ) {
-    val runtime = context.runtime
+    val ledgerState = context.ledgerUiState
+    val ledgerViewModel = context.ledgerViewModel
     val appState = context.appState
     ManualLedgerEntryScreen(
-        categories = runtime.ledgerState.categories,
-        fundingAccounts = runtime.ledgerState.fundingAccounts,
+        categories = ledgerState.categories,
+        fundingAccounts = ledgerState.fundingAccounts,
         onExit = onManualEntryClosed,
         onCreateEntry = { input ->
-            val targetLedgerBookId = runtime.ledgerState.activeLedgerBook?.id
-                ?: error("当前账本尚未加载")
-            context.dependencies.local.ledgerRepository.createManualEntry(
-                ledgerBookId = targetLedgerBookId,
-                input = input
-            )
+            ledgerViewModel.createManualEntry(input)
             onManualEntryClosed()
             appState.selectedTab.value = AppTab.Ledger
             appState.profileDestination.value = null

@@ -14,12 +14,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.ConfidenceState
-import com.bks.data.local.FundingAccountEntity
-import com.bks.data.local.FundingAccountSourceScope
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.TransactionKind
+import com.bks.feature.ledger.FundingAccountUiModel
+import com.bks.feature.ledger.LedgerCategoryUiModel
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,8 +41,8 @@ class ReviewQueueEditorTest {
                 state = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
                 onStateChange = { nextState.set(it) },
                 categories = listOf(
-                    category("food", "餐饮", TransactionKind.EXPENSE, 10),
-                    category("shopping", "购物", TransactionKind.EXPENSE, 20)
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("shopping", "购物", TransactionKind.EXPENSE)
                 ),
                 fundingAccounts = listOf(
                     fundingAccount(42, "微信零钱", PaymentSource.WECHAT),
@@ -130,8 +129,8 @@ class ReviewQueueEditorTest {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
                 categories = listOf(
-                    category("food", "餐饮", TransactionKind.EXPENSE, 10),
-                    category("shopping", "购物", TransactionKind.EXPENSE, 20)
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("shopping", "购物", TransactionKind.EXPENSE)
                 )
             )
         }
@@ -163,8 +162,8 @@ class ReviewQueueEditorTest {
                     )
                 ),
                 categories = listOf(
-                    category("food", "餐饮", TransactionKind.EXPENSE, 10),
-                    category("shopping", "购物", TransactionKind.EXPENSE, 20)
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("shopping", "购物", TransactionKind.EXPENSE)
                 )
             )
         }
@@ -247,32 +246,22 @@ class ReviewQueueEditorTest {
     private fun category(
         id: String,
         name: String,
-        kind: TransactionKind,
-        sortOrder: Int
-    ): CategoryEntity = CategoryEntity(
+        kind: TransactionKind
+    ): LedgerCategoryUiModel = LedgerCategoryUiModel(
         id = id,
         name = name,
-        kind = kind,
-        sortOrder = sortOrder,
-        isSystem = true,
-        createdAtEpochMillis = NOW
+        kind = kind
     )
 
     private fun fundingAccount(
         id: Long,
         label: String,
         source: PaymentSource
-    ): FundingAccountEntity = FundingAccountEntity(
+    ): FundingAccountUiModel = FundingAccountUiModel(
         id = id,
         syncId = "funding-$id",
-        sourceScope = when (source) {
-            PaymentSource.WECHAT -> FundingAccountSourceScope.WECHAT
-            PaymentSource.ALIPAY -> FundingAccountSourceScope.ALIPAY
-            PaymentSource.OTHER -> FundingAccountSourceScope.USER
-        },
         paymentSource = source,
-        label = label,
-        createdAtEpochMillis = NOW
+        label = label
     )
 
     private fun scrollToFirstPendingEntry() {

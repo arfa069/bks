@@ -69,10 +69,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.bks.R
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.EntryOrigin
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource

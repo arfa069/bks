@@ -6,8 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
-import com.bks.data.local.DEFAULT_LEDGER_BOOK_NAME
-import com.bks.data.local.LedgerRepositoryState
 import com.bks.feature.account.AccountDeletionUiState
 import com.bks.feature.account.AccountCloudSettingsOperationResult
 import com.bks.feature.account.AccountRuntimeState
@@ -20,16 +18,14 @@ import com.bks.feature.diagnostics.DiagnosticEvent
 import com.bks.feature.diagnostics.DiagnosticEventMetadata
 import com.bks.feature.diagnostics.DiagnosticLevel
 import com.bks.feature.diagnostics.DiagnosticSource
-import com.bks.feature.ledger.LedgerBookUiModel
-import com.bks.feature.ledger.LedgerReportUiModel
-import com.bks.feature.ledger.LedgerUiEntry
-import com.bks.feature.ledger.buildLedgerReportUiModel
-import com.bks.feature.ledger.toLedgerUiEntry
+import com.bks.feature.ledger.LedgerViewModel
 import com.bks.feature.review.ReviewQueueState
 import com.bks.ui.BksAppState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal class BksAppRuntimeState {
     var automaticBookkeepingEnabled by mutableStateOf(false)
@@ -42,7 +38,6 @@ internal class BksAppRuntimeState {
     var cloudAiSettingsLoadedToken by mutableStateOf<String?>(null)
     var reviewState by mutableStateOf(ReviewQueueState())
     var reviewTransitionInFlight by mutableStateOf(false)
-    var ledgerState by mutableStateOf(LedgerRepositoryState())
     var categorizationRules by mutableStateOf(emptyList<CategorizationRule>())
 }
 
@@ -55,7 +50,8 @@ internal class BksAppActions(
     private val dependencies: BksAppDependencies,
     private val runtime: BksAppRuntimeState,
     private val appState: BksAppState,
-    private val coroutineScope: CoroutineScope
+    private val coroutineScope: CoroutineScope,
+    private val ledgerViewModel: LedgerViewModel
 ) {
     fun persistReviewState(nextState: ReviewQueueState) {
         if (runtime.reviewTransitionInFlight) {
@@ -67,7 +63,13 @@ internal class BksAppActions(
         val previousState = runtime.reviewState
         val previousConfirmedIds = previousState.confirmedEntries.mapTo(mutableSetOf()) { it.originPendingId }
         val addsConfirmation = nextState.confirmedEntries.any { it.originPendingId !in previousConfirmedIds }
-        val targetLedgerBookId = runtime.ledgerState.activeLedgerBook?.id
+        if (addsConfirmation && ledgerViewModel.localDataReplacementInFlight.value) {
+            coroutineScope.launch {
+                appState.snackbarHostState.showSnackbar("本机数据正在删除，请稍后重试")
+            }
+            return
+        }
+        val targetLedgerBookId = ledgerViewModel.uiState.value.activeLedgerBookId
         if (addsConfirmation && targetLedgerBookId == null) {
             coroutineScope.launch {
                 appState.snackbarHostState.showSnackbar("当前账本尚未加载，请稍后重试")
@@ -137,55 +139,30 @@ internal class BksAppActions(
         }
     }
 
-    fun clearLocalData() {
-        dependencies.account.wechatAvatarCache.clear()
-        runtime.reviewState = ReviewQueueState()
-        runtime.categorizationRules = emptyList()
-        dependencies.account.cloudSettingsCoordinator.clearLocalState()
-        runtime.ledgerState = LedgerRepositoryState()
-        coroutineScope.launch {
-            try {
+    suspend fun clearLocalData() = withContext(NonCancellable) {
+        try {
+            ledgerViewModel.clearLocalData {
+                dependencies.account.wechatAvatarCache.clear()
+                runtime.reviewState = ReviewQueueState()
+                runtime.categorizationRules = emptyList()
+                dependencies.account.cloudSettingsCoordinator.clearLocalState()
                 dependencies.sync.runtime.disable()
-                dependencies.local.ledgerRepository.clearLocalData()
-            } finally {
-                dependencies.diagnosticLogs.clear(keepEnabledPreference = false)
             }
+        } finally {
+            dependencies.diagnosticLogs.clear(keepEnabledPreference = false)
         }
     }
 }
 
 internal data class BksAppPresentation(
-    val activeLedgerName: String,
-    val effectiveAiSettings: AiCategorizationSettings,
-    val ledgerEntries: List<LedgerUiEntry>,
-    val deletedLedgerEntries: List<LedgerUiEntry>,
-    val ledgerBookUiModels: List<LedgerBookUiModel>,
-    val reportUiModel: LedgerReportUiModel
+    val effectiveAiSettings: AiCategorizationSettings
 )
 
 @Composable
 internal fun rememberBksAppPresentation(
     runtime: BksAppRuntimeState
 ): BksAppPresentation {
-    val ledgerEntries = remember(runtime.ledgerState.ledgerEntries) {
-        runtime.ledgerState.ledgerEntries.map { it.toLedgerUiEntry() }
-    }
-    val deletedLedgerEntries = remember(runtime.ledgerState.deletedLedgerEntries) {
-        runtime.ledgerState.deletedLedgerEntries.map { it.toLedgerUiEntry() }
-    }
-    val ledgerBookUiModels = remember(runtime.ledgerState.ledgerBooks, runtime.ledgerState.activeLedgerBook) {
-        runtime.ledgerState.ledgerBooks.map { ledgerBook ->
-            LedgerBookUiModel(
-                id = ledgerBook.id,
-                name = ledgerBook.name,
-                activeEntryCount = ledgerBook.activeEntryCount,
-                deletedEntryCount = ledgerBook.deletedEntryCount,
-                isActive = ledgerBook.id == runtime.ledgerState.activeLedgerBook?.id
-            )
-        }
-    }
     return BksAppPresentation(
-        activeLedgerName = runtime.ledgerState.activeLedgerBook?.name ?: DEFAULT_LEDGER_BOOK_NAME,
         effectiveAiSettings = (runtime.accountSession as? AccountSession.SignedIn)
             ?.takeIf { signedIn ->
                 signedIn.token == runtime.cloudAiSettingsLoadedToken &&
@@ -193,10 +170,6 @@ internal fun rememberBksAppPresentation(
                     runtime.accountDeletionState.cloudWritesAllowed
             }
             ?.let { runtime.aiSettings }
-            ?: AiCategorizationSettings(),
-        ledgerEntries = ledgerEntries,
-        deletedLedgerEntries = deletedLedgerEntries,
-        ledgerBookUiModels = ledgerBookUiModels,
-        reportUiModel = remember(ledgerEntries) { buildLedgerReportUiModel(ledgerEntries) }
+            ?: AiCategorizationSettings()
     )
 }

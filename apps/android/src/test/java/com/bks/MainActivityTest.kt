@@ -229,7 +229,7 @@ class MainActivityTest {
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
-            composeRule.onNodeWithText("旅行账本").assertIsDisplayed()
+            waitUntilTextIsDisplayed("旅行账本")
 
             composeRule.onNodeWithTag("return-home").performClick()
             composeRule.onNodeWithTag("app-tab-Reports", useUnmergedTree = true).performClick()

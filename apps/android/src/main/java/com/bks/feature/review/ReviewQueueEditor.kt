@@ -13,13 +13,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.bks.data.local.CategoryEntity
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.FundingAccountEntity
 import com.bks.data.local.LedgerEntryInput
 import com.bks.feature.categorization.AiCategorizationResult
 import com.bks.feature.categorization.CategorizationRule
+import com.bks.feature.ledger.FundingAccountUiModel
+import com.bks.feature.ledger.LedgerCategoryUiModel
 import com.bks.feature.ledger.LedgerEntryFormState
 import com.bks.feature.ledger.LedgerEntryFormConfig
 import com.bks.feature.ledger.SharedLedgerEntryForm
@@ -65,8 +65,8 @@ internal data class PendingReviewEdit(
     companion object {
         fun from(
             input: LedgerEntryInput,
-            categories: List<CategoryEntity>,
-            fundingAccounts: List<FundingAccountEntity>
+            categories: List<LedgerCategoryUiModel>,
+            fundingAccounts: List<FundingAccountUiModel>
         ): PendingReviewEdit = PendingReviewEdit(
             title = input.merchantTitle,
             amountText = amountMinorToText(input.amountMinor),
@@ -104,14 +104,14 @@ internal fun ReviewQueueEntry.hasCategoryCorrection(category: String): Boolean {
     return category.trim().isNotBlank() && category.trim() != this.category
 }
 
-internal fun CategoryEntity.reviewDisplayName(): String =
+internal fun LedgerCategoryUiModel.reviewDisplayName(): String =
     DefaultCategories.nameForId(id) ?: name
 
 @Composable
 internal fun ReviewPendingEntryEditor(
     entry: ReviewQueueEntry,
-    availableCategories: List<CategoryEntity>,
-    fundingAccounts: List<FundingAccountEntity>,
+    availableCategories: List<LedgerCategoryUiModel>,
+    fundingAccounts: List<FundingAccountUiModel>,
     defaultFundingAccountSyncId: String?,
     config: ReviewPendingEntryEditorConfig
 ) {

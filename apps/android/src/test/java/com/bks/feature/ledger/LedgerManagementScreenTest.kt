@@ -23,8 +23,6 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.then
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import com.bks.data.local.FundingAccountEntity
-import com.bks.data.local.FundingAccountSourceScope
 import com.bks.data.local.PaymentSource
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
@@ -399,17 +397,10 @@ class LedgerManagementScreenTest {
         id: Long,
         label: String,
         source: PaymentSource?
-    ): FundingAccountEntity = FundingAccountEntity(
+    ): FundingAccountUiModel = FundingAccountUiModel(
         id = id,
         syncId = "funding-$id",
-        sourceScope = when (source) {
-            PaymentSource.WECHAT -> FundingAccountSourceScope.WECHAT
-            PaymentSource.ALIPAY -> FundingAccountSourceScope.ALIPAY
-            PaymentSource.OTHER -> FundingAccountSourceScope.USER
-            null -> FundingAccountSourceScope.USER
-        },
         paymentSource = source,
-        label = label,
-        createdAtEpochMillis = 1
+        label = label
     )
 }

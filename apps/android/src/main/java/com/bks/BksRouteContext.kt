@@ -2,6 +2,8 @@ package com.bks
 
 import androidx.compose.foundation.layout.PaddingValues
 import com.bks.feature.account.AccountSession
+import com.bks.feature.ledger.LedgerUiState
+import com.bks.feature.ledger.LedgerViewModel
 import com.bks.ui.BksAppState
 import kotlinx.coroutines.CoroutineScope
 
@@ -13,6 +15,8 @@ internal data class BksRouteContext(
     val actions: BksAppActions,
     val appState: BksAppState,
     val coroutineScope: CoroutineScope,
+    val ledgerViewModel: LedgerViewModel,
+    val ledgerUiState: LedgerUiState,
     val ledgerSyncViewModel: com.bks.feature.sync.LedgerSyncViewModel,
     val ledgerSyncUiState: com.bks.feature.sync.LedgerSyncUiState
 )
