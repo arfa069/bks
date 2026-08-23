@@ -3,6 +3,7 @@ agp = "9.2.1"
 kotlin = "2.3.20"
 composeBom = "2024.12.01"
 activityCompose = "1.10.1"
+lifecycle = "2.9.4"
 coreKtx = "1.17.0"
 room = "2.8.4"
 work = "2.10.1"
@@ -39,6 +40,7 @@ detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 [libraries]
 androidx-arch-core-testing = { module = "androidx.arch.core:core-testing", version.ref = "archCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 androidx-compose-animation = { module = "androidx.compose.animation:animation" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }

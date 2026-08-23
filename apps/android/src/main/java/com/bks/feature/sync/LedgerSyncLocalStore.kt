@@ -13,7 +13,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 
 class LedgerSyncLocalStore(
-    private val database: BksDatabase,
+    internal val database: BksDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
     private val idGenerator: () -> String = { UUID.randomUUID().toString() }
 ) {

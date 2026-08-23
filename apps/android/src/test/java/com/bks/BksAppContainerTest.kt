@@ -36,6 +36,10 @@ class BksAppContainerTest {
             firstDependencies.account.cloudSettingsCoordinator,
             secondDependencies.account.cloudSettingsCoordinator
         )
+        assertSame(container.ledgerSyncCoordinator, firstDependencies.sync.coordinator)
+        assertSame(firstDependencies.sync.coordinator, secondDependencies.sync.coordinator)
+        assertSame(container.ledgerSyncRuntime, firstDependencies.sync.runtime)
+        assertSame(firstDependencies.sync.runtime, secondDependencies.sync.runtime)
     }
 
     @Test
@@ -63,10 +67,6 @@ class BksAppContainerTest {
         val activity = ComponentActivity()
 
         assertNotSame(
-            container.createLedgerSyncCoordinator(),
-            container.createLedgerSyncCoordinator()
-        )
-        assertNotSame(
             container.createBillSyncCaptureProcessor(),
             container.createBillSyncCaptureProcessor()
         )
@@ -74,7 +74,7 @@ class BksAppContainerTest {
             container.createBillSyncStateCoordinator(activity),
             container.createBillSyncStateCoordinator(activity)
         )
-        assertNotSame(
+        assertSame(
             container.createAppDependencies(BksAppOverrides()).sync.coordinator,
             container.createAppDependencies(BksAppOverrides()).sync.coordinator
         )

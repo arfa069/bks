@@ -47,7 +47,7 @@ private fun BksProfileOverviewRoute(
         session = session,
         onDestinationSelected = { context.appState.profileDestination.value = it },
         onNavigateHome = onNavigateHome,
-        ledgerSyncEnabled = context.runtime.ledgerSyncUiState.enabled,
+        ledgerSyncEnabled = context.ledgerSyncUiState.enabled,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)
@@ -167,16 +167,15 @@ private fun BksDataAndBackupRoute(
         onDeleteLocalData = context.actions::clearLocalData,
         onBack = { context.appState.profileDestination.value = null },
         snackbarHostState = context.appState.snackbarHostState,
-        ledgerSyncState = runtime.ledgerSyncUiState.copy(
-            signedIn = runtime.accountSession is AccountSession.SignedIn
+        ledgerSyncState = context.ledgerSyncUiState,
+        ledgerSyncActions = com.bks.feature.settings.LedgerSyncSectionActions(
+            onPreview = context.ledgerSyncViewModel::preview,
+            onDismissPreview = context.ledgerSyncViewModel::dismissPreview,
+            onEnable = context.ledgerSyncViewModel::enable,
+            onSyncNow = context.ledgerSyncViewModel::synchronize,
+            onDisable = context.ledgerSyncViewModel::disable,
+            onResolveConflict = context.ledgerSyncViewModel::resolveConflict
         ),
-        onPreviewLedgerSync = { context.previewLedgerSync() },
-        onEnableLedgerSync = { mode -> context.enableLedgerSync(mode) },
-        onSyncNow = { context.syncLedgerNow() },
-        onDisableLedgerSync = context::disableLedgerSync,
-        onResolveLedgerSyncConflict = { conflictId, version, choice ->
-            context.resolveLedgerSyncConflict(conflictId, version, choice)
-        },
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)

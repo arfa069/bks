@@ -5,7 +5,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import com.bks.feature.account.AccountSession
 import com.bks.feature.sync.LedgerSyncOperationResult
-import com.bks.feature.sync.LedgerSyncScheduler
 import com.bks.ui.components.Button
 import com.bks.ui.components.TextButton
 import kotlinx.coroutines.launch
@@ -13,15 +12,16 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
     val runtime = context.runtime
-    if (!runtime.showLedgerSyncAccountSwitch) return
+    val syncState = context.ledgerSyncUiState
+    if (!syncState.showAccountSwitch) return
     val signedIn = runtime.accountSession as? AccountSession.SignedIn
     AlertDialog(
         onDismissRequest = {},
         title = { Text("切换账户同步数据") },
         text = {
             Text(
-                if (runtime.ledgerSyncUiState.pendingCount > 0) {
-                    "原账户仍有 ${runtime.ledgerSyncUiState.pendingCount} 项待上传。为避免丢失，请先恢复原账户完成同步或导出加密备份。"
+                if (syncState.pendingCount > 0) {
+                    "原账户仍有 ${syncState.pendingCount} 项待上传。为避免丢失，请先恢复原账户完成同步或导出加密备份。"
                 } else {
                     "确认后，本机正式账本将切换为当前账户的云端数据。待确认记录和设备设置会保留，原账户数据仍保存在其云端。"
                 }
@@ -31,28 +31,24 @@ internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
             Button(
                 onClick = {
                     if (signedIn != null) {
-                        runtime.ledgerSyncAccountSwitchBusy = true
                         context.coroutineScope.launch {
                             when (
-                                val result = context.dependencies.sync.coordinator.switchAccount(signedIn.token)
+                                val result = context.ledgerSyncViewModel.switchAccount()
                             ) {
                                 is LedgerSyncOperationResult.Success -> {
-                                    runtime.showLedgerSyncAccountSwitch = false
-                                    LedgerSyncScheduler.ensurePeriodic(context.dependencies.context)
                                     context.appState.snackbarHostState.showSnackbar("账户同步数据已切换")
                                 }
                                 is LedgerSyncOperationResult.Failure ->
                                     context.appState.snackbarHostState.showSnackbar(result.message)
                             }
-                            runtime.ledgerSyncAccountSwitchBusy = false
                         }
                     }
                 },
                 enabled = signedIn != null &&
-                    runtime.ledgerSyncUiState.pendingCount == 0 &&
-                    !runtime.ledgerSyncAccountSwitchBusy
+                    syncState.pendingCount == 0 &&
+                    !syncState.accountSwitchBusy
             ) {
-                Text(if (runtime.ledgerSyncAccountSwitchBusy) "切换中" else "确认切换")
+                Text(if (syncState.accountSwitchBusy) "切换中" else "确认切换")
             }
         },
         dismissButton = {
@@ -63,10 +59,9 @@ internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
                             context.dependencies.account.accountRepository.signOut(signedIn.token)
                         }
                     }
-                    runtime.showLedgerSyncAccountSwitch = false
                     context.dependencies.account.sessionCoordinator.moveToLocalMode()
                 },
-                enabled = !runtime.ledgerSyncAccountSwitchBusy
+                enabled = !syncState.accountSwitchBusy
             ) {
                 Text("取消并退出当前账户")
             }

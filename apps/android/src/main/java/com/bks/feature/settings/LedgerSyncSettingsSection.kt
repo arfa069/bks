@@ -12,20 +12,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bks.api.LedgerSyncConflictChoiceContract
-import com.bks.api.LedgerSyncEntityTypeContract
-import com.bks.api.LedgerSyncJsonContracts
-import com.bks.api.LedgerSyncPayloadContract
-import com.bks.data.local.AccountSyncConflictEntity
+import com.bks.feature.sync.LedgerSyncConflictUiModel
 import com.bks.feature.sync.LedgerSyncInitialMode
 import com.bks.feature.sync.LedgerSyncOperationResult
 import com.bks.feature.sync.LedgerSyncPreview
@@ -42,34 +35,6 @@ import kotlinx.coroutines.launch
 private fun formatSyncTime(epochMillis: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(epochMillis))
 
-private fun syncEntityLabel(entityType: String): String = when (
-    runCatching { LedgerSyncEntityTypeContract.valueOf(entityType) }.getOrNull()
-) {
-    LedgerSyncEntityTypeContract.CATEGORY -> "分类冲突"
-    LedgerSyncEntityTypeContract.FUNDING_ACCOUNT -> "资金账户冲突"
-    LedgerSyncEntityTypeContract.LEDGER_BOOK -> "账本冲突"
-    LedgerSyncEntityTypeContract.LEDGER_ENTRY -> "账目冲突"
-    LedgerSyncEntityTypeContract.CATEGORIZATION_RULE -> "分类规则冲突"
-    null -> "同步冲突"
-}
-
-private fun syncPayloadSummary(entityType: String, payload: String?, deleted: Boolean): String {
-    if (deleted || payload == null) return "已删除"
-    val type = runCatching { LedgerSyncEntityTypeContract.valueOf(entityType) }.getOrNull()
-        ?: return "数据已更新"
-    return runCatching {
-        when (val parsed = LedgerSyncJsonContracts.parsePayload(type, payload)) {
-            is LedgerSyncPayloadContract.Category -> parsed.name
-            is LedgerSyncPayloadContract.FundingAccount -> parsed.label
-            is LedgerSyncPayloadContract.LedgerBook -> parsed.name
-            is LedgerSyncPayloadContract.LedgerEntry ->
-                "${parsed.merchantTitle} · ${parsed.amountMinor / 100.0} ${parsed.currency}"
-            is LedgerSyncPayloadContract.CategorizationRule ->
-                "${parsed.merchantContains.ifBlank { parsed.titleContains }} → ${parsed.category}"
-        }
-    }.getOrDefault("数据已更新")
-}
-
 @Composable
 internal fun LedgerSyncSettingsSection(
     ledgerSyncState: LedgerSyncUiState,
@@ -77,7 +42,6 @@ internal fun LedgerSyncSettingsSection(
     snackbarHostState: SnackbarHostState
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var syncPreview by remember { mutableStateOf<LedgerSyncPreview?>(null) }
 
     CardSection(title = "账户同步") {
         when {
@@ -86,7 +50,7 @@ internal fun LedgerSyncSettingsSection(
                 coroutineScope = coroutineScope,
                 actions = actions,
                 snackbarHostState = snackbarHostState,
-                onPreviewed = { syncPreview = it }
+                previewBusy = ledgerSyncState.previewBusy
             )
             else -> EnabledSyncContent(
                 ledgerSyncState = ledgerSyncState,
@@ -97,13 +61,13 @@ internal fun LedgerSyncSettingsSection(
         }
     }
 
-    syncPreview?.let { preview ->
+    if (ledgerSyncState.preview != null) {
         FirstSyncConfirmationDialog(
-            preview = preview,
+            ledgerSyncState = ledgerSyncState,
             coroutineScope = coroutineScope,
             actions = actions,
             snackbarHostState = snackbarHostState,
-            onDismiss = { syncPreview = null }
+            onDismiss = actions.onDismissPreview
         )
     }
 }
@@ -113,24 +77,21 @@ private fun EnableSyncContent(
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState,
-    onPreviewed: (LedgerSyncPreview) -> Unit
+    previewBusy: Boolean
 ) {
-    var syncBusy by remember { mutableStateOf(false) }
     Text("同步账本、正式及最近删除账目、分类、资金账户和分类规则。默认资金账户仅按账号同步，不进入账本同步。")
     Button(
         onClick = {
-            syncBusy = true
             coroutineScope.launch {
                 when (val result = actions.onPreview()) {
-                    is LedgerSyncOperationResult.Success -> onPreviewed(result.value)
+                    is LedgerSyncOperationResult.Success -> Unit
                     is LedgerSyncOperationResult.Failure -> snackbarHostState.showSnackbar(result.message)
                 }
-                syncBusy = false
             }
         },
-        enabled = !syncBusy,
+        enabled = !previewBusy,
         modifier = Modifier.testTag("ledger-sync-enable")
-    ) { Text(if (syncBusy) "正在检查" else "启用账户同步") }
+    ) { Text(if (previewBusy) "正在检查" else "启用账户同步") }
 }
 
 @Composable
@@ -140,7 +101,6 @@ private fun EnabledSyncContent(
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState
 ) {
-    var syncBusy by remember { mutableStateOf(false) }
     Text(
         ledgerSyncState.lastSuccessAtMillis?.let {
             "最近同步：${formatSyncTime(it)}"
@@ -158,7 +118,6 @@ private fun EnabledSyncContent(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = {
-                syncBusy = true
                 coroutineScope.launch {
                     val result = actions.onSyncNow()
                     snackbarHostState.showSnackbar(
@@ -167,15 +126,14 @@ private fun EnabledSyncContent(
                             is LedgerSyncOperationResult.Failure -> result.message
                         }
                     )
-                    syncBusy = false
                 }
             },
-            enabled = !syncBusy,
+            enabled = !ledgerSyncState.syncBusy,
             modifier = Modifier.testTag("ledger-sync-now")
-        ) { Text(if (syncBusy) "同步中" else "立即同步") }
+        ) { Text(if (ledgerSyncState.syncBusy) "同步中" else "立即同步") }
         OutlinedButton(
             onClick = { coroutineScope.launch { actions.onDisable() } },
-            enabled = !syncBusy
+            enabled = !ledgerSyncState.syncBusy
         ) { Text("关闭同步") }
     }
     ledgerSyncState.conflicts.forEach { conflict ->
@@ -189,7 +147,7 @@ private fun EnabledSyncContent(
 
 @Composable
 private fun SyncConflictCard(
-    conflict: AccountSyncConflictEntity,
+    conflict: LedgerSyncConflictUiModel,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions
 ) {
@@ -201,9 +159,9 @@ private fun SyncConflictCard(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(syncEntityLabel(conflict.entityType), fontWeight = FontWeight.SemiBold)
-            Text("云端：${syncPayloadSummary(conflict.entityType, conflict.canonicalPayload, conflict.canonicalDeleted)}")
-            Text("本机：${syncPayloadSummary(conflict.entityType, conflict.candidatePayload, conflict.candidateDeleted)}")
+            Text(conflict.title, fontWeight = FontWeight.SemiBold)
+            Text("云端：${conflict.cloudSummary}")
+            Text("本机：${conflict.localSummary}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     coroutineScope.launch {
@@ -213,7 +171,7 @@ private fun SyncConflictCard(
                             LedgerSyncConflictChoiceContract.CANONICAL
                         )
                     }
-                }) { Text("保留云端") }
+                }, enabled = !conflict.resolving) { Text("保留云端") }
                 Button(onClick = {
                     coroutineScope.launch {
                         actions.onResolveConflict(
@@ -222,7 +180,7 @@ private fun SyncConflictCard(
                             LedgerSyncConflictChoiceContract.CANDIDATE
                         )
                     }
-                }) { Text("保留本机") }
+                }, enabled = !conflict.resolving) { Text("保留本机") }
             }
         }
     }
@@ -230,13 +188,14 @@ private fun SyncConflictCard(
 
 @Composable
 private fun FirstSyncConfirmationDialog(
-    preview: LedgerSyncPreview,
+    ledgerSyncState: LedgerSyncUiState,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState,
     onDismiss: () -> Unit
 ) {
-    var syncBusy by remember { mutableStateOf(false) }
+    val preview = requireNotNull(ledgerSyncState.preview)
+    val syncBusy = ledgerSyncState.syncBusy
     AlertDialog(
         onDismissRequest = { if (!syncBusy) onDismiss() },
         title = { Text("启用账户同步") },
@@ -253,7 +212,6 @@ private fun FirstSyncConfirmationDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    syncBusy = true
                     coroutineScope.launch {
                         val mode = if (preview.localRecordCount == 0 && preview.cloudRecordCount > 0) {
                             LedgerSyncInitialMode.REPLACE_LOCAL
@@ -268,7 +226,6 @@ private fun FirstSyncConfirmationDialog(
                                 is LedgerSyncOperationResult.Failure -> result.message
                             }
                         )
-                        syncBusy = false
                     }
                 },
                 enabled = !syncBusy
@@ -280,11 +237,20 @@ private fun FirstSyncConfirmationDialog(
     )
 }
 
-internal class LedgerSyncSectionActions(
-    val onPreview: suspend () -> LedgerSyncOperationResult<LedgerSyncPreview>,
-    val onEnable: suspend (LedgerSyncInitialMode) -> LedgerSyncOperationResult<Unit>,
-    val onSyncNow: suspend () -> LedgerSyncOperationResult<Unit>,
-    val onDisable: suspend () -> Unit,
+class LedgerSyncSectionActions(
+    val onPreview: suspend () -> LedgerSyncOperationResult<LedgerSyncPreview> = {
+        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
+    },
+    val onDismissPreview: () -> Unit = {},
+    val onEnable: suspend (LedgerSyncInitialMode) -> LedgerSyncOperationResult<Unit> = {
+        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
+    },
+    val onSyncNow: suspend () -> LedgerSyncOperationResult<Unit> = {
+        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
+    },
+    val onDisable: suspend () -> Unit = {},
     val onResolveConflict: suspend (String, Long, LedgerSyncConflictChoiceContract) ->
-        LedgerSyncOperationResult<Unit>
+        LedgerSyncOperationResult<Unit> = { _, _, _ ->
+            LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
+        }
 )

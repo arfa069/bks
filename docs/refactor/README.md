@@ -63,7 +63,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 |---|---|---|
 | 2.1 | [Account Session](./phase-2/step-2.1-account-session.md) | Completed |
 | 2.2 | [Cloud Settings](./phase-2/step-2.2-cloud-settings.md) | Completed |
-| 2.3 | [Sync Runtime](./phase-2/step-2.3-sync-runtime.md) | Pending |
+| 2.3 | [Sync Runtime](./phase-2/step-2.3-sync-runtime.md) | Completed |
 
 ### Phase 3 — Ledger / Categorization / Review / Automatic Bookkeeping
 

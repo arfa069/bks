@@ -26,8 +26,6 @@ import com.bks.feature.ledger.LedgerUiEntry
 import com.bks.feature.ledger.buildLedgerReportUiModel
 import com.bks.feature.ledger.toLedgerUiEntry
 import com.bks.feature.review.ReviewQueueState
-import com.bks.feature.sync.LedgerSyncScheduler
-import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.ui.BksAppState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
@@ -46,9 +44,6 @@ internal class BksAppRuntimeState {
     var reviewTransitionInFlight by mutableStateOf(false)
     var ledgerState by mutableStateOf(LedgerRepositoryState())
     var categorizationRules by mutableStateOf(emptyList<CategorizationRule>())
-    var ledgerSyncUiState by mutableStateOf(LedgerSyncUiState())
-    var showLedgerSyncAccountSwitch by mutableStateOf(false)
-    var ledgerSyncAccountSwitchBusy by mutableStateOf(false)
 }
 
 @Composable
@@ -150,7 +145,7 @@ internal class BksAppActions(
         runtime.ledgerState = LedgerRepositoryState()
         coroutineScope.launch {
             try {
-                LedgerSyncScheduler.cancel(dependencies.context)
+                dependencies.sync.runtime.disable()
                 dependencies.local.ledgerRepository.clearLocalData()
             } finally {
                 dependencies.diagnosticLogs.clear(keepEnabledPreference = false)

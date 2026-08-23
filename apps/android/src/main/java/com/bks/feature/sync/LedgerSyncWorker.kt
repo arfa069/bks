@@ -20,18 +20,48 @@ class LedgerSyncWorker(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         val container = applicationContext.bksAppContainer
-        val restored = container.secureAccountSessionStore.restore()
-            as? AccountSessionRestoreResult.Restored
-            ?: return Result.success()
-        val local = container.ledgerSyncLocalStore
-        if (!local.currentState().enabled) return Result.success()
-        return when (
-            val result = container.createLedgerSyncCoordinator().synchronize(restored.credentials.token)
-        ) {
-            is LedgerSyncOperationResult.Success -> Result.success()
-            is LedgerSyncOperationResult.Failure -> if (result.retryable) Result.retry() else Result.failure()
+        return when (runLedgerSyncWorkerInvocation(
+            restoreSession = container.secureAccountSessionStore::restore,
+            syncEnabled = { container.ledgerSyncLocalStore.currentState().enabled },
+            synchronize = container.ledgerSyncCoordinator::synchronize
+        )) {
+            LedgerSyncWorkerOutcome.Success -> Result.success()
+            LedgerSyncWorkerOutcome.Retry -> Result.retry()
+            LedgerSyncWorkerOutcome.Failure -> Result.failure()
         }
     }
+}
+
+internal enum class LedgerSyncWorkerOutcome {
+    Success,
+    Retry,
+    Failure
+}
+
+internal suspend fun runLedgerSyncWorkerInvocation(
+    restoreSession: () -> AccountSessionRestoreResult,
+    syncEnabled: suspend () -> Boolean,
+    synchronize: suspend (String) -> LedgerSyncOperationResult<Unit>
+): LedgerSyncWorkerOutcome {
+    val restored = restoreSession() as? AccountSessionRestoreResult.Restored
+        ?: return LedgerSyncWorkerOutcome.Success
+    if (!syncEnabled()) return LedgerSyncWorkerOutcome.Success
+    return when (val result = synchronize(restored.credentials.token)) {
+        is LedgerSyncOperationResult.Success -> LedgerSyncWorkerOutcome.Success
+        is LedgerSyncOperationResult.Failure -> {
+            if (result.retryable) LedgerSyncWorkerOutcome.Retry else LedgerSyncWorkerOutcome.Failure
+        }
+    }
+}
+
+internal class AndroidLedgerSyncSchedulingGateway(context: Context) : LedgerSyncSchedulingGateway {
+    private val applicationContext = context.applicationContext
+
+    override fun enqueueNow() = LedgerSyncScheduler.enqueueNow(applicationContext)
+
+    override fun ensurePeriodic() = LedgerSyncScheduler.ensurePeriodic(applicationContext)
+
+    override fun cancel() = LedgerSyncScheduler.cancel(applicationContext)
 }
 
 object LedgerSyncScheduler {

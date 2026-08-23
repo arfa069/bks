@@ -14,9 +14,9 @@ import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.diagnostics.DiagnosticLogRepository
 import com.bks.feature.review.ReviewQueuePersistence
 import com.bks.feature.settings.LocalDataBackupRepository
-import com.bks.feature.sync.HttpLedgerSyncRepository
 import com.bks.feature.sync.LedgerSyncCoordinator
 import com.bks.feature.sync.LedgerSyncLocalStore
+import com.bks.feature.sync.LedgerSyncRuntime
 
 internal data class BksLocalDependencies(
     val database: BksDatabase,
@@ -38,7 +38,7 @@ internal data class BksAccountDependencies(
 internal data class BksSyncDependencies(
     val localStore: LedgerSyncLocalStore,
     val coordinator: LedgerSyncCoordinator,
-    val repository: HttpLedgerSyncRepository
+    val runtime: LedgerSyncRuntime
 )
 
 internal data class BksAppDependencies(

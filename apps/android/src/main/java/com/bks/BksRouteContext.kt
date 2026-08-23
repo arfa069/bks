@@ -12,7 +12,9 @@ internal data class BksRouteContext(
     val bindings: BksAppBindings,
     val actions: BksAppActions,
     val appState: BksAppState,
-    val coroutineScope: CoroutineScope
+    val coroutineScope: CoroutineScope,
+    val ledgerSyncViewModel: com.bks.feature.sync.LedgerSyncViewModel,
+    val ledgerSyncUiState: com.bks.feature.sync.LedgerSyncUiState
 )
 
 internal data class BksRouteContentContext(

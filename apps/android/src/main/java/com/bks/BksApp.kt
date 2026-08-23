@@ -14,6 +14,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.feature.account.AccountCredentials
 import com.bks.feature.account.AccountRepository
 import com.bks.feature.account.AccountSessionNotice
@@ -21,6 +24,7 @@ import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.CloudAiSettingsGateway
+import com.bks.feature.sync.LedgerSyncViewModel
 import com.bks.ui.components.SlidePageTransition
 import com.bks.ui.rememberBksAppState
 import com.bks.ui.theme.BksTheme
@@ -58,8 +62,19 @@ fun BksApp(
     val runtime = rememberBksAppRuntimeState()
     val accountSessionCoordinator = dependencies.account.sessionCoordinator
     val cloudSettingsCoordinator = dependencies.account.cloudSettingsCoordinator
+    val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerSyncViewModel(
+                runtime = dependencies.sync.runtime,
+                coordinator = dependencies.sync.coordinator,
+                accountSessionState = accountSessionCoordinator.state
+            ) as T
+        }
+    )
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
     val cloudSettingsState by cloudSettingsCoordinator.state.collectAsStateWithLifecycle()
+    val ledgerSyncUiState by ledgerSyncViewModel.uiState.collectAsStateWithLifecycle()
     val actions = androidx.compose.runtime.remember(dependencies, runtime, appState, coroutineScope) {
         BksAppActions(
             dependencies = dependencies,
@@ -76,7 +91,9 @@ fun BksApp(
         bindings = bindings,
         actions = actions,
         appState = appState,
-        coroutineScope = coroutineScope
+        coroutineScope = coroutineScope,
+        ledgerSyncViewModel = ledgerSyncViewModel,
+        ledgerSyncUiState = ledgerSyncUiState
     )
 
     LaunchedEffect(accountSessionCoordinator) {

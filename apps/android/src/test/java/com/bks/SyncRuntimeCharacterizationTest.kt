@@ -2,7 +2,6 @@ package com.bks
 
 import android.content.Context
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
-import androidx.lifecycle.Lifecycle
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.bks.api.LedgerSyncConflictChoiceContract
@@ -13,15 +12,11 @@ import com.bks.api.LedgerSyncPushResponseContract
 import com.bks.api.LedgerSyncResolveConflictResponseContract
 import com.bks.api.LedgerSyncSnapshotResponseContract
 import com.bks.data.local.BksDatabase
-import com.bks.feature.account.AccountRuntimeState
-import com.bks.feature.account.AccountRuntimeStatus
-import com.bks.feature.account.AccountSession
 import com.bks.feature.sync.LedgerSyncCoordinator
 import com.bks.feature.sync.LedgerSyncLocalStore
 import com.bks.feature.sync.LedgerSyncOperationResult
 import com.bks.feature.sync.LedgerSyncRemoteResult
 import com.bks.feature.sync.LedgerSyncRepository
-import com.bks.feature.sync.LedgerSyncUiState
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -55,41 +50,6 @@ class SyncRuntimeCharacterizationTest {
     @After
     fun tearDown() {
         database.close()
-    }
-
-    @Test
-    fun resumeEnqueuesOnlyForVerifiedSignedInEnabledSync() {
-        val signedIn = AccountSession.SignedIn(token = "token")
-        val verified = AccountRuntimeState(AccountRuntimeStatus.Verified)
-        val enabled = LedgerSyncUiState(enabled = true)
-
-        assertTrue(shouldEnqueueLedgerSync(Lifecycle.Event.ON_RESUME, signedIn, verified, enabled))
-        assertFalse(shouldEnqueueLedgerSync(Lifecycle.Event.ON_START, signedIn, verified, enabled))
-        assertFalse(shouldEnqueueLedgerSync(Lifecycle.Event.ON_RESUME, null, verified, enabled))
-        assertFalse(
-            shouldEnqueueLedgerSync(
-                Lifecycle.Event.ON_RESUME,
-                AccountSession.LocalMode,
-                verified,
-                enabled
-            )
-        )
-        assertFalse(
-            shouldEnqueueLedgerSync(
-                Lifecycle.Event.ON_RESUME,
-                signedIn,
-                AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified),
-                enabled
-            )
-        )
-        assertFalse(
-            shouldEnqueueLedgerSync(
-                Lifecycle.Event.ON_RESUME,
-                signedIn,
-                verified,
-                LedgerSyncUiState(enabled = false)
-            )
-        )
     }
 
     @Test

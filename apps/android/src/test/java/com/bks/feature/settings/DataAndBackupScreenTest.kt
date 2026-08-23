@@ -33,10 +33,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityOptionsCompat
 import com.bks.api.LedgerSyncConflictChoiceContract
-import com.bks.api.LedgerSyncEntityTypeContract
-import com.bks.api.LedgerSyncJsonContracts
 import com.bks.api.LedgerSyncPayloadContract
-import com.bks.data.local.AccountSyncConflictEntity
+import com.bks.feature.sync.LedgerSyncConflictUiModel
 import com.bks.feature.sync.LedgerSyncInitialMode
 import com.bks.feature.sync.LedgerSyncOperationResult
 import com.bks.feature.sync.LedgerSyncPreview
@@ -62,6 +60,7 @@ class DataAndBackupScreenTest {
     @Test
     fun firstEnableExplainsReadableStorageTransportAndDeletionBeforeMerge() {
         var enabledMode: LedgerSyncInitialMode? = null
+        var syncState by mutableStateOf(LedgerSyncUiState(signedIn = true))
         composeRule.setContent {
             DataAndBackupScreen(
                 ledgerEntries = emptyList(),
@@ -70,16 +69,26 @@ class DataAndBackupScreenTest {
                 onImportEncryptedBackup = { _, _ -> },
                 onDeleteLocalData = {},
                 onBack = {},
-                ledgerSyncState = LedgerSyncUiState(signedIn = true),
-                onPreviewLedgerSync = {
-                    LedgerSyncOperationResult.Success(
-                        LedgerSyncPreview("profile-a", localRecordCount = 2, cloudRecordCount = 3, insecureHttpTestMode = false)
-                    )
-                },
-                onEnableLedgerSync = { mode ->
-                    enabledMode = mode
-                    LedgerSyncOperationResult.Success(Unit)
-                }
+                ledgerSyncState = syncState,
+                ledgerSyncActions = LedgerSyncSectionActions(
+                    onPreview = {
+                        val result = LedgerSyncOperationResult.Success(
+                            LedgerSyncPreview(
+                                "profile-a",
+                                localRecordCount = 2,
+                                cloudRecordCount = 3,
+                                insecureHttpTestMode = false
+                            )
+                        )
+                        syncState = syncState.copy(preview = result.value)
+                        result
+                    },
+                    onDismissPreview = { syncState = syncState.copy(preview = null) },
+                    onEnable = { mode ->
+                        enabledMode = mode
+                        LedgerSyncOperationResult.Success(Unit)
+                    }
+                )
             )
         }
 
@@ -114,29 +123,21 @@ class DataAndBackupScreenTest {
                     enabled = true,
                     insecureHttpTestMode = true,
                     conflicts = listOf(
-                        AccountSyncConflictEntity(
+                        LedgerSyncConflictUiModel(
                             conflictId = "conflict-a",
-                            entityType = LedgerSyncEntityTypeContract.LEDGER_BOOK.name,
-                            entityId = "book-a",
                             canonicalVersion = 2,
-                            canonicalDeleted = false,
-                            canonicalPayload = LedgerSyncJsonContracts.encodePayload(
-                                LedgerSyncEntityTypeContract.LEDGER_BOOK,
-                                canonical
-                            ),
-                            candidateDeleted = false,
-                            candidatePayload = LedgerSyncJsonContracts.encodePayload(
-                                LedgerSyncEntityTypeContract.LEDGER_BOOK,
-                                candidate
-                            ),
-                            createdAtMillis = 1
+                            title = "账本冲突",
+                            cloudSummary = canonical.name,
+                            localSummary = candidate.name
                         )
                     )
                 ),
-                onResolveLedgerSyncConflict = { _, _, choice ->
-                    resolvedChoice = choice
-                    LedgerSyncOperationResult.Success(Unit)
-                }
+                ledgerSyncActions = LedgerSyncSectionActions(
+                    onResolveConflict = { _, _, choice ->
+                        resolvedChoice = choice
+                        LedgerSyncOperationResult.Success(Unit)
+                    }
+                )
             )
         }
 

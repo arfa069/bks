@@ -5,20 +5,14 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.bks.api.LedgerSyncConflictChoiceContract
 import com.bks.data.local.FundingAccountDeleteResult as DataFundingAccountDeleteResult
 import com.bks.data.local.LedgerBookDeleteResult as DataLedgerBookDeleteResult
 import com.bks.feature.account.AccountCloudSettingsOperationResult
-import com.bks.feature.account.AccountSession
 import com.bks.feature.ledger.FundingAccountDeleteResult as UiFundingAccountDeleteResult
 import com.bks.feature.ledger.LedgerBookDeleteResult as UiLedgerBookDeleteResult
 import com.bks.feature.ledger.LedgerScreen
 import com.bks.feature.ledger.ReportsScreen
 import com.bks.feature.review.ReviewQueueScreen
-import com.bks.feature.sync.LedgerSyncInitialMode
-import com.bks.feature.sync.LedgerSyncOperationResult
-import com.bks.feature.sync.LedgerSyncPreview
-import com.bks.feature.sync.LedgerSyncScheduler
 
 @Composable
 internal fun BksReviewRoute(
@@ -136,55 +130,4 @@ internal fun BksReportsRoute(
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)
     )
-}
-
-internal suspend fun BksRouteContext.previewLedgerSync(): LedgerSyncOperationResult<LedgerSyncPreview> {
-    val signedIn = runtime.accountSession as? AccountSession.SignedIn
-    return if (signedIn == null) {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    } else {
-        dependencies.sync.coordinator.preview(signedIn.token)
-    }
-}
-
-internal suspend fun BksRouteContext.enableLedgerSync(
-    mode: LedgerSyncInitialMode
-): LedgerSyncOperationResult<Unit> {
-    val signedIn = runtime.accountSession as? AccountSession.SignedIn
-    return if (signedIn == null) {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    } else {
-        dependencies.sync.coordinator.enable(signedIn.token, mode).also { result ->
-            if (result is LedgerSyncOperationResult.Success) {
-                LedgerSyncScheduler.ensurePeriodic(dependencies.context)
-            }
-        }
-    }
-}
-
-internal suspend fun BksRouteContext.syncLedgerNow(): LedgerSyncOperationResult<Unit> {
-    val signedIn = runtime.accountSession as? AccountSession.SignedIn
-    return if (signedIn == null) {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    } else {
-        dependencies.sync.coordinator.synchronize(signedIn.token)
-    }
-}
-
-internal suspend fun BksRouteContext.disableLedgerSync() {
-    LedgerSyncScheduler.cancel(dependencies.context)
-    dependencies.sync.localStore.disableAndUnbind()
-}
-
-internal suspend fun BksRouteContext.resolveLedgerSyncConflict(
-    conflictId: String,
-    version: Long,
-    choice: LedgerSyncConflictChoiceContract
-): LedgerSyncOperationResult<Unit> {
-    val signedIn = runtime.accountSession as? AccountSession.SignedIn
-    return if (signedIn == null) {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    } else {
-        dependencies.sync.coordinator.resolveConflict(signedIn.token, conflictId, version, choice)
-    }
 }

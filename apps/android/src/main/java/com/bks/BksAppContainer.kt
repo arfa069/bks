@@ -26,9 +26,10 @@ import com.bks.feature.diagnostics.DiagnosticLogs
 import com.bks.feature.review.ReviewQueuePersistence
 import com.bks.feature.settings.LocalDataBackupRepository
 import com.bks.feature.sync.HttpLedgerSyncRepository
+import com.bks.feature.sync.AndroidLedgerSyncSchedulingGateway
 import com.bks.feature.sync.LedgerSyncCoordinator
 import com.bks.feature.sync.LedgerSyncLocalStore
-import com.bks.feature.sync.LedgerSyncScheduler
+import com.bks.feature.sync.LedgerSyncRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -88,6 +89,16 @@ internal class BksAppContainer(context: Context) {
             gateway = cloudAiSettingsGateway
         )
     }
+    val ledgerSyncCoordinator: LedgerSyncCoordinator by lazy {
+        LedgerSyncCoordinator(
+            localStore = ledgerSyncLocalStore,
+            repository = ledgerSyncRepository,
+            deviceId = installationIdStore::getOrCreate
+        )
+    }
+    val ledgerSyncRuntime: LedgerSyncRuntime by lazy {
+        createLedgerSyncRuntime(accountSessionCoordinator)
+    }
 
     fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies {
         val sessionCoordinator = if (overrides.hasAccountSessionOverrides()) {
@@ -102,6 +113,11 @@ internal class BksAppContainer(context: Context) {
             ).also { it.start() }
         } else {
             accountCloudSettingsCoordinator
+        }
+        val syncRuntime = if (overrides.hasAccountSessionOverrides()) {
+            createLedgerSyncRuntime(sessionCoordinator).also { it.start() }
+        } else {
+            ledgerSyncRuntime
         }
         return BksAppDependencies(
             context = applicationContext,
@@ -122,19 +138,13 @@ internal class BksAppContainer(context: Context) {
             ),
             sync = BksSyncDependencies(
                 localStore = ledgerSyncLocalStore,
-                coordinator = createLedgerSyncCoordinator(),
-                repository = ledgerSyncRepository
+                coordinator = ledgerSyncCoordinator,
+                runtime = syncRuntime
             ),
             aiCategorizationGateway = overrides.aiCategorizationGateway ?: aiCategorizationGateway,
             diagnosticLogs = diagnosticLogs
         )
     }
-
-    fun createLedgerSyncCoordinator(): LedgerSyncCoordinator = LedgerSyncCoordinator(
-        localStore = ledgerSyncLocalStore,
-        repository = ledgerSyncRepository,
-        deviceId = installationIdStore::getOrCreate
-    )
 
     fun createBillSyncCaptureProcessor(): BillSyncCaptureProcessor = BillSyncCaptureProcessor(
         pipeline = BillSyncPipeline(),
@@ -154,7 +164,6 @@ internal class BksAppContainer(context: Context) {
             persistSession = overrides.persistAccountSession ?: secureAccountSessionStore::save,
             onCredentialsAccepted = { credentials -> wechatAvatarCache.prepareUrl(credentials.avatarUrl) },
             onMoveToLocalMode = {
-                LedgerSyncScheduler.cancel(applicationContext)
                 wechatAvatarCache.clear()
             }
         )
@@ -168,6 +177,17 @@ internal class BksAppContainer(context: Context) {
         fundingAccountRepository = ledgerRepository,
         cloudGateway = gateway,
         applicationScope = applicationScope
+    )
+
+    private fun createLedgerSyncRuntime(
+        sessionCoordinator: AccountSessionCoordinator
+    ): LedgerSyncRuntime = LedgerSyncRuntime(
+        localStore = ledgerSyncLocalStore,
+        coordinator = ledgerSyncCoordinator,
+        accountSessionState = sessionCoordinator.state,
+        scheduler = AndroidLedgerSyncSchedulingGateway(applicationContext),
+        applicationScope = applicationScope,
+        insecureHttpTestMode = ledgerSyncRepository.insecureHttpTestMode
     )
 }
 
