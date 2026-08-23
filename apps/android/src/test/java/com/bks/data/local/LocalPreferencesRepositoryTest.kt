@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
-import com.bks.feature.categorization.applyCategorizationSuggestion
 import com.bks.feature.review.ReviewQueueEntry
+import com.bks.feature.review.applyCategorizationSuggestion
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals

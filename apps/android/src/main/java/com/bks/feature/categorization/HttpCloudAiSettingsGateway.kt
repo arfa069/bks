@@ -1,9 +1,8 @@
 package com.bks.feature.categorization
 
 import com.bks.api.ApiJsonContracts
-import com.bks.feature.isPrivateTestHost
+import com.bks.feature.toBackendEndpointOrNull
 import java.io.IOException
-import java.net.URI
 import kotlinx.coroutines.CancellationException
 
 sealed interface CloudAiSettingsGatewayResult {
@@ -129,17 +128,4 @@ private fun AiHttpResponse.toFailureReason(): AiCategorizationFailureReason = wh
     statusCode == 429 -> AiCategorizationFailureReason.RATE_LIMITED
     statusCode >= 500 -> AiCategorizationFailureReason.SERVICE_UNAVAILABLE
     else -> AiCategorizationFailureReason.INVALID_RESPONSE
-}
-
-internal fun String.toBackendEndpointOrNull(path: String, allowHttp: Boolean): String? {
-    val baseUrl = trim().trimEnd('/')
-    if (baseUrl.isBlank()) return null
-    val uri = runCatching { URI(baseUrl) }.getOrNull() ?: return null
-    if (uri.host.isNullOrBlank()) return null
-    if (uri.userInfo != null || uri.query != null || uri.fragment != null) return null
-    val transportAllowed = uri.scheme.equals("https", true) || (
-        uri.scheme.equals("http", true) && allowHttp && uri.host.isPrivateTestHost()
-    )
-    if (!transportAllowed) return null
-    return "$baseUrl$path"
 }

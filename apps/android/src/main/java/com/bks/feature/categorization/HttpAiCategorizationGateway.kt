@@ -2,6 +2,7 @@ package com.bks.feature.categorization
 
 import com.bks.api.AiCategorizationRequestContract
 import com.bks.api.ApiJsonContracts
+import com.bks.feature.toBackendEndpointOrNull
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI

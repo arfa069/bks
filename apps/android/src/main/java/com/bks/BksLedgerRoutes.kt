@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.bks.feature.account.AccountSession
 import com.bks.feature.ledger.LedgerScreen
 import com.bks.feature.ledger.ReportsScreen
 import com.bks.feature.review.ReviewQueueScreen
@@ -31,7 +32,7 @@ internal fun BksReviewRoute(
         onCategorizationRuleRequested = { rule ->
             context.actions.persistCategorizationRules(runtime.categorizationRules.upsert(rule))
         },
-        accountSession = runtime.accountSession,
+        accountToken = (runtime.accountSession as? AccountSession.SignedIn)?.token,
         aiSettings = presentation.effectiveAiSettings,
         aiCategorizationGateway = context.dependencies.aiCategorizationGateway,
         onNavigateHome = onNavigateHome

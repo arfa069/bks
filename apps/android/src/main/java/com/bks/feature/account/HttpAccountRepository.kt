@@ -6,7 +6,7 @@ import com.bks.api.AccountSessionResponseContract
 import com.bks.api.MergePreviewResponseContract
 import com.bks.api.IdentifierLinkPrepareResponseContract
 import com.bks.api.WechatAuthResultContract
-import com.bks.feature.categorization.toBackendEndpointOrNull
+import com.bks.feature.toBackendEndpointOrNull
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection

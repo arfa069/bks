@@ -1,6 +1,5 @@
 package com.bks.feature.categorization
 
-import com.bks.feature.review.ReviewQueueEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -64,29 +63,6 @@ class CategorizationRulesTest {
         val rules = listOf(sampleRule(merchantContains = "便利店", category = "购物"))
 
         assertNull(suggestCategory(rules, sampleTransaction(merchantTitle = "地铁")))
-    }
-
-    @Test
-    fun reviewQueueEntryCanApplyMatchingSuggestion() {
-        val rules = listOf(
-            sampleRule(
-                merchantContains = "coffee",
-                sourceLabel = "wechat",
-                transactionKind = "expense",
-                category = "food"
-            )
-        )
-        val entry = ReviewQueueEntry(
-            id = "pending-coffee",
-            title = "Coffee Shop",
-            category = "",
-            sourceLabel = "wechat",
-            kindLabel = "expense"
-        )
-
-        val suggestedEntry = entry.applyCategorizationSuggestion(rules)
-
-        assertEquals("food", suggestedEntry.category)
     }
 
     private fun sampleRule(

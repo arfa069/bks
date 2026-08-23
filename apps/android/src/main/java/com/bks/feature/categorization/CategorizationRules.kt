@@ -1,7 +1,5 @@
 package com.bks.feature.categorization
 
-import com.bks.feature.review.ReviewQueueEntry
-
 data class CategorizationRule(
     val id: String,
     val merchantContains: String = "",
@@ -43,21 +41,6 @@ fun suggestCategory(
             category = rule.category
         )
     }
-
-fun ReviewQueueEntry.applyCategorizationSuggestion(
-    rules: List<CategorizationRule>
-): ReviewQueueEntry {
-    val suggestion = suggestCategory(
-        rules = rules,
-        transaction = CategorizationTransaction(
-            merchantTitle = title,
-            sourceLabel = sourceLabel,
-            transactionKind = kindLabel
-        )
-    ) ?: return this
-
-    return copy(category = suggestion.category)
-}
 
 private fun CategorizationRule.matches(transaction: CategorizationTransaction): Boolean {
     return merchantContains.matchesBlankOrContains(transaction.merchantTitle) &&

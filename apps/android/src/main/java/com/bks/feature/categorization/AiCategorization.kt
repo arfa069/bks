@@ -1,8 +1,5 @@
 package com.bks.feature.categorization
 
-import com.bks.feature.account.AccountSession
-import com.bks.feature.review.ReviewQueueEntry
-
 data class AiCategorizationSettings(
     val aiConsentGranted: Boolean = false,
     val enhancedContextGranted: Boolean = false
@@ -90,12 +87,11 @@ class AiCategorizationClient(
     private val gateway: AiCategorizationGateway
 ) {
     suspend fun suggestCategory(
-        entry: ReviewQueueEntry,
-        session: AccountSession?,
-        settings: AiCategorizationSettings,
-        categoryCandidates: List<String> = emptyList()
+        token: String?,
+        payload: AiCategorizationPayload,
+        settings: AiCategorizationSettings
     ): AiCategorizationResult {
-        val signedIn = session as? AccountSession.SignedIn
+        val validToken = token
             ?: return AiCategorizationResult(
                 skipReason = AiCategorizationSkipReason.REQUIRES_SIGNED_IN_ACCOUNT
             )
@@ -104,20 +100,27 @@ class AiCategorizationClient(
                 skipReason = AiCategorizationSkipReason.REQUIRES_AI_CONSENT
             )
         }
-        val candidates = categoryCandidates.map(String::trim).filter(String::isNotBlank).distinct()
+        val candidates = payload.categoryCandidates
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
         if (candidates.isEmpty()) {
             return AiCategorizationResult(
                 failureReason = AiCategorizationFailureReason.CATEGORY_CANDIDATES_REQUIRED
             )
         }
+        val enhancedContextAllowed = settings.enhancedContextGranted && payload.enhancedContext
+        val requestPayload = payload.copy(
+            categoryCandidates = candidates,
+            enhancedContext = enhancedContextAllowed,
+            note = payload.note.takeIf { enhancedContextAllowed },
+            rawEvidenceText = payload.rawEvidenceText.takeIf { enhancedContextAllowed }
+        )
 
         return when (
             val result = gateway.suggestCategory(
-                token = signedIn.token,
-                payload = entry.toAiPayload(
-                    enhancedContextGranted = settings.enhancedContextGranted,
-                    categoryCandidates = candidates
-                )
+                token = validToken,
+                payload = requestPayload
             )
         ) {
             is AiCategorizationGatewayResult.Success -> AiCategorizationResult(
@@ -127,30 +130,5 @@ class AiCategorizationClient(
                 failureReason = result.reason
             )
         }
-    }
-}
-
-private fun ReviewQueueEntry.toAiPayload(
-    enhancedContextGranted: Boolean,
-    categoryCandidates: List<String>
-): AiCategorizationPayload = AiCategorizationPayload(
-    merchantTitle = title,
-    sourceLabel = sourceLabel,
-    transactionKind = kindLabel,
-    amountRangeLabel = amountRangeLabel(amountMinor),
-    categoryCandidates = categoryCandidates,
-    enhancedContext = enhancedContextGranted,
-    note = note.takeIf { enhancedContextGranted },
-    rawEvidenceText = rawEvidenceText.takeIf { enhancedContextGranted }
-)
-
-private fun amountRangeLabel(amountMinor: Long): String {
-    val yuan = amountMinor / 100
-    return when {
-        yuan < 50 -> "0-50"
-        yuan < 200 -> "50-200"
-        yuan < 500 -> "200-500"
-        yuan < 1000 -> "500-1000"
-        else -> "1000+"
     }
 }

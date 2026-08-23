@@ -1,47 +1,63 @@
 package com.bks.feature.categorization
 
-import com.bks.feature.account.AccountSession
-import com.bks.feature.review.ReviewQueueEntry
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AiCategorizationClientTest {
     @Test
-    fun localModeOrMissingConsentDoesNotCallCloudAi() = runBlocking {
+    fun clientBoundaryDoesNotAcceptAccountOrReviewDomainTypes() {
+        val parameterTypes = AiCategorizationClient::class.java.declaredMethods
+            .single { it.name == "suggestCategory" }
+            .parameterTypes
+
+        assertTrue(parameterTypes.contains(String::class.java))
+        assertTrue(parameterTypes.contains(AiCategorizationPayload::class.java))
+        assertTrue(parameterTypes.contains(AiCategorizationSettings::class.java))
+        assertTrue(
+            parameterTypes.none { type ->
+                type.name.startsWith("com.bks.feature.account.") ||
+                    type.name.startsWith("com.bks.feature.review.")
+            }
+        )
+    }
+
+    @Test
+    fun missingTokenOrConsentDoesNotCallCloudAi() = runBlocking {
         val gateway = RecordingAiCategorizationGateway()
         val client = AiCategorizationClient(gateway)
 
-        val localModeResult = client.suggestCategory(
-            entry = sampleEntry(),
-            session = AccountSession.LocalMode,
-            settings = AiCategorizationSettings(aiConsentGranted = true),
-            categoryCandidates = listOf("餐饮")
+        val missingTokenResult = client.suggestCategory(
+            token = null,
+            payload = samplePayload(),
+            settings = AiCategorizationSettings(aiConsentGranted = true)
         )
         val noConsentResult = client.suggestCategory(
-            entry = sampleEntry(),
-            session = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
-            settings = AiCategorizationSettings(aiConsentGranted = false),
-            categoryCandidates = listOf("餐饮")
+            token = "token-1",
+            payload = samplePayload(),
+            settings = AiCategorizationSettings(aiConsentGranted = false)
         )
 
-        assertEquals(AiCategorizationSkipReason.REQUIRES_SIGNED_IN_ACCOUNT, localModeResult.skipReason)
+        assertEquals(
+            AiCategorizationSkipReason.REQUIRES_SIGNED_IN_ACCOUNT,
+            missingTokenResult.skipReason
+        )
         assertEquals(AiCategorizationSkipReason.REQUIRES_AI_CONSENT, noConsentResult.skipReason)
         assertTrue(gateway.requests.isEmpty())
     }
 
     @Test
-    fun consentedSignedInUserSendsMinimalPayloadByDefault() = runBlocking {
+    fun consentedTokenSendsGenericMinimalPayload() = runBlocking {
         val gateway = RecordingAiCategorizationGateway()
         val client = AiCategorizationClient(gateway)
 
         val result = client.suggestCategory(
-            entry = sampleEntry(),
-            session = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
-            settings = AiCategorizationSettings(aiConsentGranted = true),
-            categoryCandidates = listOf("餐饮", "交通")
+            token = "token-1",
+            payload = samplePayload(categoryCandidates = listOf("餐饮", "交通")),
+            settings = AiCategorizationSettings(aiConsentGranted = true)
         )
 
         assertEquals("餐饮", result.suggestion?.category)
@@ -52,24 +68,28 @@ class AiCategorizationClientTest {
         assertEquals("支出", payload.transactionKind)
         assertEquals("0-50", payload.amountRangeLabel)
         assertEquals(listOf("餐饮", "交通"), payload.categoryCandidates)
-        assertEquals(false, payload.enhancedContext)
+        assertFalse(payload.enhancedContext)
         assertNull(payload.note)
         assertNull(payload.rawEvidenceText)
     }
 
     @Test
-    fun enhancedContextOptInAddsOptionalContext() = runBlocking {
+    fun enhancedContextOptInPreservesOptionalPayloadContext() = runBlocking {
         val gateway = RecordingAiCategorizationGateway()
         val client = AiCategorizationClient(gateway)
 
         client.suggestCategory(
-            entry = sampleEntry(),
-            session = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
+            token = "token-1",
+            payload = samplePayload(
+                categoryCandidates = listOf("餐饮"),
+                enhancedContext = true,
+                note = "客户会议",
+                rawEvidenceText = "微信支付收款凭证 午餐 35.90"
+            ),
             settings = AiCategorizationSettings(
                 aiConsentGranted = true,
                 enhancedContextGranted = true
-            ),
-            categoryCandidates = listOf("餐饮")
+            )
         )
 
         val payload = gateway.requests.single().payload
@@ -79,14 +99,33 @@ class AiCategorizationClientTest {
     }
 
     @Test
+    fun unauthorizedEnhancedPayloadIsRedactedBeforeGateway() = runBlocking {
+        val gateway = RecordingAiCategorizationGateway()
+
+        AiCategorizationClient(gateway).suggestCategory(
+            token = "token-1",
+            payload = samplePayload(
+                enhancedContext = true,
+                note = "客户会议",
+                rawEvidenceText = "微信支付收款凭证 午餐 35.90"
+            ),
+            settings = AiCategorizationSettings(aiConsentGranted = true)
+        )
+
+        val payload = gateway.requests.single().payload
+        assertFalse(payload.enhancedContext)
+        assertNull(payload.note)
+        assertNull(payload.rawEvidenceText)
+    }
+
+    @Test
     fun emptyCandidatesFailBeforeNetwork() = runBlocking {
         val gateway = RecordingAiCategorizationGateway()
 
         val result = AiCategorizationClient(gateway).suggestCategory(
-            entry = sampleEntry(),
-            session = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
-            settings = AiCategorizationSettings(aiConsentGranted = true),
-            categoryCandidates = listOf(" ")
+            token = "token-1",
+            payload = samplePayload(categoryCandidates = listOf(" ")),
+            settings = AiCategorizationSettings(aiConsentGranted = true)
         )
 
         assertEquals(AiCategorizationFailureReason.CATEGORY_CANDIDATES_REQUIRED, result.failureReason)
@@ -102,27 +141,28 @@ class AiCategorizationClientTest {
         )
 
         val result = AiCategorizationClient(gateway).suggestCategory(
-            entry = sampleEntry(),
-            session = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
-            settings = AiCategorizationSettings(aiConsentGranted = true),
-            categoryCandidates = listOf("餐饮")
+            token = "token-1",
+            payload = samplePayload(),
+            settings = AiCategorizationSettings(aiConsentGranted = true)
         )
 
         assertEquals(AiCategorizationFailureReason.ACCOUNT_DELETION_PENDING, result.failureReason)
     }
 
-    private fun sampleEntry(): ReviewQueueEntry = ReviewQueueEntry(
-        id = "pending-lunch",
-        title = "午餐",
-        amountMinor = 3590,
-        transactionTimeText = "2026-07-08 12:20",
-        category = "",
-        fundingAccountLabel = "微信零钱",
+    private fun samplePayload(
+        categoryCandidates: List<String> = listOf("餐饮"),
+        enhancedContext: Boolean = false,
+        note: String? = null,
+        rawEvidenceText: String? = null
+    ): AiCategorizationPayload = AiCategorizationPayload(
+        merchantTitle = "午餐",
         sourceLabel = "微信",
-        kindLabel = "支出",
-        captureReasonLabel = "通知捕获",
-        note = "客户会议",
-        rawEvidenceText = "微信支付收款凭证 午餐 35.90"
+        transactionKind = "支出",
+        amountRangeLabel = "0-50",
+        categoryCandidates = categoryCandidates,
+        enhancedContext = enhancedContext,
+        note = note,
+        rawEvidenceText = rawEvidenceText
     )
 
     private class RecordingAiCategorizationGateway(

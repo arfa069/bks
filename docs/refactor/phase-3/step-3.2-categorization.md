@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -114,20 +114,34 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- `AiCategorizationClient` 的调用边界改为 nullable token、`AiCategorizationPayload` 与 `AiCategorizationSettings`；Categorization 生产代码不再引用 `AccountSession` 或 `ReviewQueueEntry`。Client 继续负责登录/同意 gate、候选分类去空去重、增强上下文二次授权与 Gateway 结果映射，Gateway 仍只接收非空类型 token 和通用 payload。
+- 新增 Review-owned 纯映射文件 `ReviewCategorization.kt`：由 Review 将 `ReviewQueueEntry` 映射为通用 AI payload，并在未授权增强上下文时剔除 note/raw evidence；原先位于 Categorization 的 `ReviewQueueEntry.applyCategorizationSuggestion` 同步迁回 Review，调用既有确定性 `suggestCategory` 规则函数。自动捕获仍先生成 Review entry，再应用建议并持久化 Review Queue。
+- `ReviewQueueScreen` 只接收 token，不再接收 `AccountSession`；`BksReviewRoute` 从已登录 Session 提取 token 后传入。既有无 Gateway/未登录/未同意、候选分类、loading、防重复提交、失败文案和建议写回编辑草稿行为保持不变。
+- `toBackendEndpointOrNull` 从 Categorization 的 Cloud settings Gateway 文件迁入现有非具体 feature 的 `BackendTransportPolicy.kt`；Account、AI categorization 与 Cloud AI settings HTTP 实现复用同一校验，HTTPS、仅私网测试 HTTP、userinfo/query/fragment 拒绝和 endpoint 拼接语义未变。
+- 未创建 `CategorizationViewModel` 或 state holder：规则 presentation 只有 Repository Flow 与单一 replace operation，筛选/编辑/Dialog 已由 Screen 局部状态持有；AI settings 的持久状态、busy 与 cloud-write gate 已由 Step 2.2 的 `AccountCloudSettingsCoordinator` 持有，不满足独立生命周期、多异步业务编排或新增 source-of-truth 的准入条件。
+- 新增 `ReviewCategorizationTest`，并改写 `AiCategorizationClientTest` 直接使用 token/payload/settings；增加反射边界断言，确认 Client 参数不包含 Account/Review domain 类型，同时覆盖最小 payload、增强上下文授权与二次脱敏。
 
 ### Deviations From Plan
 
-无
+- 未修改候选文件 `ReviewQueueState.kt`：该文件已集中 reducer/model，新增独立的纯函数文件 `ReviewCategorization.kt` 能明确表达 Review-owned mapping，且没有引入类、interface、Manager 或 UseCase。
+- 未修改 `CategorizationRulesScreen.kt` 或创建候选 presentation owner；这是按 Plan 准入规则得出的执行结果，不是遗漏。既有 Root rules projection 仍作为可回滚桥接，移除 God Layer 属于后续 Step，当前 Step 不提前处理。
+- 为迁移真实调用方与保持自动捕获路径编译/行为一致，最小修改了候选清单外的 `BksLedgerRoutes.kt`、`ReviewQueueScreen.kt`、`BillSyncCaptureProcessor.kt`、`HttpCloudAiSettingsGateway.kt`、`LocalPreferencesRepositoryTest.kt` 及对应 Review 测试；未进入 Step 3.3 的 Review state/persistence/concurrency 重构。
+- 未修改 shared API、Backend route、AI payload 字段、endpoint 路径、Room schema、sync protocol、backup format、依赖或可见 UI。
 
 ### Test Results
 
-尚未执行
+- 变更前 Step 指定专项基线：`CategorizationRulesTest`、`CategorizationRulesScreenTest`、`AiCategorizationClientTest`、`HttpAiCategorizationGatewayTest`、`HttpAccountRepositoryTest` 全部通过，Gradle `BUILD SUCCESSFUL`。
+- 最终 Step 指定专项加直接受影响补充回归通过：上述 5 类，加 `HttpCloudAiSettingsGatewayTest`、`ReviewCategorizationTest`、`ReviewQueueAiSuggestionTest`、`BillSyncCaptureProcessorTest`、`LocalPreferencesRepositoryTest`，共 10 suites、66 tests、0 failures、0 errors、0 skipped。
+- `:apps:android:detekt`：通过，0 issues；最终复跑为 `BUILD SUCCESSFUL`。
+- 依赖边界搜索：Categorization 生产代码对 Account/Review 的 import 为 0；Account/Review 只单向依赖 Categorization contract，循环已消失。`toBackendEndpointOrNull` 仅定义于 `BackendTransportPolicy.kt`，三个 HTTP consumer 均从通用位置导入。
+- `git diff --check`：tracked 与两个新增文件分别检查通过。
 
 ### Remaining Risks
 
-尚未执行
+- 未运行 Android 全量 JVM/Robolectric suite、instrumentation、真机或真实 Backend 验收：本 Step 不是 Phase 完成点，且未修改 StateFlow、Room/API/资源/Manifest/依赖；专项 JVM/Robolectric 已覆盖实际边界与 UI 调用链。
+- Categorization rules 仍通过当前 Root runtime/actions bridge 暴露给页面和 Review 保存规则入口；本 Step 按 owner 准入规则保留该可回滚桥接，后续 God Layer 收敛 Step 才处理，当前没有新增第二份持久真相。
+- `LedgerSyncRepository` 保留其既有 sync-specific endpoint wrapper/policy；本 Step 只移动 Account/Categorization 共用 helper，未跨入已完成的 Sync Runtime Step 或改变其网络契约。
 
 ### Final Status
 
-Pending
+Completed

@@ -14,7 +14,6 @@ import com.bks.data.local.ConfidenceState
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.TransactionKind
-import com.bks.feature.account.AccountSession
 import com.bks.feature.categorization.AiCategorizationFailureReason
 import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.AiCategorizationGatewayResult
@@ -48,7 +47,7 @@ class ReviewQueueAiSuggestionTest {
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("transport", "交通", TransactionKind.EXPENSE)
                 ),
-                accountSession = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
+                accountToken = "token-1",
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
                 aiCategorizationGateway = FixedAiCategorizationGateway("交通")
             )
@@ -75,10 +74,7 @@ class ReviewQueueAiSuggestionTest {
                     pendingEntries = listOf(sampleEntry().copy(category = ""))
                 ),
                 categories = emptyList(),
-                accountSession = AccountSession.SignedIn(
-                    phone = "13800138000",
-                    token = "token-1"
-                ),
+                accountToken = "token-1",
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
                 aiCategorizationGateway = gateway
             )
@@ -120,10 +116,7 @@ class ReviewQueueAiSuggestionTest {
                         kind = null
                     )
                 ),
-                accountSession = AccountSession.SignedIn(
-                    phone = "13800138000",
-                    token = "token-1"
-                ),
+                accountToken = "token-1",
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
                 aiCategorizationGateway = gateway
             )
@@ -153,7 +146,7 @@ class ReviewQueueAiSuggestionTest {
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("transport", "交通", TransactionKind.EXPENSE)
                 ),
-                accountSession = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
+                accountToken = "token-1",
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
                 aiCategorizationGateway = gateway
             )
@@ -187,7 +180,7 @@ class ReviewQueueAiSuggestionTest {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(category("food", "餐饮", TransactionKind.EXPENSE)),
-                accountSession = AccountSession.SignedIn(phone = "13800138000", token = "token-1"),
+                accountToken = "token-1",
                 aiSettings = AiCategorizationSettings(aiConsentGranted = true),
                 aiCategorizationGateway = FixedAiCategorizationGateway(
                     AiCategorizationGatewayResult.Failure(AiCategorizationFailureReason.RATE_LIMITED)

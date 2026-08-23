@@ -1,9 +1,9 @@
 package com.bks.feature.billsync
 
 import com.bks.data.local.LocalPreferencesRepository
-import com.bks.feature.categorization.applyCategorizationSuggestion
 import com.bks.feature.review.ReviewQueueCaptureCoordinator
 import com.bks.feature.review.ReviewQueuePersistence
+import com.bks.feature.review.applyCategorizationSuggestion
 import kotlinx.coroutines.flow.first
 
 class BillSyncCaptureProcessor(
