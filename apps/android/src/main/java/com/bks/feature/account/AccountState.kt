@@ -21,8 +21,7 @@ data class AccountUiState(
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
     val smsCountdownSeconds: Int = 0,
-    val operationInProgress: Boolean = false,
-    val session: AccountSession? = null
+    val operationInProgress: Boolean = false
 ) {
     val hasNoFieldErrors: Boolean
         get() = listOf(
@@ -46,7 +45,6 @@ sealed interface AccountAction {
     data class UpdatePassword(val password: String) : AccountAction
     data class UpdateConfirmPassword(val password: String) : AccountAction
     data object RequestSmsCode : AccountAction
-    data object TickSmsCountdown : AccountAction
     data object SubmitLogin : AccountAction
     data object SubmitRegister : AccountAction
     data object SubmitRecovery : AccountAction
@@ -92,7 +90,7 @@ fun reduceAccountState(
     } else {
         state.clearErrors().copy(flow = AccountFlow.LocalModeExplanation)
     }
-    AccountAction.ConfirmLocalMode -> state.copy(session = AccountSession.LocalMode)
+    AccountAction.ConfirmLocalMode -> state
     AccountAction.RequestSmsCode -> {
         if (!state.requiresVerificationCode) {
             state.copy(phoneError = "用户名不支持获取验证码，请使用手机号或邮箱")
@@ -105,9 +103,6 @@ fun reduceAccountState(
             }
         }
     }
-    AccountAction.TickSmsCountdown -> state.copy(
-        smsCountdownSeconds = (state.smsCountdownSeconds - 1).coerceAtLeast(0)
-    )
     AccountAction.SubmitLogin -> state.submitLogin()
     AccountAction.SubmitRegister -> state.submitRegister()
     AccountAction.SubmitRecovery -> state.submitRecovery()

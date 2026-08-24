@@ -21,105 +21,71 @@ internal fun AccountUiState.isReadyFor(action: AccountAction): Boolean = when (a
 internal suspend fun AccountUiState.runNetworkAction(
     action: AccountAction,
     accountRepository: AccountRepository,
-    persistSession: (AccountCredentials) -> Boolean,
-    clearPersistedSession: () -> Boolean
-): AccountUiState = when (action) {
+    commitSession: (AccountCredentials) -> Boolean,
+    clearPersistedSession: () -> Boolean,
+    canCommitSession: () -> Boolean
+): AccountEntryOperationResult = when (action) {
     AccountAction.RequestSmsCode -> submitSmsCodeRequest(accountRepository)
-    AccountAction.SubmitLogin -> submitLogin(
-        accountRepository,
-        persistSession,
-        clearPersistedSession
+    AccountAction.SubmitLogin -> completeAuthentication(
+        result = accountRepository.login(phone, password),
+        accountRepository = accountRepository,
+        commitSession = commitSession,
+        clearPersistedSession = clearPersistedSession,
+        canCommitSession = canCommitSession
     )
-    AccountAction.SubmitRegister -> submitRegister(
-        accountRepository,
-        persistSession,
-        clearPersistedSession
+    AccountAction.SubmitRegister -> completeAuthentication(
+        result = accountRepository.register(phone, verificationCode, password),
+        accountRepository = accountRepository,
+        commitSession = commitSession,
+        clearPersistedSession = clearPersistedSession,
+        canCommitSession = canCommitSession
     )
-    AccountAction.SubmitRecovery -> submitRecovery(
-        accountRepository,
-        persistSession,
-        clearPersistedSession
+    AccountAction.SubmitRecovery -> completeAuthentication(
+        result = accountRepository.recoverPassword(phone, verificationCode, password),
+        accountRepository = accountRepository,
+        commitSession = commitSession,
+        clearPersistedSession = clearPersistedSession,
+        canCommitSession = canCommitSession
     )
-    else -> this
+    else -> AccountEntryOperationResult.Failure("当前操作不可用")
 }
 
 private suspend fun AccountUiState.submitSmsCodeRequest(
     accountRepository: AccountRepository
-): AccountUiState {
+): AccountEntryOperationResult {
     val purpose = when (flow) {
         AccountFlow.Register -> AccountVerificationPurpose.Register
         AccountFlow.Recovery -> AccountVerificationPurpose.Recovery
-        else -> return copy(errorMessage = "当前页面不能获取验证码")
+        else -> return AccountEntryOperationResult.Failure("当前页面不能获取验证码")
     }
     return when (val result = accountRepository.requestVerificationCode(phone, purpose)) {
-        is AccountRepositoryResult.Success -> copy(smsCountdownSeconds = 60)
-        is AccountRepositoryResult.Failure -> copy(
-            smsCountdownSeconds = 0,
-            errorMessage = result.message
-        )
+        is AccountRepositoryResult.Success -> AccountEntryOperationResult.SmsCodeSent
+        is AccountRepositoryResult.Failure -> AccountEntryOperationResult.Failure(result.message)
     }
 }
 
-private suspend fun AccountUiState.submitLogin(
-    accountRepository: AccountRepository,
-    persistSession: (AccountCredentials) -> Boolean,
-    clearPersistedSession: () -> Boolean
-): AccountUiState {
-    return completeAuthentication(
-        result = accountRepository.login(phone, password),
-        accountRepository = accountRepository,
-        persistSession = persistSession,
-        clearPersistedSession = clearPersistedSession
-    )
-}
-
-private suspend fun AccountUiState.submitRegister(
-    accountRepository: AccountRepository,
-    persistSession: (AccountCredentials) -> Boolean,
-    clearPersistedSession: () -> Boolean
-): AccountUiState {
-    return completeAuthentication(
-        result = accountRepository.register(phone, verificationCode, password),
-        accountRepository = accountRepository,
-        persistSession = persistSession,
-        clearPersistedSession = clearPersistedSession
-    )
-}
-
-private suspend fun AccountUiState.submitRecovery(
-    accountRepository: AccountRepository,
-    persistSession: (AccountCredentials) -> Boolean,
-    clearPersistedSession: () -> Boolean
-): AccountUiState {
-    return completeAuthentication(
-        result = accountRepository.recoverPassword(phone, verificationCode, password),
-        accountRepository = accountRepository,
-        persistSession = persistSession,
-        clearPersistedSession = clearPersistedSession
-    )
-}
-
-private suspend fun AccountUiState.completeAuthentication(
+private suspend fun completeAuthentication(
     result: AccountRepositoryResult<AccountCredentials>,
     accountRepository: AccountRepository,
-    persistSession: (AccountCredentials) -> Boolean,
-    clearPersistedSession: () -> Boolean
-): AccountUiState = when (result) {
+    commitSession: (AccountCredentials) -> Boolean,
+    clearPersistedSession: () -> Boolean,
+    canCommitSession: () -> Boolean
+): AccountEntryOperationResult = when (result) {
     is AccountRepositoryResult.Success -> {
-        if (
+        if (!canCommitSession()) {
+            AccountEntryOperationResult.Invalidated
+        } else if (
             persistAccountSessionOrRevoke(
                 credentials = result.value,
                 accountRepository = accountRepository,
-                persistSession = persistSession,
+                persistSession = commitSession,
                 clearPersistedSession = clearPersistedSession
             )
         ) {
-            copy(
-                session = result.value.toSignedInSession()
-            )
+            AccountEntryOperationResult.AuthenticationCommitted
         } else {
-            copy(errorMessage = "无法安全保存登录状态，已尝试撤销新会话，请重试")
+            AccountEntryOperationResult.Failure("无法安全保存登录状态，已尝试撤销新会话，请重试")
         }
     }
-    is AccountRepositoryResult.Failure -> copy(errorMessage = result.message)
+    is AccountRepositoryResult.Failure -> AccountEntryOperationResult.Failure(result.message)
 }

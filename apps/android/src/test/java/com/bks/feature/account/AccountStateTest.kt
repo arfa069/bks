@@ -11,7 +11,6 @@ class AccountStateTest {
         val blocked = reduceAccountState(AccountUiState(), AccountAction.StartLocalMode)
 
         assertEquals("请先阅读并同意用户协议和隐私政策", blocked.errorMessage)
-        assertNull(blocked.session)
 
         val allowed = reduceAccountState(
             blocked.copy(agreementAccepted = true),
@@ -39,7 +38,6 @@ class AccountStateTest {
         assertEquals("请输入验证码", result.verificationCodeError)
         assertEquals("密码需 8-32 位，包含大小写字母、数字和符号", result.passwordError)
         assertEquals("两次输入的密码不一致", result.confirmPasswordError)
-        assertNull(result.session)
     }
 
     @Test
@@ -55,7 +53,6 @@ class AccountStateTest {
 
         val result = reduceAccountState(state, AccountAction.SubmitRegister)
 
-        assertNull(result.session)
         assertNull(result.errorMessage)
         assertTrue(result.hasNoFieldErrors)
     }
@@ -70,9 +67,6 @@ class AccountStateTest {
         assertEquals(0, requested.smsCountdownSeconds)
         assertNull(requested.phoneError)
 
-        val ticked = reduceAccountState(requested, AccountAction.TickSmsCountdown)
-
-        assertEquals(0, ticked.smsCountdownSeconds)
     }
 
     @Test

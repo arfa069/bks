@@ -56,6 +56,8 @@ interface WechatAuthGateway {
         purpose: WechatAuthPurpose,
         sessionFingerprint: String? = null
     ): WechatAuthLaunchResult
+
+    fun cancelAuthorization(purpose: WechatAuthPurpose) = Unit
 }
 
 class WechatAuthCoordinator(
@@ -68,6 +70,10 @@ class WechatAuthCoordinator(
     ): WechatAuthLaunchResult {
         if (!agreementAccepted) return WechatAuthLaunchResult.AgreementRequired
         return gateway.startAuthorization(purpose, sessionFingerprint)
+    }
+
+    fun cancelAuthorization(purpose: WechatAuthPurpose) {
+        gateway.cancelAuthorization(purpose)
     }
 }
 
@@ -102,6 +108,10 @@ class AndroidWechatAuthGateway(
             return WechatAuthLaunchResult.SendFailed
         }
         return WechatAuthLaunchResult.Started
+    }
+
+    override fun cancelAuthorization(purpose: WechatAuthPurpose) {
+        stateStore.clear(purpose)
     }
 
     private companion object {
@@ -183,6 +193,10 @@ class WechatAuthStateStore(
         if (MessageDigest.isEqual(storedState.toByteArray(), expectedState.toByteArray())) {
             clearAll()
         }
+    }
+
+    fun clear(purpose: WechatAuthPurpose) {
+        if (preferences.getString(KEY_PURPOSE, null) == purpose.name) clearAll()
     }
 
     private fun clearAll() {

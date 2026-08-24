@@ -34,18 +34,14 @@ import com.bks.ui.components.TextButton
 
 internal sealed interface AccountPage {
     data class Flow(val flow: AccountFlow) : AccountPage
-
-    data object Compliance : AccountPage
     data object Wechat : AccountPage
 }
 
 internal fun currentAccountPage(
-    showComplianceMaterials: Boolean,
-    wechatController: WechatLoginController?,
+    wechatState: WechatLoginUiState,
     flow: AccountFlow
 ): AccountPage = when {
-    showComplianceMaterials -> AccountPage.Compliance
-    wechatController?.state?.page?.let { it != WechatLoginPage.Idle } == true -> AccountPage.Wechat
+    wechatState.page != WechatLoginPage.Idle -> AccountPage.Wechat
     else -> AccountPage.Flow(flow)
 }
 

@@ -3,11 +3,16 @@ package com.bks.feature.account
 import com.bks.api.MergePreviewResponseContract
 import com.bks.api.IdentifierLinkPrepareResponseContract
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 internal class TestAccountRepository : AccountRepository {
     var smsResult: AccountRepositoryResult<Unit> = AccountRepositoryResult.Success(Unit)
+    var smsIgnoresCancellation = false
     var authenticationResult: AccountRepositoryResult<AccountCredentials> =
         AccountRepositoryResult.Success(AccountCredentials("13800138000", "token-1"))
+    var authenticationGate: CompletableDeferred<AccountRepositoryResult<AccountCredentials>>? = null
+    var authenticationIgnoresCancellation = false
     var verificationResult: AccountRepositoryResult<AccountCredentials> = authenticationResult
     var verificationGate: CompletableDeferred<AccountRepositoryResult<AccountCredentials>>? = null
     var updateNicknameResult: AccountRepositoryResult<AccountCredentials>? = null
@@ -19,6 +24,7 @@ internal class TestAccountRepository : AccountRepository {
         )
     var cancelDeletionResult: AccountRepositoryResult<Unit> = AccountRepositoryResult.Success(Unit)
     var wechatExchangeResult: AccountRepositoryResult<AccountWechatAuthResult>? = null
+    var wechatExchangeGate: CompletableDeferred<AccountRepositoryResult<AccountWechatAuthResult>>? = null
     var registerWithWechatResult: AccountRepositoryResult<AccountCredentials>? = null
     var linkWechatWithPasswordResult: AccountRepositoryResult<AccountCredentials>? = null
     var linkWechatWithCodeResult: AccountRepositoryResult<AccountCredentials>? = null
@@ -49,6 +55,7 @@ internal class TestAccountRepository : AccountRepository {
     var lastUnlinkWechatCode: String? = null
     var signOutCalls = 0
     var verificationCalls = 0
+    var authenticationCalls = 0
     var requestDeletionCalls = 0
     var updateNicknameCalls = 0
     var updateAvatarCalls = 0
@@ -66,25 +73,39 @@ internal class TestAccountRepository : AccountRepository {
         lastSmsIdentifier = identifier
         lastSmsPurpose = purpose
         lastSmsContextKey = contextKey
-        return smsGate?.await() ?: smsResult
+        val gate = smsGate ?: return smsResult
+        return if (smsIgnoresCancellation) {
+            withContext(NonCancellable) { gate.await() }
+        } else {
+            gate.await()
+        }
     }
 
     override suspend fun register(
         identifier: String,
         code: String,
         password: String
-    ): AccountRepositoryResult<AccountCredentials> = authenticationResult
+    ): AccountRepositoryResult<AccountCredentials> {
+        authenticationCalls += 1
+        return awaitAuthenticationResult()
+    }
 
     override suspend fun login(
         identifier: String,
         password: String
-    ): AccountRepositoryResult<AccountCredentials> = authenticationResult
+    ): AccountRepositoryResult<AccountCredentials> {
+        authenticationCalls += 1
+        return awaitAuthenticationResult()
+    }
 
     override suspend fun recoverPassword(
         identifier: String,
         code: String,
         password: String
-    ): AccountRepositoryResult<AccountCredentials> = authenticationResult
+    ): AccountRepositoryResult<AccountCredentials> {
+        authenticationCalls += 1
+        return awaitAuthenticationResult()
+    }
 
     override suspend fun verifySession(
         credentials: AccountCredentials
@@ -139,7 +160,7 @@ internal class TestAccountRepository : AccountRepository {
         bearerToken: String?
     ): AccountRepositoryResult<AccountWechatAuthResult> {
         exchangeWechatCalls += 1
-        return wechatExchangeResult ?: AccountRepositoryResult.Success(
+        return wechatExchangeGate?.await() ?: wechatExchangeResult ?: AccountRepositoryResult.Success(
             AccountWechatAuthResult.RegistrationRequired("ticket", "微信用户", null, 300_000L)
         )
     }
@@ -240,5 +261,14 @@ internal class TestAccountRepository : AccountRepository {
         lastUnlinkWechatIdentifier = identifier
         lastUnlinkWechatCode = code
         return unlinkWechatWithCodeResult ?: authenticationResult
+    }
+
+    private suspend fun awaitAuthenticationResult(): AccountRepositoryResult<AccountCredentials> {
+        val gate = authenticationGate ?: return authenticationResult
+        return if (authenticationIgnoresCancellation) {
+            withContext(NonCancellable) { gate.await() }
+        } else {
+            gate.await()
+        }
     }
 }

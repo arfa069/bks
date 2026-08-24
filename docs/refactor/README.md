@@ -78,7 +78,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 4.1 | [Account Entry](./phase-4/step-4.1-account-entry.md) | Pending |
+| 4.1 | [Account Entry](./phase-4/step-4.1-account-entry.md) | Completed |
 | 4.2 | [Account Management](./phase-4/step-4.2-account-management.md) | Pending |
 | 4.3 | [Backup](./phase-4/step-4.3-backup.md) | Pending |
 | 4.4 | [Diagnostics](./phase-4/step-4.4-diagnostics.md) | Pending |

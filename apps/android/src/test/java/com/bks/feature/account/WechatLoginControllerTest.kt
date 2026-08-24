@@ -10,20 +10,19 @@ import org.junit.Test
 class WechatLoginControllerTest {
     @Test
     fun agreementGateBlocksGatewayAndDuplicateStartIsLocked() {
-        val repository = TestAccountRepository()
         val gateway = RecordingWechatGateway()
-        val controller = controller(repository, gateway)
+        val controller = controller(TestAccountRepository(), gateway)
 
-        controller.start(agreementAccepted = false)
+        val blocked = controller.start(WechatLoginUiState(), agreementAccepted = false)
 
         assertEquals(0, gateway.calls)
-        assertEquals("请先阅读并同意用户协议和隐私政策", controller.state.errorMessage)
+        assertEquals("请先阅读并同意用户协议和隐私政策", blocked.errorMessage)
 
-        controller.start(agreementAccepted = true)
-        controller.start(agreementAccepted = true)
+        val started = controller.start(blocked, agreementAccepted = true)
+        val duplicate = controller.start(started, agreementAccepted = true)
 
         assertEquals(1, gateway.calls)
-        assertTrue(controller.state.operationInProgress)
+        assertTrue(duplicate.operationInProgress)
         assertEquals(WechatAuthPurpose.SignInOrRegister, gateway.lastPurpose)
     }
 
@@ -40,110 +39,112 @@ class WechatLoginControllerTest {
                 )
             )
         }
-        var persisted: AccountCredentials? = null
-        var signedIn: AccountSession.SignedIn? = null
+        var committed: AccountCredentials? = null
         val controller = controller(
             repository = repository,
-            persistSession = { credentials -> persisted = credentials; true },
-            onSignedIn = { signedIn = it }
+            commitSession = { credentials -> committed = credentials; true }
         )
 
-        controller.handleCallback(
+        val preview = controller.handleCallback(
+            WechatLoginUiState(operationInProgress = true),
             WechatAuthCallback.Authorized("one-time-code", WechatAuthPurpose.SignInOrRegister)
         )
 
-        assertEquals(WechatLoginPage.Preview, controller.state.page)
-        assertEquals("微信用户", controller.state.nickname)
+        assertEquals(WechatLoginPage.Preview, preview.page)
+        assertEquals("微信用户", preview.nickname)
         assertEquals(1, repository.exchangeWechatCalls)
 
-        controller.createWechatAccount()
+        val completed = controller.createWechatAccount(preview)
 
         assertEquals(1, repository.registerWithWechatCalls)
-        assertNotNull(persisted)
-        assertEquals("wechat-token", signedIn?.token)
-        assertEquals(WechatLoginPage.Idle, controller.state.page)
+        assertNotNull(committed)
+        assertEquals("wechat-token", committed?.token)
+        assertEquals(WechatLoginPage.Idle, completed.page)
     }
 
     @Test
     fun passwordAndSmsBindingUseTheirDedicatedRepositoryPaths() = runTest {
         val passwordRepository = TestAccountRepository()
         val passwordController = previewController(passwordRepository)
-        passwordController.showBinding()
-        passwordController.updatePhone("13800138000")
-        passwordController.updatePassword("Aa123456!")
+        val passwordState = passwordController.showBinding(previewState())
 
-        passwordController.bindExistingAccount()
+        passwordController.bindExistingAccount(passwordState, "13800138000", "Aa123456!", "")
 
         assertEquals(1, passwordRepository.linkWechatWithPasswordCalls)
         assertEquals(0, passwordRepository.linkWechatWithCodeCalls)
 
         val smsRepository = TestAccountRepository()
         val smsController = previewController(smsRepository)
-        smsController.showBinding()
-        smsController.selectBindMethod(WechatBindMethod.Sms)
-        smsController.updatePhone("13800138000")
+        val smsState = smsController.selectBindMethod(
+            smsController.showBinding(previewState()),
+            WechatBindMethod.Sms
+        )
 
-        smsController.requestBindingSms()
+        val requested = smsController.requestBindingSms(smsState, "13800138000")
 
         assertEquals(1, smsRepository.smsCalls)
         assertEquals(AccountVerificationPurpose.WechatLink, smsRepository.lastSmsPurpose)
         assertEquals("ticket", smsRepository.lastSmsContextKey)
-        assertTrue(smsController.state.smsRequested)
+        assertTrue(requested.smsRequested)
 
-        smsController.updateCode("123456")
-        smsController.bindExistingAccount()
+        smsController.bindExistingAccount(requested, "13800138000", "", "123456")
 
         assertEquals(1, smsRepository.linkWechatWithCodeCalls)
         assertEquals(0, smsRepository.linkWechatWithPasswordCalls)
     }
 
     @Test
-    fun persistenceFailureClearsLocalSessionAndDoesNotReportSignedIn() = runTest {
+    fun persistenceFailureClearsLocalSessionAndDoesNotCommit() = runTest {
         val repository = TestAccountRepository().apply {
             authenticationResult = AccountRepositoryResult.Success(
                 AccountCredentials(null, "new-token", wechatLinked = true)
             )
         }
         var cleared = false
-        var signedIn = false
+        var commitCalls = 0
         val controller = controller(
             repository = repository,
-            persistSession = { false },
-            clearPersistedSession = { cleared = true; true },
-            onSignedIn = { signedIn = true }
+            commitSession = { commitCalls += 1; false },
+            clearPersistedSession = { cleared = true; true }
         )
-        controller.handleCallback(
+        val preview = controller.handleCallback(
+            WechatLoginUiState(operationInProgress = true),
             WechatAuthCallback.Authorized("one-time-code", WechatAuthPurpose.SignInOrRegister)
         )
 
-        controller.createWechatAccount()
+        val failed = controller.createWechatAccount(preview)
 
         assertTrue(cleared)
-        assertFalse(signedIn)
+        assertEquals(1, commitCalls)
         assertEquals(1, repository.signOutCalls)
-        assertTrue(controller.state.errorMessage?.contains("无法安全保存登录状态") == true)
+        assertFalse(failed.operationInProgress)
+        assertTrue(failed.errorMessage?.contains("无法安全保存登录状态") == true)
     }
 
     private suspend fun previewController(repository: TestAccountRepository): WechatLoginController {
         val controller = controller(repository)
         controller.handleCallback(
+            WechatLoginUiState(operationInProgress = true),
             WechatAuthCallback.Authorized("one-time-code", WechatAuthPurpose.SignInOrRegister)
         )
         return controller
     }
 
+    private fun previewState() = WechatLoginUiState(
+        page = WechatLoginPage.Preview,
+        wechatTicket = "ticket"
+    )
+
     private fun controller(
         repository: TestAccountRepository,
         gateway: WechatAuthGateway = RecordingWechatGateway(),
-        persistSession: (AccountCredentials) -> Boolean = { true },
-        clearPersistedSession: () -> Boolean = { true },
-        onSignedIn: (AccountSession.SignedIn) -> Unit = {}
+        commitSession: (AccountCredentials) -> Boolean = { true },
+        clearPersistedSession: () -> Boolean = { true }
     ): WechatLoginController = WechatLoginController(
         accountRepository = repository,
         authCoordinator = WechatAuthCoordinator(gateway),
-        persistSession = persistSession,
-        clearPersistedSession = clearPersistedSession,
-        onSignedIn = onSignedIn
+        commitSession = commitSession,
+        clearPersistedSession = clearPersistedSession
     )
 
     private class RecordingWechatGateway : WechatAuthGateway {

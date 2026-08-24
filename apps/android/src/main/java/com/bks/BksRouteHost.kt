@@ -8,13 +8,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bks.feature.account.AccountEntryViewModel
+import com.bks.feature.account.AccountScreenDependencies
 import com.bks.feature.account.AccountSession
 import com.bks.feature.account.AccountScreen
+import com.bks.feature.compliance.ComplianceMaterialsScreen
 import com.bks.feature.home.HomeScreen
 import com.bks.feature.ledger.ManualLedgerEntryScreen
 import com.bks.feature.profile.ProfileDestination
@@ -25,39 +34,61 @@ import com.bks.ui.visual.AppWallpaper
 
 @Composable
 internal fun BksAccountEntry(context: BksRouteContext) {
-    val runtime = context.runtime
     val appState = context.appState
     val dependencies = context.dependencies
     val sessionCoordinator = dependencies.account.sessionCoordinator
     val returnTarget = appState.accountEntryReturnTarget.value
+    val accountState by sessionCoordinator.state.collectAsStateWithLifecycle()
+    var showComplianceMaterials by remember { mutableStateOf(false) }
+    val accountEntryViewModel: AccountEntryViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = AccountEntryViewModel(
+                accountRepository = dependencies.account.accountRepository,
+                commitSession = sessionCoordinator::commit,
+                clearPersistedSession = sessionCoordinator::clearPersistedSession,
+                enterLocalMode = sessionCoordinator::enterLocalMode,
+                wechatAuthGateway = dependencies.account.wechatAuthGateway
+            ) as T
+        }
+    )
+
+    LaunchedEffect(accountState.session, appState.accountEntryMode.value) {
+        if (accountState.session is AccountSession.SignedIn && appState.accountEntryMode.value != null) {
+            accountEntryViewModel.closeEntry()
+            appState.closeAccountEntry()
+            appState.selectedTab.value = null
+            appState.profileDestination.value = null
+        }
+    }
 
     AppWallpaper(R.drawable.aa_bg_account) {
-        AccountScreen(
-            accountRepository = dependencies.account.accountRepository,
-            persistSession = sessionCoordinator::commit,
-            clearPersistedSession = sessionCoordinator::clearPersistedSession,
-            wechatAuthGateway = dependencies.account.wechatAuthGateway,
-            wechatAuthCallback = context.bindings.wechatAuthCallback,
-            onWechatAuthCallbackConsumed = context.bindings.onWechatAuthCallbackConsumed,
-            avatarCacheOverride = dependencies.account.wechatAvatarCache,
-            onSessionChange = { session ->
-                if (session == AccountSession.LocalMode) sessionCoordinator.enterLocalMode()
-                appState.closeAccountEntry()
-                appState.selectedTab.value = null
-                appState.profileDestination.value = null
-            },
-            onBack = returnTarget?.let {
-                {
-                    appState.closeAccountEntry()
-                    when (it) {
-                        AccountEntryReturnTarget.AccountManagement -> {
-                            appState.selectedTab.value = AppTab.Profile
-                            appState.profileDestination.value = ProfileDestination.AccountManagement
+        if (showComplianceMaterials) {
+            BackHandler { showComplianceMaterials = false }
+            ComplianceMaterialsScreen(onBack = { showComplianceMaterials = false })
+        } else {
+            AccountScreen(
+                dependencies = AccountScreenDependencies(
+                    viewModel = accountEntryViewModel,
+                    wechatAuthCallback = context.bindings.wechatAuthCallback,
+                    onWechatAuthCallbackConsumed = context.bindings.onWechatAuthCallbackConsumed,
+                    avatarCacheOverride = dependencies.account.wechatAvatarCache
+                ),
+                onComplianceClick = { showComplianceMaterials = true },
+                onBack = returnTarget?.let {
+                    {
+                        accountEntryViewModel.closeEntry()
+                        appState.closeAccountEntry()
+                        when (it) {
+                            AccountEntryReturnTarget.AccountManagement -> {
+                                appState.selectedTab.value = AppTab.Profile
+                                appState.profileDestination.value = ProfileDestination.AccountManagement
+                            }
                         }
                     }
                 }
-            }
-        )
+            )
+        }
     }
 }
 

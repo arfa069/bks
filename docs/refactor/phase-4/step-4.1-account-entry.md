@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -113,20 +113,37 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 新增 `AccountEntryViewModel`，由其 `viewModelScope` 和 `StateFlow` 统一持有普通认证、短信倒计时、微信授权/绑定的 loading、错误和 operation state；Snackbar 临时反馈通过 feature-local `Channel` 暴露。
+- 普通登录、注册、找回密码和微信认证成功均只调用 Route 注入的 `AccountSessionCoordinator.commit`；本地模式只调用 `AccountSessionCoordinator.enterLocalMode`。认证成功后不再向 Screen/Route 发送成功 callback。
+- `AccountScreen` 改为只持有普通账号表单草稿、运行 reducer、转发 action 和渲染 ViewModel state；不再接收 `AccountRepository`、持久化 callback 或启动认证业务 coroutine。
+- `WechatLoginController` 改为无内部 Compose state 的认证边界，`AccountEntryViewModel` 成为微信异步状态 owner；微信绑定的标识、密码和验证码草稿改由 `WechatLoginScreens` 内的 Compose state 持有。
+- `BksAccountEntry` 负责创建 ViewModel、装配 Compliance 独立内容并观察 `AccountSessionCoordinator.state`；首次登录依靠根 session gate，LocalMode 上的登录覆盖页依靠稳定 `SignedIn` state 关闭。
+- 新增 `AccountEntryViewModelTest` 与 Screen 测试 harness，扩充 fake Repository 的挂起请求 seam，覆盖成功、失败、取消、短信倒计时、普通/微信重复提交、Session 唯一提交入口及敏感草稿不进入 ViewModel state。
+- 复审后为 Activity-scoped `AccountEntryViewModel` 增加显式 Account Entry generation/关闭边界：账户管理返回、稳定 `SignedIn` 导航和进入本地模式都会取消在途任务、清空瞬态状态并在 Session commit 前拒绝迟到结果；未使用 Composition dispose 清理，因此 configuration recreation 仍保留合法的 ViewModel operation。
+- 短信请求增加 operation 与 SMS-context generation；手机号或 Register/Recovery/Landing flow 改变时取消并作废挂起请求、恢复 idle，忽略 coroutine cancellation 的旧响应也不能在新上下文启动倒计时或发布错误。
+- 显式关闭 Account Entry 时按 purpose 作废持久化的微信 `SignInOrRegister` state/relay；合法的进程冷启动 callback 仍可由新 ViewModel 继续处理，且不会误清 Account Management 的 `LinkCurrentAccount` 授权上下文。
 
 ### Deviations From Plan
 
-无
+- 当前基线已经存在拆分后的 `AccountAuthContent.kt`、`AccountAuthOperations.kt`、`WechatLoginScreens.kt`，因此没有为计划形态重复创建内容类，只调整实际 ownership 和调用边界。
+- 保留 `WechatLoginController` 作为可测试的无状态 Repository/微信协议操作边界，而不是把全部分支机械复制进 ViewModel；所有可观察异步状态仍只由 `AccountEntryViewModel` 持有。
+- `AccountUiState` 继续作为现有表单渲染模型复用；其中 operation/countdown 值只由 Screen 从 ViewModel state 投影，Compose 保存的 `formState` 不再更新这些字段，也不再包含 Session。
 
 ### Test Results
 
-尚未执行
+- 重构前专项基线：Step 列出的既有 6 个 Account 测试类及 `MainActivityTest`，`BUILD SUCCESSFUL`。
+- 重构及复审修复后专项验证：新增 `AccountEntryViewModelTest` 加 Step 列出的全部测试类，`BUILD SUCCESSFUL`；覆盖关闭入口后的非协作取消认证、挂起短信上下文切换、微信瞬态清理、purpose-bound 授权作废与 cold-start callback。
+- `./gradlew.bat :apps:android:testDebugUnitTest`：通过；最终 XML 汇总为 85 个 suite、468 tests、0 failures、0 errors、0 skipped。
+- `./gradlew.bat :apps:android:detekt`：通过。
+- `git diff --check`：通过。
+- `android_code_reviewer` 最终只读复审：原 P1/P2 与中途发现的微信 cold-start 回归均闭合，无新增 P1/P2。
+- 未运行 `assembleDebug`：本 Step 未修改 Manifest、Resources、Gradle dependency、BuildConfig 或 Android platform configuration，按总计划无需 APK 验证。
 
 ### Remaining Risks
 
-尚未执行
+- 未进行真实后端账号、短信或微信 OpenSDK/回调的真机验收；本 Step 仅以 fake Repository/Gateway、Robolectric UI 和既有 HTTP/微信边界测试证明行为保持。
+- ViewModel 中的微信 ticket 只存在于非持久 `StateFlow`，进程死亡后会要求用户重新授权；这与本 Step 禁止持久化临时票据的安全边界一致。
 
 ### Final Status
 
-Pending
+Completed（2026-08-24）

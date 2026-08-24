@@ -110,6 +110,20 @@ class WechatAuthCoordinatorTest {
     }
 
     @Test
+    fun clearingAuthorizationIsPurposeBoundAndRejectsItsLateCallback() {
+        val state = "F".repeat(43)
+        val store = WechatAuthStateStore(context, stateGenerator = { state })
+
+        store.begin(WechatAuthPurpose.LinkCurrentAccount)
+        store.clear(WechatAuthPurpose.SignInOrRegister)
+        assertEquals(WechatAuthPurpose.LinkCurrentAccount, store.consumeSdkResponse(state)?.purpose)
+
+        store.begin(WechatAuthPurpose.SignInOrRegister)
+        store.clear(WechatAuthPurpose.SignInOrRegister)
+        assertNull(store.consumeSdkResponse(state))
+    }
+
+    @Test
     fun expiredStateIsDiscarded() {
         val clock = TestClock(1_000L)
         val state = "C".repeat(43)
