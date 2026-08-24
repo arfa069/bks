@@ -25,20 +25,17 @@ import com.bks.ui.components.Button
 import com.bks.ui.components.TextButton
 
 @Composable
-@Suppress("LongParameterList")
 fun AutomaticBookkeepingScreen(
-    enabled: Boolean = false,
-    accessibilityAccessGranted: Boolean = false,
-    accessibilityServiceConnected: Boolean = false,
+    state: AutomaticBookkeepingUiState = AutomaticBookkeepingUiState(),
     onEnabledChange: (Boolean) -> Unit = {},
     onOpenAccessibilitySettings: () -> Unit = {},
     onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val status = when {
-        !enabled -> "已关闭"
-        !accessibilityAccessGranted -> "等待无障碍授权"
-        !accessibilityServiceConnected -> "等待服务连接"
+        !state.enabled -> "已关闭"
+        !state.accessibilityAccessGranted -> "等待无障碍授权"
+        !state.accessibilityServiceConnected -> "等待服务连接"
         else -> "正在监听"
     }
     Column(
@@ -75,13 +72,14 @@ fun AutomaticBookkeepingScreen(
                         Text(status, modifier = Modifier.testTag("automatic-bookkeeping-status"))
                     }
                     Switch(
-                        checked = enabled,
+                        checked = state.enabled,
                         onCheckedChange = onEnabledChange,
+                        enabled = !state.writeInProgress,
                         modifier = Modifier.testTag("automatic-bookkeeping-toggle")
                     )
                 }
                 Button(onClick = onOpenAccessibilitySettings) {
-                    Text(if (accessibilityAccessGranted) "管理无障碍授权" else "打开无障碍设置")
+                    Text(if (state.accessibilityAccessGranted) "管理无障碍授权" else "打开无障碍设置")
                 }
             }
         }

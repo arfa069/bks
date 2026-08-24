@@ -12,6 +12,7 @@ import com.bks.feature.categorization.CategorizationRulesActions
 import com.bks.feature.categorization.CategorizationRulesScreen
 import com.bks.feature.compliance.ComplianceAndPrivacyScreen
 import com.bks.feature.monitoring.AutomaticBookkeepingScreen
+import com.bks.feature.monitoring.AutomaticBookkeepingUiState
 import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.profile.ProfileOverviewScreen
 import com.bks.feature.settings.DataAndBackupScreen
@@ -60,10 +61,13 @@ private fun BksAutomaticBookkeepingRoute(
     innerPadding: PaddingValues
 ) {
     AutomaticBookkeepingScreen(
-        enabled = context.runtime.automaticBookkeepingEnabled,
-        accessibilityAccessGranted = context.bindings.billSyncAccessibilityAccessGranted,
-        accessibilityServiceConnected = context.bindings.billSyncAccessibilityServiceConnected,
-        onEnabledChange = context.actions::setAutomaticBookkeepingEnabled,
+        state = AutomaticBookkeepingUiState(
+            enabled = context.automaticBookkeepingState.enabled,
+            writeInProgress = context.automaticBookkeepingState.writeInProgress,
+            accessibilityAccessGranted = context.bindings.billSyncAccessibilityAccessGranted,
+            accessibilityServiceConnected = context.bindings.billSyncAccessibilityServiceConnected
+        ),
+        onEnabledChange = context.automaticBookkeepingViewModel::setEnabled,
         onOpenAccessibilitySettings = context.bindings.onOpenBillSyncAccessibilitySettings,
         onBack = { context.appState.profileDestination.value = null },
         modifier = Modifier

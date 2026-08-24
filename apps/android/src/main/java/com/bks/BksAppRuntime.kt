@@ -21,7 +21,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal class BksAppRuntimeState {
-    var automaticBookkeepingEnabled by mutableStateOf(false)
     var accountSession by mutableStateOf<AccountSession?>(null)
     var isRestoringAccountSession by mutableStateOf(true)
     var accountDeletionState by mutableStateOf(AccountDeletionUiState())
@@ -49,13 +48,6 @@ internal class BksAppActions(
         runtime.categorizationRules = nextRules
         coroutineScope.launch {
             dependencies.local.preferencesRepository.replaceCategorizationRules(nextRules)
-        }
-    }
-
-    fun setAutomaticBookkeepingEnabled(enabled: Boolean) {
-        runtime.automaticBookkeepingEnabled = enabled
-        coroutineScope.launch {
-            dependencies.local.preferencesRepository.setAutomaticBookkeepingEnabled(enabled)
         }
     }
 

@@ -47,7 +47,6 @@ private fun BksLocalPersistenceEffects(context: BksAppEffectsContext) {
     }
     LaunchedEffect(dependencies.local.preferencesRepository, runtime.accountSession) {
         dependencies.local.preferencesRepository.userPreferences.collect { preferences ->
-            runtime.automaticBookkeepingEnabled = preferences.automaticBookkeepingEnabled
             if (runtime.accountSession !is AccountSession.SignedIn) {
                 runtime.aiSettings = preferences.aiSettings
             }

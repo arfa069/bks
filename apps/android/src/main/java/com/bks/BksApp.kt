@@ -28,6 +28,8 @@ import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.ledger.LedgerViewModel
 import com.bks.feature.ledger.LedgerUiState
+import com.bks.feature.monitoring.AutomaticBookkeepingFeatureState
+import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
 import com.bks.feature.review.ReviewQueueState
 import com.bks.feature.review.ReviewQueueViewModel
 import com.bks.feature.sync.LedgerSyncUiState
@@ -36,6 +38,8 @@ import com.bks.ui.components.SlidePageTransition
 import com.bks.ui.rememberBksAppState
 import com.bks.ui.theme.BksTheme
 import com.bks.ui.visual.AppWallpaper
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 data class BksAppBindings(
     val billSyncAccessibilityAccessGranted: Boolean = false,
@@ -101,6 +105,8 @@ fun BksApp(
         actions = actions,
         appState = appState,
         coroutineScope = coroutineScope,
+        automaticBookkeepingViewModel = owners.automaticBookkeepingViewModel,
+        automaticBookkeepingState = owners.automaticBookkeepingState,
         ledgerViewModel = owners.ledgerViewModel,
         ledgerUiState = owners.ledgerUiState,
         reviewQueueViewModel = owners.reviewQueueViewModel,
@@ -110,7 +116,7 @@ fun BksApp(
     )
 
     BksAccountSessionNotices(accountSessionCoordinator, appState)
-    BksReviewQueueNotices(owners.reviewQueueViewModel, appState)
+    BksFeatureNotices(owners, appState)
     LaunchedEffect(accountState, cloudSettingsState) {
         runtime.accountSession = accountState.session
         runtime.isRestoringAccountSession = accountState.isRestoring
@@ -159,6 +165,8 @@ fun BksApp(
 }
 
 private data class BksFeatureOwners(
+    val automaticBookkeepingViewModel: AutomaticBookkeepingViewModel,
+    val automaticBookkeepingState: AutomaticBookkeepingFeatureState,
     val ledgerViewModel: LedgerViewModel,
     val ledgerUiState: LedgerUiState,
     val reviewQueueViewModel: ReviewQueueViewModel,
@@ -166,6 +174,15 @@ private data class BksFeatureOwners(
     val ledgerSyncViewModel: LedgerSyncViewModel,
     val ledgerSyncUiState: LedgerSyncUiState
 )
+
+@Composable
+private fun BksFeatureNotices(
+    owners: BksFeatureOwners,
+    appState: com.bks.ui.BksAppState
+) {
+    BksReviewQueueNotices(owners.reviewQueueViewModel, appState)
+    BksAutomaticBookkeepingNotices(owners.automaticBookkeepingViewModel, appState)
+}
 
 @Composable
 private fun rememberBksFeatureOwners(
@@ -189,10 +206,17 @@ private fun rememberBksFeatureOwners(
             ) as T
         }
     )
+    val automaticBookkeepingViewModel: AutomaticBookkeepingViewModel = viewModel(
+        factory = automaticBookkeepingFactory(dependencies)
+    )
     val ledgerUiState by ledgerViewModel.uiState.collectAsStateWithLifecycle()
     val reviewQueueState by reviewQueueViewModel.uiState.collectAsStateWithLifecycle()
     val ledgerSyncUiState by ledgerSyncViewModel.uiState.collectAsStateWithLifecycle()
+    val automaticBookkeepingState by automaticBookkeepingViewModel.uiState
+        .collectAsStateWithLifecycle()
     return BksFeatureOwners(
+        automaticBookkeepingViewModel = automaticBookkeepingViewModel,
+        automaticBookkeepingState = automaticBookkeepingState,
         ledgerViewModel = ledgerViewModel,
         ledgerUiState = ledgerUiState,
         reviewQueueViewModel = reviewQueueViewModel,
@@ -200,6 +224,18 @@ private fun rememberBksFeatureOwners(
         ledgerSyncViewModel = ledgerSyncViewModel,
         ledgerSyncUiState = ledgerSyncUiState
     )
+}
+
+@Composable
+private fun BksAutomaticBookkeepingNotices(
+    viewModel: AutomaticBookkeepingViewModel,
+    appState: com.bks.ui.BksAppState
+) {
+    LaunchedEffect(viewModel) {
+        viewModel.notices.collect { message ->
+            appState.snackbarHostState.showSnackbar(message)
+        }
+    }
 }
 
 @Composable
@@ -253,4 +289,19 @@ private fun reviewQueueFactory(
         persistence = dependencies.local.reviewQueuePersistence,
         localDataReplacementInFlight = ledgerViewModel.localDataReplacementInFlight
     ) as T
+}
+
+private fun automaticBookkeepingFactory(
+    dependencies: BksAppDependencies
+) = object : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        val repository = dependencies.local.preferencesRepository
+        return AutomaticBookkeepingViewModel(
+            enabled = repository.userPreferences
+                .map { it.automaticBookkeepingEnabled }
+                .distinctUntilChanged(),
+            persistEnabled = repository::setAutomaticBookkeepingEnabled
+        ) as T
+    }
 }

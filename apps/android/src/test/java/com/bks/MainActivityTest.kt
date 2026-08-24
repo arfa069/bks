@@ -3,6 +3,9 @@ package com.bks
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -20,6 +23,7 @@ import com.bks.data.local.ConfidenceState
 import com.bks.data.local.FlowDirection
 import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LocalLedgerRepository
+import com.bks.data.local.LocalPreferencesRepository
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.PendingEntryEntity
 import com.bks.data.local.TransactionKind
@@ -30,6 +34,7 @@ import com.bks.feature.account.LocalModeSessionStore
 import com.bks.feature.account.SecureAccountSessionStore
 import com.bks.feature.ledger.LedgerTestTags
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.After
@@ -386,6 +391,31 @@ class MainActivityTest {
         composeRule.onNodeWithText("自动识别")
             .performScrollTo()
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun automaticBookkeepingTogglePersistsThroughRouteAndRoomFlow() {
+        val repository = LocalPreferencesRepository(BksDatabaseProvider.get(context))
+        runBlocking { repository.setAutomaticBookkeepingEnabled(false) }
+        try {
+            composeRule.setContent { BksApp() }
+            openProfileTab()
+            composeRule.onNodeWithTag("profile-entry-AutomaticBookkeeping")
+                .performScrollTo()
+                .performClick()
+
+            composeRule.onNodeWithTag("automatic-bookkeeping-toggle")
+                .assertIsOff()
+                .performClick()
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                runBlocking { repository.userPreferences.first().automaticBookkeepingEnabled }
+            }
+            composeRule.onNodeWithTag("automatic-bookkeeping-toggle")
+                .assertIsOn()
+                .assertIsEnabled()
+        } finally {
+            runBlocking { repository.setAutomaticBookkeepingEnabled(false) }
+        }
     }
 
     @Test
