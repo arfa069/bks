@@ -32,6 +32,8 @@ import com.bks.feature.monitoring.AutomaticBookkeepingFeatureState
 import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
 import com.bks.feature.review.ReviewQueueState
 import com.bks.feature.review.ReviewQueueViewModel
+import com.bks.feature.settings.DataAndBackupUiState
+import com.bks.feature.settings.DataAndBackupViewModel
 import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.feature.sync.LedgerSyncViewModel
 import com.bks.ui.components.SlidePageTransition
@@ -84,17 +86,13 @@ fun BksApp(
         dependencies,
         runtime,
         appState,
-        coroutineScope,
-        owners.ledgerViewModel,
-        owners.reviewQueueViewModel
+        coroutineScope
     ) {
         BksAppActions(
             dependencies = dependencies,
             runtime = runtime,
             appState = appState,
-            coroutineScope = coroutineScope,
-            ledgerViewModel = owners.ledgerViewModel,
-            reviewQueueViewModel = owners.reviewQueueViewModel
+            coroutineScope = coroutineScope
         )
     }
     val routeContext = BksRouteContext(
@@ -111,6 +109,8 @@ fun BksApp(
         ledgerUiState = owners.ledgerUiState,
         reviewQueueViewModel = owners.reviewQueueViewModel,
         reviewQueueState = owners.reviewQueueState,
+        dataAndBackupViewModel = owners.dataAndBackupViewModel,
+        dataAndBackupUiState = owners.dataAndBackupUiState,
         ledgerSyncViewModel = owners.ledgerSyncViewModel,
         ledgerSyncUiState = owners.ledgerSyncUiState
     )
@@ -171,6 +171,8 @@ private data class BksFeatureOwners(
     val ledgerUiState: LedgerUiState,
     val reviewQueueViewModel: ReviewQueueViewModel,
     val reviewQueueState: ReviewQueueState,
+    val dataAndBackupViewModel: DataAndBackupViewModel,
+    val dataAndBackupUiState: DataAndBackupUiState,
     val ledgerSyncViewModel: LedgerSyncViewModel,
     val ledgerSyncUiState: LedgerSyncUiState
 )
@@ -196,6 +198,9 @@ private fun rememberBksFeatureOwners(
     val reviewQueueViewModel: ReviewQueueViewModel = viewModel(
         factory = reviewQueueFactory(dependencies, ledgerViewModel)
     )
+    val dataAndBackupViewModel: DataAndBackupViewModel = viewModel(
+        factory = dataAndBackupFactory(dependencies, ledgerViewModel, reviewQueueViewModel)
+    )
     val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -211,6 +216,7 @@ private fun rememberBksFeatureOwners(
     )
     val ledgerUiState by ledgerViewModel.uiState.collectAsStateWithLifecycle()
     val reviewQueueState by reviewQueueViewModel.uiState.collectAsStateWithLifecycle()
+    val dataAndBackupUiState by dataAndBackupViewModel.uiState.collectAsStateWithLifecycle()
     val ledgerSyncUiState by ledgerSyncViewModel.uiState.collectAsStateWithLifecycle()
     val automaticBookkeepingState by automaticBookkeepingViewModel.uiState
         .collectAsStateWithLifecycle()
@@ -221,6 +227,8 @@ private fun rememberBksFeatureOwners(
         ledgerUiState = ledgerUiState,
         reviewQueueViewModel = reviewQueueViewModel,
         reviewQueueState = reviewQueueState,
+        dataAndBackupViewModel = dataAndBackupViewModel,
+        dataAndBackupUiState = dataAndBackupUiState,
         ledgerSyncViewModel = ledgerSyncViewModel,
         ledgerSyncUiState = ledgerSyncUiState
     )
@@ -288,6 +296,29 @@ private fun reviewQueueFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T = ReviewQueueViewModel(
         persistence = dependencies.local.reviewQueuePersistence,
         localDataReplacementInFlight = ledgerViewModel.localDataReplacementInFlight
+    ) as T
+}
+
+private fun dataAndBackupFactory(
+    dependencies: BksAppDependencies,
+    ledgerViewModel: LedgerViewModel,
+    reviewQueueViewModel: ReviewQueueViewModel
+) = object : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = DataAndBackupViewModel(
+        exportEncryptedBackup = dependencies.local.dataBackupRepository::exportEncryptedBackup,
+        validateEncryptedBackup = dependencies.local.dataBackupRepository::validateEncryptedBackup,
+        importEncryptedBackup = dependencies.local.dataBackupRepository::importEncryptedBackup,
+        serializeWithSync = dependencies.sync.coordinator::withLocalDataReplacement,
+        runLocalDataReplacement = ledgerViewModel::runLocalDataReplacement,
+        clearLocalData = ledgerViewModel::clearLocalData,
+        awaitReviewIdle = reviewQueueViewModel::awaitIdleAndResetForLocalDataReplacement,
+        clearAvatarCache = dependencies.account.wechatAvatarCache::clear,
+        clearCloudSettingsLocalState = dependencies.account.cloudSettingsCoordinator::clearLocalState,
+        disableSync = dependencies.sync.runtime::disable,
+        clearDiagnostics = {
+            dependencies.diagnosticLogs.clear(keepEnabledPreference = false)
+        }
     ) as T
 }
 

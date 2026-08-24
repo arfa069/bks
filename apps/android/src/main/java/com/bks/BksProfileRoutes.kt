@@ -28,6 +28,7 @@ import com.bks.feature.monitoring.AutomaticBookkeepingUiState
 import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.profile.ProfileOverviewScreen
 import com.bks.feature.settings.DataAndBackupScreen
+import com.bks.feature.settings.DataAndBackupActions
 import com.bks.ui.AccountEntryMode
 import com.bks.ui.AccountEntryReturnTarget
 
@@ -193,26 +194,25 @@ private fun BksDataAndBackupRoute(
     context: BksRouteContext,
     innerPadding: PaddingValues
 ) {
-    val dependencies = context.dependencies
+    val viewModel = context.dataAndBackupViewModel
     DataAndBackupScreen(
         ledgerEntries = context.ledgerUiState.entries,
         currentLedgerName = context.ledgerUiState.activeLedgerName,
-        onExportEncryptedBackup = { passphrase ->
-            dependencies.local.dataBackupRepository.exportEncryptedBackup(passphrase)
-        },
-        onValidateEncryptedBackup = { backup, passphrase ->
-            dependencies.local.dataBackupRepository.validateEncryptedBackup(backup, passphrase)
-        },
-        onImportEncryptedBackup = { backup, passphrase ->
-            context.ledgerViewModel.runLocalDataReplacement {
-                context.reviewQueueViewModel.awaitIdleAndResetForLocalDataReplacement()
-                dependencies.local.dataBackupRepository.importEncryptedBackup(backup, passphrase)
-            }
-        },
-        onDeleteLocalData = context.actions::clearLocalData,
+        dataAndBackupState = context.dataAndBackupUiState,
+        dataAndBackupActions = DataAndBackupActions(
+            onExport = viewModel::export,
+            onValidate = viewModel::validate,
+            onImport = viewModel::import,
+            onDelete = viewModel::delete,
+            onAttachUi = viewModel::attachUi,
+            onDetachUi = viewModel::detachUi,
+            onAcknowledgeValidation = viewModel::acknowledgeValidation,
+            onEndValidatedContinuation = viewModel::endValidatedContinuation,
+            onClearValidation = viewModel::clearValidation,
+            onAcknowledgeNotice = viewModel::acknowledgeNotice
+        ),
         onBack = { context.appState.profileDestination.value = null },
         snackbarHostState = context.appState.snackbarHostState,
-        localDataReplacementInFlight = context.ledgerUiState.localDataReplacementInFlight,
         ledgerSyncState = context.ledgerSyncUiState,
         ledgerSyncActions = com.bks.feature.settings.LedgerSyncSectionActions(
             onPreview = context.ledgerSyncViewModel::preview,

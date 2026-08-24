@@ -23,11 +23,19 @@ sealed interface LedgerSyncOperationResult<out T> {
     data class Failure(val code: String?, val message: String, val retryable: Boolean) : LedgerSyncOperationResult<Nothing>
 }
 
+@Suppress("TooManyFunctions")
 class LedgerSyncCoordinator(
     private val localStore: LedgerSyncLocalStore,
     private val repository: LedgerSyncRepository,
     private val deviceId: () -> String
 ) {
+    internal suspend fun <T> withLocalDataReplacement(block: suspend () -> T): T =
+        mutex.withLock { block() }
+
+    internal suspend fun disable() = mutex.withLock {
+        localStore.disableAndUnbind()
+    }
+
     suspend fun preview(token: String): LedgerSyncOperationResult<LedgerSyncPreview> = mutex.withLock {
         when (val initialized = repository.initialize(token, deviceId())) {
             is LedgerSyncRemoteResult.Failure -> initialized.toOperationFailure()

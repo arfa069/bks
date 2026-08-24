@@ -5,6 +5,8 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.bks.data.local.AccountSyncMetadataEntity
+import com.bks.data.local.AccountSyncOutboxEntity
+import com.bks.data.local.AccountSyncConflictEntity
 import com.bks.data.local.AccountSyncStateEntity
 import com.bks.data.local.BksDatabase
 import com.bks.data.local.CaptureReason
@@ -135,12 +137,60 @@ class LocalDataBackupRepositoryTest {
                 deleted = false
             )
         )
+        database.ledgerSyncDao().upsertMetadata(
+            AccountSyncMetadataEntity(
+                entityType = "LEDGER_ENTRY",
+                entityId = "ledger-1",
+                serverVersion = 5,
+                syncedPayload = "restore-before-server-payload",
+                deleted = false,
+                blockedByConflict = true
+            )
+        )
+        database.ledgerSyncDao().upsertConflict(
+            AccountSyncConflictEntity(
+                conflictId = "restore-before-conflict",
+                entityType = "LEDGER_ENTRY",
+                entityId = "ledger-1",
+                canonicalVersion = 5,
+                canonicalDeleted = false,
+                canonicalPayload = "restore-before-canonical-private-payload",
+                candidateDeleted = false,
+                candidatePayload = "restore-before-candidate-private-payload",
+                createdAtMillis = NOW - 2
+            )
+        )
+        database.ledgerSyncDao().upsertOutbox(
+            AccountSyncOutboxEntity(
+                mutationId = "stale-create",
+                entityType = "LEDGER_ENTRY",
+                entityId = "restore-replaced-private-entry",
+                baseVersion = 0,
+                deleted = false,
+                payload = "stale-private-payload",
+                createdAtMillis = NOW - 1
+            )
+        )
 
         backupRepository.importEncryptedBackup(backup, PASSPHRASE)
 
         val mutations = database.ledgerSyncDao().listOutbox(100)
         assertTrue(mutations.any { it.entityType == "LEDGER_ENTRY" && !it.deleted })
         assertTrue(mutations.any { it.entityId == "obsolete-book" && it.deleted && it.baseVersion == 3L })
+        assertFalse(mutations.any { it.entityId == "restore-replaced-private-entry" })
+        assertFalse(mutations.any { it.payload == "stale-private-payload" })
+        assertTrue(mutations.any { it.entityId == "ledger-1" && !it.deleted })
+        assertFalse(
+            mutations.any {
+                it.payload == "restore-before-canonical-private-payload" ||
+                    it.payload == "restore-before-candidate-private-payload"
+            }
+        )
+        assertFalse(
+            database.ledgerSyncDao().getMetadata("LEDGER_ENTRY", "ledger-1")?.blockedByConflict
+                ?: true
+        )
+        assertTrue(database.ledgerSyncDao().observeConflicts().first().isEmpty())
         assertTrue(database.fundingAccountDao().getAllFundingAccounts().all { it.syncId != null })
     }
 

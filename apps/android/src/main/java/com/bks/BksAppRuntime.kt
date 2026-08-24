@@ -12,13 +12,9 @@ import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
-import com.bks.feature.ledger.LedgerViewModel
-import com.bks.feature.review.ReviewQueueViewModel
 import com.bks.ui.BksAppState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 internal class BksAppRuntimeState {
     var accountSession by mutableStateOf<AccountSession?>(null)
@@ -40,9 +36,7 @@ internal class BksAppActions(
     private val dependencies: BksAppDependencies,
     private val runtime: BksAppRuntimeState,
     private val appState: BksAppState,
-    private val coroutineScope: CoroutineScope,
-    private val ledgerViewModel: LedgerViewModel,
-    private val reviewQueueViewModel: ReviewQueueViewModel
+    private val coroutineScope: CoroutineScope
 ) {
     fun persistCategorizationRules(nextRules: List<CategorizationRule>) {
         runtime.categorizationRules = nextRules
@@ -70,20 +64,6 @@ internal class BksAppActions(
                 AccountCloudSettingsOperationResult.Stale,
                 AccountCloudSettingsOperationResult.Success -> Unit
             }
-        }
-    }
-
-    suspend fun clearLocalData() = withContext(NonCancellable) {
-        try {
-            ledgerViewModel.clearLocalData {
-                reviewQueueViewModel.awaitIdleAndResetForLocalDataReplacement()
-                dependencies.account.wechatAvatarCache.clear()
-                runtime.categorizationRules = emptyList()
-                dependencies.account.cloudSettingsCoordinator.clearLocalState()
-                dependencies.sync.runtime.disable()
-            }
-        } finally {
-            dependencies.diagnosticLogs.clear(keepEnabledPreference = false)
         }
     }
 }

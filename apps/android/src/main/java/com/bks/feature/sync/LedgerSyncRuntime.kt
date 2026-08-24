@@ -121,7 +121,7 @@ internal class LedgerSyncRuntime(
 
     suspend fun disable() {
         scheduler.cancel()
-        localStore.disableAndUnbind()
+        coordinator.disable()
     }
 
     private suspend fun collectDurableState() {

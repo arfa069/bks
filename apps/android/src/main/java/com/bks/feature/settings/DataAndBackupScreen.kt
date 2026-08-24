@@ -21,38 +21,39 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import com.bks.ui.components.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bks.feature.ledger.LedgerUiEntry
 import com.bks.feature.sync.LedgerSyncUiState
-import kotlinx.coroutines.launch
 
 @Composable
 @Suppress("LongParameterList")
-fun DataAndBackupScreen(
+internal fun DataAndBackupScreen(
     ledgerEntries: List<LedgerUiEntry>,
     currentLedgerName: String = "默认账本",
-    onExportEncryptedBackup: suspend (String) -> String,
-    onValidateEncryptedBackup: suspend (String, String) -> Unit,
-    onImportEncryptedBackup: suspend (String, String) -> Unit,
-    onDeleteLocalData: suspend () -> Unit,
+    dataAndBackupState: DataAndBackupUiState,
+    dataAndBackupActions: DataAndBackupActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = SnackbarHostState(),
-    localDataReplacementInFlight: Boolean = false,
     ledgerSyncState: LedgerSyncUiState = LedgerSyncUiState(),
     ledgerSyncActions: LedgerSyncSectionActions = LedgerSyncSectionActions()
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var deleteRequestInFlight by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val deletionInFlight = deleteRequestInFlight || localDataReplacementInFlight
+    val deletionInFlight = dataAndBackupState.operation == DataAndBackupOperation.Deleting
+
+    DataAndBackupNoticeEffect(
+        notice = dataAndBackupState.notice,
+        snackbarHostState = snackbarHostState,
+        onDeleteSucceeded = { showDeleteDialog = false },
+        onAcknowledge = dataAndBackupActions.onAcknowledgeNotice
+    )
 
     Column(
         modifier = modifier
@@ -72,21 +73,30 @@ fun DataAndBackupScreen(
             ledgerEntries = ledgerEntries,
             currentLedgerName = currentLedgerName,
             actions = LocalBackupSectionActions(
-                onExportEncryptedBackup = onExportEncryptedBackup,
-                onValidateEncryptedBackup = onValidateEncryptedBackup,
-                onImportEncryptedBackup = onImportEncryptedBackup
+                onExport = dataAndBackupActions.onExport,
+                onValidate = dataAndBackupActions.onValidate,
+                onImport = dataAndBackupActions.onImport,
+                onAttachUi = dataAndBackupActions.onAttachUi,
+                onDetachUi = dataAndBackupActions.onDetachUi,
+                onAcknowledgeValidation = dataAndBackupActions.onAcknowledgeValidation,
+                onEndValidatedContinuation = dataAndBackupActions.onEndValidatedContinuation,
+                onClearValidation = dataAndBackupActions.onClearValidation
             ),
+            operationState = dataAndBackupState,
             snackbarHostState = snackbarHostState
         )
         CardSection(title = "危险区", danger = true) {
             Text("删除本机数据不会注销云端账号，且无法撤销。")
-            OutlinedButton(onClick = { showDeleteDialog = true }) {
+            OutlinedButton(
+                onClick = { showDeleteDialog = true },
+                enabled = !dataAndBackupState.operationInProgress
+            ) {
                 Text("删除本机数据")
             }
         }
     }
 
-    if (showDeleteDialog || localDataReplacementInFlight) {
+    if (showDeleteDialog || deletionInFlight) {
         LocalDataDeletionDialog(
             deletionInFlight = deletionInFlight,
             onDismiss = {
@@ -96,18 +106,60 @@ fun DataAndBackupScreen(
             },
             onDelete = {
                 if (!deletionInFlight) {
-                    deleteRequestInFlight = true
-                    coroutineScope.launch {
-                        val failure = runCatching { onDeleteLocalData() }.exceptionOrNull()
-                        deleteRequestInFlight = false
-                        if (failure == null) {
-                            showDeleteDialog = false
-                        } else {
-                            snackbarHostState.showSnackbar("删除本机数据失败，请重试")
-                        }
-                    }
+                    dataAndBackupActions.onDelete()
                 }
             }
+        )
+    }
+
+    BackupOperationProgressDialog(dataAndBackupState.operation)
+}
+
+@Composable
+private fun DataAndBackupNoticeEffect(
+    notice: DataAndBackupNotice?,
+    snackbarHostState: SnackbarHostState,
+    onDeleteSucceeded: () -> Unit,
+    onAcknowledge: (Long) -> Unit
+) {
+    LaunchedEffect(notice?.id) {
+        val current = notice ?: return@LaunchedEffect
+        if (current.operation == DataAndBackupOperation.Deleting && current.success) {
+            onDeleteSucceeded()
+        }
+        dataAndBackupNoticeMessage(current)?.let { snackbarHostState.showSnackbar(it) }
+        onAcknowledge(current.id)
+    }
+}
+
+private fun dataAndBackupNoticeMessage(notice: DataAndBackupNotice): String? = when {
+    notice.requiresBackupReselection -> "校验流程已中断，请重新选择备份并输入密码"
+    notice.operation == DataAndBackupOperation.Exporting && notice.success ->
+        "备份已保存到 Downloads/${notice.detail}"
+    notice.operation == DataAndBackupOperation.Exporting -> "加密备份失败"
+    notice.operation == DataAndBackupOperation.Importing && notice.success -> "备份已恢复成功"
+    notice.operation == DataAndBackupOperation.Importing -> "备份恢复失败，本机数据未更改"
+    notice.operation == DataAndBackupOperation.Deleting && !notice.success ->
+        "删除本机数据失败，请重试"
+    else -> null
+}
+
+@Composable
+private fun BackupOperationProgressDialog(operation: DataAndBackupOperation) {
+    if (operation == DataAndBackupOperation.Exporting || operation == DataAndBackupOperation.Importing) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(
+                    if (operation == DataAndBackupOperation.Exporting) {
+                        "正在导出加密备份"
+                    } else {
+                        "正在恢复备份"
+                    }
+                )
+            },
+            text = { Text("请稍候，操作完成前请勿关闭应用。") },
+            confirmButton = {}
         )
     }
 }

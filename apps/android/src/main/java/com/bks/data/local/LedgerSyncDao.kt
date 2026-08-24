@@ -29,6 +29,9 @@ interface LedgerSyncDao {
     @Query("DELETE FROM account_sync_metadata")
     suspend fun deleteAllMetadata()
 
+    @Query("UPDATE account_sync_metadata SET blocked_by_conflict = 0 WHERE blocked_by_conflict = 1")
+    suspend fun unblockAllMetadata()
+
     @Query("DELETE FROM account_sync_metadata WHERE entity_type = :entityType AND entity_id = :entityId")
     suspend fun deleteMetadata(entityType: String, entityId: String): Int
 

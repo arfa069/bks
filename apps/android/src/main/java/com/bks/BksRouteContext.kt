@@ -8,6 +8,8 @@ import com.bks.feature.monitoring.AutomaticBookkeepingFeatureState
 import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
 import com.bks.feature.review.ReviewQueueState
 import com.bks.feature.review.ReviewQueueViewModel
+import com.bks.feature.settings.DataAndBackupUiState
+import com.bks.feature.settings.DataAndBackupViewModel
 import com.bks.ui.BksAppState
 import kotlinx.coroutines.CoroutineScope
 
@@ -25,6 +27,8 @@ internal data class BksRouteContext(
     val ledgerUiState: LedgerUiState,
     val reviewQueueViewModel: ReviewQueueViewModel,
     val reviewQueueState: ReviewQueueState,
+    val dataAndBackupViewModel: DataAndBackupViewModel,
+    val dataAndBackupUiState: DataAndBackupUiState,
     val ledgerSyncViewModel: com.bks.feature.sync.LedgerSyncViewModel,
     val ledgerSyncUiState: com.bks.feature.sync.LedgerSyncUiState
 )

@@ -9,6 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.SnackbarHostState
@@ -31,6 +33,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.then
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityOptionsCompat
 import com.bks.api.LedgerSyncConflictChoiceContract
 import com.bks.api.LedgerSyncPayloadContract
@@ -41,6 +44,7 @@ import com.bks.feature.sync.LedgerSyncPreview
 import com.bks.feature.sync.LedgerSyncUiState
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,7 +67,7 @@ class DataAndBackupScreenTest {
         var enabledMode: LedgerSyncInitialMode? = null
         var syncState by mutableStateOf(LedgerSyncUiState(signedIn = true))
         composeRule.setContent {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { _, _ -> },
@@ -112,7 +116,7 @@ class DataAndBackupScreenTest {
         val canonical = LedgerSyncPayloadContract.LedgerBook("book-a", "云端账本", 1)
         val candidate = LedgerSyncPayloadContract.LedgerBook("book-a", "本机账本", 1)
         composeRule.setContent {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { _, _ -> },
@@ -160,7 +164,7 @@ class DataAndBackupScreenTest {
                 DeviceConfigurationOverride.ForcedSize(forcedSize) then
                     DeviceConfigurationOverride.FontScale(fontScale)
             ) {
-                DataAndBackupScreen(
+                TestDataAndBackupScreen(
                     ledgerEntries = emptyList(),
                     onExportEncryptedBackup = { "backup" },
                     onValidateEncryptedBackup = { _, _ -> },
@@ -191,7 +195,7 @@ class DataAndBackupScreenTest {
     @Test
     fun exportCopyDistinguishesCurrentLedgerCsvFromFullBackup() {
         composeRule.setContent {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 currentLedgerName = "家庭账本",
                 onExportEncryptedBackup = { "backup" },
@@ -216,7 +220,7 @@ class DataAndBackupScreenTest {
     fun exportPromptsForPasswordAndRequiresMoreThanEightCharacters() {
         var exportedPassphrase: String? = null
         composeRule.setContent {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { passphrase ->
                     exportedPassphrase = passphrase
@@ -251,7 +255,7 @@ class DataAndBackupScreenTest {
         var validatedBackup: String? = null
         var importedPassphrase: String? = null
         setContentWithBackupFile(encryptedBackup) {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { backup, passphrase ->
@@ -308,7 +312,7 @@ class DataAndBackupScreenTest {
         val snackbarHostState = SnackbarHostState()
         var validated = false
         setContentWithBackupFile("plain backup") {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { _, _ -> validated = true },
@@ -338,7 +342,7 @@ class DataAndBackupScreenTest {
     fun cancellingValidatedRestoreKeepsImportCallbackUntouched() {
         var imported = false
         setContentWithBackupFile("AUTO_ACCOUNTING_BACKUP_V4:backup") {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { _, _ -> },
@@ -375,7 +379,7 @@ class DataAndBackupScreenTest {
     fun deleteRemainsInDangerZoneAndRequiresBothConfirmations() {
         var deleted = false
         composeRule.setContent {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { _, _ -> },
@@ -405,7 +409,7 @@ class DataAndBackupScreenTest {
         val allowDeleteToFinish = CompletableDeferred<Unit>()
         var deletionStarted = false
         composeRule.setContent {
-            DataAndBackupScreen(
+            TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
                 onExportEncryptedBackup = { "backup" },
                 onValidateEncryptedBackup = { _, _ -> },
@@ -463,4 +467,105 @@ class DataAndBackupScreenTest {
         }
         composeRule.waitForIdle()
     }
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun TestDataAndBackupScreen(
+    ledgerEntries: List<com.bks.feature.ledger.LedgerUiEntry>,
+    currentLedgerName: String = "默认账本",
+    onExportEncryptedBackup: suspend (String) -> String,
+    onValidateEncryptedBackup: suspend (String, String) -> Unit,
+    onImportEncryptedBackup: suspend (String, String) -> Unit,
+    onDeleteLocalData: suspend () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState = SnackbarHostState(),
+    ledgerSyncState: LedgerSyncUiState = LedgerSyncUiState(),
+    ledgerSyncActions: LedgerSyncSectionActions = LedgerSyncSectionActions()
+) {
+    var state by remember { mutableStateOf(DataAndBackupUiState()) }
+    var nextId by remember { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    val actions = DataAndBackupActions(
+        onExport = { passphrase, writer ->
+            state = DataAndBackupUiState(DataAndBackupOperation.Exporting)
+            scope.launch {
+                val result = runCatching { writer(onExportEncryptedBackup(passphrase)) }
+                state = DataAndBackupUiState(
+                    notice = DataAndBackupNotice(
+                        id = ++nextId,
+                        operation = DataAndBackupOperation.Exporting,
+                        success = result.isSuccess,
+                        detail = result.getOrNull()
+                    )
+                )
+            }
+        },
+        onValidate = { uiSessionId, backup, passphrase ->
+            val requestId = ++nextId
+            state = DataAndBackupUiState(DataAndBackupOperation.Validating)
+            scope.launch {
+                val result = runCatching { onValidateEncryptedBackup(backup, passphrase) }
+                state = DataAndBackupUiState(
+                    validationResult = DataAndBackupValidationResult(
+                        requestId = requestId,
+                        uiSessionId = uiSessionId,
+                        valid = result.isSuccess
+                    )
+                )
+            }
+            requestId
+        },
+        onImport = { backup, passphrase ->
+            state = DataAndBackupUiState(DataAndBackupOperation.Importing)
+            scope.launch {
+                val result = runCatching { onImportEncryptedBackup(backup, passphrase) }
+                state = DataAndBackupUiState(
+                    notice = DataAndBackupNotice(
+                        id = ++nextId,
+                        operation = DataAndBackupOperation.Importing,
+                        success = result.isSuccess
+                    )
+                )
+            }
+        },
+        onDelete = {
+            state = DataAndBackupUiState(DataAndBackupOperation.Deleting)
+            scope.launch {
+                val result = runCatching { onDeleteLocalData() }
+                state = DataAndBackupUiState(
+                    notice = DataAndBackupNotice(
+                        id = ++nextId,
+                        operation = DataAndBackupOperation.Deleting,
+                        success = result.isSuccess
+                    )
+                )
+            }
+        },
+        onAttachUi = { ++nextId },
+        onDetachUi = {},
+        onAcknowledgeValidation = { requestId, uiSessionId ->
+            val result = state.validationResult
+            if (result?.requestId == requestId && result.uiSessionId == uiSessionId) {
+                state = state.copy(validationResult = null)
+            }
+        },
+        onEndValidatedContinuation = {},
+        onClearValidation = { state = state.copy(validationResult = null) },
+        onAcknowledgeNotice = { id ->
+            if (state.notice?.id == id) state = state.copy(notice = null)
+        }
+    )
+    DataAndBackupScreen(
+        ledgerEntries = ledgerEntries,
+        currentLedgerName = currentLedgerName,
+        dataAndBackupState = state,
+        dataAndBackupActions = actions,
+        onBack = onBack,
+        modifier = modifier,
+        snackbarHostState = snackbarHostState,
+        ledgerSyncState = ledgerSyncState,
+        ledgerSyncActions = ledgerSyncActions
+    )
 }

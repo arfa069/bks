@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -119,20 +119,37 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 新增 `DataAndBackupViewModel`，以 `StateFlow<DataAndBackupUiState>` 统一拥有加密备份导出、只读校验、恢复和本机删除的 operation/failure state；同一时刻只接受一个长操作，普通操作随 owner 取消并恢复 Idle，删除沿用 `NonCancellable` 完成既有不可中断清理边界。
+- `DataAndBackupViewModel` 在恢复前等待 Review operation idle，再通过 `LedgerViewModel.runLocalDataReplacement` 执行原子 restore；恢复完成依赖 Repository/Room Flow 投影，不手动写 Review、Ledger 或 Root runtime 镜像。
+- 本机删除顺序保持为 Review idle → 清头像缓存 → 清 cloud settings 本地状态 → disable Sync → `LedgerViewModel.clearLocalData` 原子清理 Room/重建默认数据 → `finally` 清 diagnostics。移除了 Root 中对 `runtime.categorizationRules` 的手动清空，分类规则继续由 `LocalPreferencesRepository.categorizationRules` Flow 自然刷新。
+- `DataAndBackupScreen` / `LocalBackupSection` 仅保留文件 launcher、URI/MediaStore 读写、CSV 导出、口令和确认 Dialog；加密、validate、restore/delete coroutine 与 busy/failure state 迁入 ViewModel。口令只存在于短生命周期 Compose 状态和调用参数中，未进入 ViewModel state、`SavedStateHandle`、日志或持久化。
+- `BksApp` 创建并 lifecycle-scope `DataAndBackupViewModel`，`BksProfileRoutes` 只装配 state/actions；Ledger Sync Section 继续直接使用 Step 2.3 的 `LedgerSyncViewModel`。
+- 新增 `DataAndBackupViewModelTest`，并更新 `DataAndBackupScreenTest` 的 owner test harness，覆盖成功、失败、取消、并发屏蔽、删除顺序与 finally 清理。
+- `LedgerSyncRuntime.disable()` 现通过 `LedgerSyncCoordinator` 的既有全局 mutex 等待在途 Sync 完成后再清 Sync state；backup import 也在同一 mutex 内完成完整本机 replacement，防止旧网络响应在删除/恢复后重新写入 Room。
+- restore transaction 在替换正式数据后清除恢复前的 Sync conflicts、解除 metadata conflict block、清空旧 outbox，再依据保留的 server metadata 与恢复后快照重建 mutations；metadata-less stale create、旧 conflict payload 和 blocked metadata 不再跨恢复残留。
+- export/import/delete 结果改为带 ID、可确认消费的非敏感 ViewModel notice；validation 使用 UI session/request ID 交接，Composition detach 会立即逻辑失效并取消旧校验。已校验或校验失败但仍依赖当前文件/口令的 continuation 只在 ViewModel 中保留非敏感 session ID，重建时明确提示重新选择；backup 正文、URI 与口令始终不进入 ViewModel state。
 
 ### Deviations From Plan
 
-无
+- 未新增 `LocalDataDeletionCoordinator`：删除仅有“数据与备份”一个入口，且不需要独立 Application 生命周期；不满足复用/独立生命周期准入条件。
+- `LocalDataPortability.kt` 和 `LedgerSyncSettingsSection.kt` 无生产改动：backup format/CSV 契约稳定，Sync Section 已复用 `LedgerSyncViewModel`。`PersistedLocalDataBackup.kt` 仅在既有 import transaction 中补齐 Sync outbox/conflict 一致性清理，没有改 wire format、codec、crypto、schema 或正式数据替换语义。
+- 没有新增百分比式 progress：底层 backup/Room operation 没有稳定、行为等价的进度信号；UI state 记录当前具体 operation、busy、failure 和取消回 Idle，保留原有“请稍候/正在恢复/正在删除”可见语义。
 
 ### Test Results
 
-尚未执行
+- `DataAndBackupViewModelTest`：17/17 通过；除原有 operation/delete 覆盖外，新增同一 ViewModel 上的 UI detach/attach、在途 validation 取消、已校验/失败 continuation 失效、attach-before-old-detach、notice 精确消费与覆盖防护。
+- Step 专项命令通过：`DataAndBackupViewModelTest` 17、`LocalDataBackupRepositoryTest` 12、`LocalDataPortabilityTest` 3、`DataAndBackupScreenTest` 10、`LedgerSyncViewModelTest` 4、`LedgerSyncCoordinatorTest` 3，共 49/49，0 skipped/failures/errors。
+- `LedgerSyncCoordinatorTest` 覆盖 Sync 先持锁时 disable/replacement 等待、replacement 先持锁时新 Sync 等待，以及 disable 最终清空 Sync state；Backup repository 回归覆盖 metadata-less stale outbox、旧 conflict/blocked metadata 与敏感旧 payload 清理。
+- Android 全量 `:apps:android:testDebugUnitTest` 通过：88 suites / 507 tests，0 skipped/failures/errors。首次全量尝试仅因 Windows 上 `.robolectric-download-lock` 被其他进程占用导致 `MainActivityTest` class initialization 失败；该类单独重跑通过，随后全量重跑通过。
+- `:apps:android:detekt` 通过；`git diff --check` 通过。
+- 未运行 `assembleDebug`、Instrumentation 或真机测试：本 Step 未修改 Manifest、Resources、Gradle dependency、BuildConfig 或平台配置，计划与模块规则不要求 APK 验证。
 
 ### Remaining Risks
 
-尚未执行
+- MediaStore Downloads 的真实文件创建、系统文件选择器及 Activity/process recreation 未做设备端验收；Robolectric 覆盖 launcher/口令/确认/锁定/结果文案，ViewModel 状态机测试覆盖同一 owner 上的旧 UI detach 与新 UI attach，但不能替代真实 OEM 文件系统和 Activity 重建联测。
+- 删除和恢复的数据库完整性由现有 Room/Robolectric repository、Ledger replacement 及本轮全量测试覆盖；未额外运行设备端 SQLite Instrumentation。
+- `BksRouteContext` 仍暂时携带该 ViewModel/state，这是当前已完成 Step 的桥接形态；Route God Layer 收敛属于 Step 5.1，本 Step 未提前执行。
 
 ### Final Status
 
-Pending
+Completed

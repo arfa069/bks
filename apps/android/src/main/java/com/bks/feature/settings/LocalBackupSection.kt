@@ -16,6 +16,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,10 +46,19 @@ private data class PendingRestore(
     val passphrase: String
 )
 
+@Suppress("LongParameterList")
 internal class LocalBackupSectionActions(
-    val onExportEncryptedBackup: suspend (String) -> String,
-    val onValidateEncryptedBackup: suspend (String, String) -> Unit,
-    val onImportEncryptedBackup: suspend (String, String) -> Unit
+    val onExport: (
+        passphrase: String,
+        writer: suspend (String) -> String
+    ) -> Unit,
+    val onValidate: (Long, String, String) -> Long?,
+    val onImport: (String, String) -> Unit,
+    val onAttachUi: () -> Long,
+    val onDetachUi: (Long) -> Unit,
+    val onAcknowledgeValidation: (Long, Long) -> Unit,
+    val onEndValidatedContinuation: (Long) -> Unit,
+    val onClearValidation: () -> Unit
 )
 
 private class ImportDialogCallbacks(
@@ -55,19 +66,41 @@ private class ImportDialogCallbacks(
     val onValidated: (PendingRestore) -> Unit
 )
 
+private class BackupDialogEnvironment(
+    val context: Context,
+    val actions: LocalBackupSectionActions,
+    val operationState: DataAndBackupUiState
+)
+
 @Composable
 internal fun LocalBackupSection(
     ledgerEntries: List<LedgerUiEntry>,
     currentLedgerName: String,
     actions: LocalBackupSectionActions,
+    operationState: DataAndBackupUiState,
     snackbarHostState: SnackbarHostState
 ) {
     val context = LocalContext.current
+    val applicationContext = context.applicationContext
     val coroutineScope = rememberCoroutineScope()
+    val uiSessionId = rememberDataAndBackupUiSession(actions)
     var selectedBackup by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<PendingRestore?>(null) }
     var showExportPasswordDialog by remember { mutableStateOf(false) }
     var isReadingBackup by remember { mutableStateOf(false) }
+    val dialogEnvironment = BackupDialogEnvironment(
+        context = applicationContext,
+        actions = actions,
+        operationState = operationState
+    )
+
+    LaunchedEffect(operationState.notice?.id) {
+        when (operationState.notice?.operation) {
+            DataAndBackupOperation.Exporting -> showExportPasswordDialog = false
+            DataAndBackupOperation.Importing -> pendingRestore = null
+            else -> Unit
+        }
+    }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -79,6 +112,7 @@ internal fun LocalBackupSection(
             isReadingBackup = false
             result.onSuccess { content ->
                 if (isEncryptedLocalDataBackup(content)) {
+                    actions.onClearValidation()
                     selectedBackup = content
                 } else {
                     snackbarHostState.showSnackbar("所选文件不是受支持的加密备份")
@@ -103,30 +137,30 @@ internal fun LocalBackupSection(
                 snackbarHostState = snackbarHostState
             )
             OutlinedButton(
-                onClick = { showExportPasswordDialog = true }
+                onClick = { showExportPasswordDialog = true },
+                enabled = !operationState.operationInProgress
             ) { Text("导出加密备份") }
         }
         OutlinedButton(
             onClick = { openDocumentLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
-            enabled = !isReadingBackup
+            enabled = !isReadingBackup && !operationState.operationInProgress
         ) { Text("导入加密备份") }
     }
 
     if (showExportPasswordDialog) {
         ExportBackupDialog(
-            context = context,
-            coroutineScope = coroutineScope,
-            actions = actions,
-            snackbarHostState = snackbarHostState,
+            environment = dialogEnvironment,
             onDismissed = { showExportPasswordDialog = false }
         )
     }
 
     selectedBackup?.let { backup ->
+        val activeUiSessionId = uiSessionId ?: return@let
         ImportBackupDialog(
             backup = backup,
-            coroutineScope = coroutineScope,
+            uiSessionId = activeUiSessionId,
             actions = actions,
+            operationState = operationState,
             callbacks = ImportDialogCallbacks(
                 onDismiss = { selectedBackup = null },
                 onValidated = {
@@ -138,14 +172,25 @@ internal fun LocalBackupSection(
     }
 
     pendingRestore?.let { restore ->
+        val activeUiSessionId = uiSessionId ?: return@let
         RestoreConfirmationDialog(
             restore = restore,
-            coroutineScope = coroutineScope,
-            actions = actions,
-            snackbarHostState = snackbarHostState,
+            uiSessionId = activeUiSessionId,
+            environment = dialogEnvironment,
             onDismissed = { pendingRestore = null }
         )
     }
+}
+
+@Composable
+private fun rememberDataAndBackupUiSession(actions: LocalBackupSectionActions): Long? {
+    var uiSessionId by remember { mutableStateOf<Long?>(null) }
+    DisposableEffect(Unit) {
+        val attachedSessionId = actions.onAttachUi()
+        uiSessionId = attachedSessionId
+        onDispose { actions.onDetachUi(attachedSessionId) }
+    }
+    return uiSessionId
 }
 
 @Composable
@@ -188,14 +233,12 @@ private fun CsvExportButton(
 
 @Composable
 private fun ExportBackupDialog(
-    context: Context,
-    coroutineScope: CoroutineScope,
-    actions: LocalBackupSectionActions,
-    snackbarHostState: SnackbarHostState,
+    environment: BackupDialogEnvironment,
     onDismissed: () -> Unit
 ) {
+    val actions = environment.actions
     var passphrase by remember { mutableStateOf("") }
-    var isBusy by remember { mutableStateOf(false) }
+    val isBusy = environment.operationState.operation == DataAndBackupOperation.Exporting
     BackupPasswordDialog(
         title = "导出加密备份",
         description = "请输入大于 8 位的备份密码。密码不会保存，丢失后无法恢复备份。",
@@ -211,29 +254,22 @@ private fun ExportBackupDialog(
             }
         },
         onConfirm = {
-            isBusy = true
-            coroutineScope.launch {
-                val result = runCatching {
-                    val content = actions.onExportEncryptedBackup(passphrase)
+            actions.onExport(
+                passphrase,
+                { content ->
                     val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.US).format(Date())
                     val filename = "$timestamp-ac-backup.bak"
                     writeDownloadFile(
-                        context = context,
+                        context = environment.context,
                         filename = filename,
                         mimeType = "application/octet-stream",
                         content = content
                     )
                     filename
                 }
-                isBusy = false
-                passphrase = ""
-                onDismissed()
-                result.onSuccess {
-                    snackbarHostState.showSnackbar("备份已保存到 Downloads/$it")
-                }.onFailure {
-                    snackbarHostState.showSnackbar("加密备份失败")
-                }
-            }
+            )
+            passphrase = ""
+            onDismissed()
         }
     )
 }
@@ -241,42 +277,60 @@ private fun ExportBackupDialog(
 @Composable
 private fun ImportBackupDialog(
     backup: String,
-    coroutineScope: CoroutineScope,
+    uiSessionId: Long,
     actions: LocalBackupSectionActions,
+    operationState: DataAndBackupUiState,
     callbacks: ImportDialogCallbacks
 ) {
     var passphrase by remember { mutableStateOf("") }
-    var passwordError by remember { mutableStateOf<String?>(null) }
-    var isBusy by remember { mutableStateOf(false) }
+    var validationRequestId by remember { mutableStateOf<Long?>(null) }
+    var passwordError by remember { mutableStateOf(false) }
+    val validationResult = operationState.validationResult
+    LaunchedEffect(validationResult) {
+        val requestId = validationRequestId
+        if (
+            requestId != null &&
+            validationResult?.requestId == requestId &&
+            validationResult.uiSessionId == uiSessionId
+        ) {
+            actions.onAcknowledgeValidation(requestId, uiSessionId)
+            validationRequestId = null
+            if (validationResult.valid) {
+                callbacks.onValidated(PendingRestore(backup, passphrase))
+                passphrase = ""
+            } else {
+                passwordError = true
+            }
+        }
+    }
+    val isBusy = operationState.operation == DataAndBackupOperation.Validating
     BackupPasswordDialog(
         title = "输入备份密码",
         description = "该文件是加密备份。请输入密码，验证通过后才能恢复。",
         passphrase = passphrase,
         onPassphraseChange = {
             passphrase = it
-            passwordError = null
+            passwordError = false
+            actions.onEndValidatedContinuation(uiSessionId)
+            actions.onClearValidation()
         },
         confirmLabel = "确认",
         isBusy = isBusy,
-        errorMessage = passwordError,
+        errorMessage = if (passwordError) {
+            "密码错误，或备份文件已损坏，请重试"
+        } else {
+            null
+        },
         onDismiss = {
             if (!isBusy) {
                 passphrase = ""
-                passwordError = null
+                actions.onEndValidatedContinuation(uiSessionId)
+                actions.onClearValidation()
                 callbacks.onDismiss()
             }
         },
         onConfirm = {
-            isBusy = true
-            coroutineScope.launch {
-                val result = runCatching { actions.onValidateEncryptedBackup(backup, passphrase) }
-                isBusy = false
-                result.onSuccess {
-                    callbacks.onValidated(PendingRestore(backup, passphrase))
-                }.onFailure {
-                    passwordError = "密码错误，或备份文件已损坏，请重试"
-                }
-            }
+            validationRequestId = actions.onValidate(uiSessionId, backup, passphrase)
         }
     )
 }
@@ -284,40 +338,35 @@ private fun ImportBackupDialog(
 @Composable
 private fun RestoreConfirmationDialog(
     restore: PendingRestore,
-    coroutineScope: CoroutineScope,
-    actions: LocalBackupSectionActions,
-    snackbarHostState: SnackbarHostState,
+    uiSessionId: Long,
+    environment: BackupDialogEnvironment,
     onDismissed: () -> Unit
 ) {
-    var isBusy by remember { mutableStateOf(false) }
+    val isBusy = environment.operationState.operation == DataAndBackupOperation.Importing
     AlertDialog(
         onDismissRequest = {
-            if (!isBusy) onDismissed()
+            if (!isBusy) {
+                environment.actions.onEndValidatedContinuation(uiSessionId)
+                onDismissed()
+            }
         },
         title = { Text("确认恢复备份") },
         text = { Text("备份已通过校验。继续将替换本机现有数据，此操作无法撤销。") },
         confirmButton = {
             Button(onClick = {
-                isBusy = true
-                coroutineScope.launch {
-                    val result = runCatching {
-                        actions.onImportEncryptedBackup(restore.backup, restore.passphrase)
-                    }
-                    isBusy = false
-                    onDismissed()
-                    result.onSuccess {
-                        snackbarHostState.showSnackbar("备份已恢复成功")
-                    }.onFailure {
-                        snackbarHostState.showSnackbar("备份恢复失败，本机数据未更改")
-                    }
-                }
+                environment.actions.onEndValidatedContinuation(uiSessionId)
+                environment.actions.onImport(restore.backup, restore.passphrase)
+                onDismissed()
             }, enabled = !isBusy) {
                 Text(if (isBusy) "正在恢复" else "确认替换并恢复")
             }
         },
         dismissButton = {
             TextButton(
-                onClick = onDismissed,
+                onClick = {
+                    environment.actions.onEndValidatedContinuation(uiSessionId)
+                    onDismissed()
+                },
                 enabled = !isBusy
             ) { Text("取消") }
         }

@@ -76,6 +76,9 @@ class LocalDataBackupRepository(
                 database.localSettingsDao().upsert(
                     requireNotNull(snapshot.settings).copy(automaticBookkeepingEnabled = false)
                 )
+                database.ledgerSyncDao().deleteAllConflicts()
+                database.ledgerSyncDao().unblockAllMetadata()
+                database.ledgerSyncDao().deleteAllOutbox()
                 LocalSyncMutationRecorder(database, System::currentTimeMillis).reconcileAll()
             }
         }
