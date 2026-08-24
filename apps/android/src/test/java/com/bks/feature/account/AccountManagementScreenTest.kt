@@ -36,7 +36,7 @@ class AccountManagementScreenTest {
         var cleared = false
         var signedOut = false
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "token-1"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified),
                 deletionState = AccountDeletionUiState(),
@@ -71,7 +71,7 @@ class AccountManagementScreenTest {
             value = "admin069"
         )
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(
                     primaryIdentifier = username,
                     identifiers = listOf(username),
@@ -110,7 +110,7 @@ class AccountManagementScreenTest {
         var persisted: AccountCredentials? = null
         var verified: AccountCredentials? = null
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "token-1"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified),
                 deletionState = AccountDeletionUiState(),
@@ -141,7 +141,7 @@ class AccountManagementScreenTest {
         val repository = TestAccountRepository()
         var deletionState = AccountDeletionUiState()
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "token-1"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = deletionState,

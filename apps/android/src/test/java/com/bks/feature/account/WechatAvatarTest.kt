@@ -1,9 +1,15 @@
 package com.bks.feature.account
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ApplicationProvider
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
@@ -14,6 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -93,5 +100,22 @@ class WechatAvatarTest {
         assertTrue(
             provider.metaData.getInt("android.support.FILE_PROVIDER_PATHS") != 0
         )
+    }
+
+    @Test
+    fun avatarUriIsDecodedAndCompressedToSupportedDataUrlOffTheUiBoundary() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/avatar-decode.jpg")
+        val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        val bytes = ByteArrayOutputStream().also {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bitmap.recycle()
+        shadowOf(context.contentResolver).registerInputStream(uri, ByteArrayInputStream(bytes))
+
+        val result = context.readCompressedAvatarDataUrl(uri)
+
+        assertTrue(result.startsWith("data:image/jpeg;base64,"))
+        assertTrue(result.length > "data:image/jpeg;base64,".length)
     }
 }

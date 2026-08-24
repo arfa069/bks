@@ -15,9 +15,11 @@ internal class TestAccountRepository : AccountRepository {
     var authenticationIgnoresCancellation = false
     var verificationResult: AccountRepositoryResult<AccountCredentials> = authenticationResult
     var verificationGate: CompletableDeferred<AccountRepositoryResult<AccountCredentials>>? = null
+    var verificationIgnoresCancellation = false
     var updateNicknameResult: AccountRepositoryResult<AccountCredentials>? = null
     var updateAvatarResult: AccountRepositoryResult<AccountCredentials>? = null
     var signOutResult: AccountRepositoryResult<Unit> = AccountRepositoryResult.Success(Unit)
+    var signOutGate: CompletableDeferred<AccountRepositoryResult<Unit>>? = null
     var deletionResult: AccountRepositoryResult<AccountDeletionUiState> =
         AccountRepositoryResult.Success(
             AccountDeletionUiState(1_000, 604_801_000)
@@ -57,6 +59,7 @@ internal class TestAccountRepository : AccountRepository {
     var verificationCalls = 0
     var authenticationCalls = 0
     var requestDeletionCalls = 0
+    var cancelDeletionCalls = 0
     var updateNicknameCalls = 0
     var updateAvatarCalls = 0
     var lastNickname: String? = null
@@ -111,7 +114,12 @@ internal class TestAccountRepository : AccountRepository {
         credentials: AccountCredentials
     ): AccountRepositoryResult<AccountCredentials> {
         verificationCalls += 1
-        return verificationGate?.await() ?: verificationResult
+        val gate = verificationGate ?: return verificationResult
+        return if (verificationIgnoresCancellation) {
+            withContext(NonCancellable) { gate.await() }
+        } else {
+            gate.await()
+        }
     }
 
     override suspend fun updateNickname(
@@ -138,7 +146,7 @@ internal class TestAccountRepository : AccountRepository {
 
     override suspend fun signOut(token: String): AccountRepositoryResult<Unit> {
         signOutCalls += 1
-        return signOutResult
+        return signOutGate?.await() ?: signOutResult
     }
 
     override suspend fun getDeletionStatus(
@@ -152,8 +160,10 @@ internal class TestAccountRepository : AccountRepository {
         return deletionResult
     }
 
-    override suspend fun cancelDeletion(token: String): AccountRepositoryResult<Unit> =
-        cancelDeletionResult
+    override suspend fun cancelDeletion(token: String): AccountRepositoryResult<Unit> {
+        cancelDeletionCalls += 1
+        return cancelDeletionResult
+    }
 
     override suspend fun exchangeWechatCode(
         code: String,

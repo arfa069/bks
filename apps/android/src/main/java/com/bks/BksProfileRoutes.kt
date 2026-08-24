@@ -4,8 +4,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.feature.account.AccountManagementScreen
+import com.bks.feature.account.AccountManagementScreenActions
+import com.bks.feature.account.AccountManagementScreenDependencies
+import com.bks.feature.account.AccountManagementScreenState
+import com.bks.feature.account.AccountManagementViewModel
 import com.bks.feature.account.AccountSession
 import com.bks.feature.categorization.CategorizationAiUiState
 import com.bks.feature.categorization.CategorizationRulesActions
@@ -27,9 +39,41 @@ internal fun BksProfileRoute(
     destination: ProfileDestination?,
     onNavigateHome: () -> Unit
 ) {
+    val dependencies = context.dependencies
+    val sessionCoordinator = dependencies.account.sessionCoordinator
+    val accountManagementViewModel: AccountManagementViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = AccountManagementViewModel(
+                accountRepository = dependencies.account.accountRepository,
+                commitManagementCredentials = sessionCoordinator::commitManagementCredentials,
+                commitVerifiedCredentials = sessionCoordinator::commitVerifiedCredentials,
+                invalidateSession = sessionCoordinator::invalidateSession,
+                updateDeletionState = sessionCoordinator::updateDeletionState,
+                wechatAuthGateway = dependencies.account.wechatAuthGateway
+            ) as T
+        }
+    )
+    var managementHadSignedInSession by remember { mutableStateOf(false) }
+    LaunchedEffect(destination, activeAccountSession) {
+        if (destination != ProfileDestination.AccountManagement) {
+            accountManagementViewModel.closeManagement()
+            managementHadSignedInSession = false
+        } else if (activeAccountSession is AccountSession.SignedIn) {
+            managementHadSignedInSession = true
+        } else if (managementHadSignedInSession) {
+            accountManagementViewModel.closeManagement()
+            context.appState.profileDestination.value = null
+        }
+    }
     when (destination) {
         null -> BksProfileOverviewRoute(context, activeAccountSession, innerPadding, onNavigateHome)
-        ProfileDestination.AccountManagement -> BksAccountManagementRoute(context, activeAccountSession, innerPadding)
+        ProfileDestination.AccountManagement -> BksAccountManagementRoute(
+            context,
+            activeAccountSession,
+            accountManagementViewModel,
+            innerPadding
+        )
         ProfileDestination.AutomaticBookkeeping -> BksAutomaticBookkeepingRoute(context, innerPadding)
         ProfileDestination.CategorizationRules -> BksCategorizationRoute(context, innerPadding)
         ProfileDestination.DataAndBackup -> BksDataAndBackupRoute(context, innerPadding)
@@ -80,42 +124,38 @@ private fun BksAutomaticBookkeepingRoute(
 private fun BksAccountManagementRoute(
     context: BksRouteContext,
     session: AccountSession,
+    viewModel: AccountManagementViewModel,
     innerPadding: PaddingValues
 ) {
     val runtime = context.runtime
     val bindings = context.bindings
     val dependencies = context.dependencies
     val appState = context.appState
-    val sessionCoordinator = dependencies.account.sessionCoordinator
     AccountManagementScreen(
-        session = session,
-        runtimeState = runtime.accountRuntimeState,
-        deletionState = runtime.accountDeletionState,
-        accountRepository = dependencies.account.accountRepository,
-        onSignInOrRegister = {
-            appState.openAccountEntry(
-                mode = AccountEntryMode.SignInOrRegister,
-                returnTarget = AccountEntryReturnTarget.AccountManagement
-            )
-            appState.profileDestination.value = null
-        },
-        onSessionVerified = {},
-        onInvalidSession = {
-            sessionCoordinator.moveToLocalMode()
-            appState.profileDestination.value = null
-        },
-        persistSession = sessionCoordinator::commit,
-        clearPersistedSession = sessionCoordinator::clearPersistedSession,
-        wechatAuthGateway = dependencies.account.wechatAuthGateway,
-        wechatAuthCallback = bindings.wechatAuthCallback,
-        onWechatAuthCallbackConsumed = bindings.onWechatAuthCallbackConsumed,
-        avatarCacheOverride = dependencies.account.wechatAvatarCache,
-        onSignedOut = {
-            sessionCoordinator.moveToLocalMode()
-            appState.profileDestination.value = null
-        },
-        onDeletionStateChange = sessionCoordinator::updateDeletionState,
-        onBack = { appState.profileDestination.value = null },
+        screenState = AccountManagementScreenState(
+            session = session,
+            runtimeState = runtime.accountRuntimeState,
+            deletionState = runtime.accountDeletionState
+        ),
+        dependencies = AccountManagementScreenDependencies(
+            viewModel = viewModel,
+            wechatAuthCallback = bindings.wechatAuthCallback,
+            onWechatAuthCallbackConsumed = bindings.onWechatAuthCallbackConsumed,
+            avatarCacheOverride = dependencies.account.wechatAvatarCache
+        ),
+        actions = AccountManagementScreenActions(
+            onSignInOrRegister = {
+                appState.openAccountEntry(
+                    mode = AccountEntryMode.SignInOrRegister,
+                    returnTarget = AccountEntryReturnTarget.AccountManagement
+                )
+                appState.profileDestination.value = null
+            },
+            onBack = {
+                viewModel.closeManagement()
+                appState.profileDestination.value = null
+            }
+        ),
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)

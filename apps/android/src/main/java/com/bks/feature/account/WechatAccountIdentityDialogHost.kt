@@ -1,23 +1,21 @@
 package com.bks.feature.account
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import com.bks.api.AccountIdentifierTypeContract
 
 @Composable
 internal fun WechatAccountIdentityDialogHost(
     session: AccountSession.SignedIn,
     deletionState: AccountDeletionUiState,
-    accountRepository: AccountRepository,
+    viewModel: AccountManagementViewModel,
     state: AccountIdentityUiState,
-    actions: WechatAccountIdentityActions
+    onStateChange: (AccountIdentityUiState) -> Unit
 ) {
     val operation = WechatAccountIdentityDialogOperations(
-        scope = rememberCoroutineScope(),
         session = session,
         deletionState = deletionState,
-        accountRepository = accountRepository,
-        actions = actions
+        viewModel = viewModel,
+        actions = WechatAccountIdentityActions(onStateChange)
     )
     when (state.page) {
         AccountIdentityPage.EditNickname -> WechatEditNicknameDialog(state, operation)
@@ -38,7 +36,7 @@ private fun WechatEditNicknameDialog(
         initialValue = state.editNicknameInput,
         operationInProgress = state.operationInProgress,
         onDismiss = { operation.actions.onStateChange(AccountIdentityUiState()) },
-        onConfirm = { operation.launchNicknameUpdate(state, it) }
+        onConfirm = operation::launchNicknameUpdate
     )
 }
 
@@ -119,10 +117,5 @@ private fun WechatUnlinkDialog(
 }
 
 internal data class WechatAccountIdentityActions(
-    val onStateChange: (AccountIdentityUiState) -> Unit,
-    val currentState: () -> AccountIdentityUiState,
-    val onOperationFinished: () -> Unit,
-    val onFailureMessage: (String) -> Unit,
-    val onFailureResult: (AccountRepositoryResult.Failure) -> Unit,
-    val onHandleCredentials: suspend (AccountRepositoryResult<AccountCredentials>, Boolean) -> Unit
+    val onStateChange: (AccountIdentityUiState) -> Unit
 )

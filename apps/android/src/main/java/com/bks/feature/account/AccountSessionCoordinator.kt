@@ -21,13 +21,20 @@ internal enum class AccountSessionNotice {
     InvalidSessionMovedToLocalMode
 }
 
-@Suppress("LongParameterList")
+internal enum class AccountSessionMutationResult {
+    Applied,
+    PersistenceFailed,
+    StaleSession
+}
+
+@Suppress("LongParameterList", "TooManyFunctions")
 internal class AccountSessionCoordinator(
     private val accountRepository: AccountRepository,
     private val secureSessionStore: SecureAccountSessionStore,
     private val localModeSessionStore: LocalModeSessionStore,
     private val applicationScope: CoroutineScope,
     private val persistSession: (AccountCredentials) -> Boolean = secureSessionStore::save,
+    private val confirmLocalMode: () -> Boolean = localModeSessionStore::confirmLocalMode,
     private val onCredentialsAccepted: (AccountCredentials) -> Unit = {},
     private val onMoveToLocalMode: () -> Unit = {}
 ) {
@@ -51,20 +58,58 @@ internal class AccountSessionCoordinator(
         true
     }
 
+    fun commitManagementCredentials(
+        expectedSessionToken: String,
+        credentials: AccountCredentials
+    ): AccountSessionMutationResult = synchronized(stateLock) {
+        val current = mutableState.value
+        val currentSession = current.session as? AccountSession.SignedIn
+            ?: return@synchronized AccountSessionMutationResult.StaleSession
+        if (currentSession.token != expectedSessionToken) {
+            return@synchronized AccountSessionMutationResult.StaleSession
+        }
+        val credentialsWithCurrentDeletionState = credentials.copy(
+            deletionState = current.deletionState
+        )
+        if (!persistSession(credentialsWithCurrentDeletionState)) {
+            return@synchronized AccountSessionMutationResult.PersistenceFailed
+        }
+        publishVerified(credentialsWithCurrentDeletionState)
+        AccountSessionMutationResult.Applied
+    }
+
+    fun commitVerifiedCredentials(
+        expectedSessionToken: String,
+        credentials: AccountCredentials
+    ): AccountSessionMutationResult = synchronized(stateLock) {
+        val currentSession = mutableState.value.session as? AccountSession.SignedIn
+            ?: return@synchronized AccountSessionMutationResult.StaleSession
+        if (currentSession.token != expectedSessionToken) {
+            return@synchronized AccountSessionMutationResult.StaleSession
+        }
+        if (!persistSession(credentials)) {
+            return@synchronized AccountSessionMutationResult.PersistenceFailed
+        }
+        publishVerified(credentials)
+        AccountSessionMutationResult.Applied
+    }
+
     fun enterLocalMode() {
         synchronized(stateLock) {
-            localModeSessionStore.confirmLocalMode()
-            publishLocalMode()
+            if (confirmLocalMode()) publishLocalMode()
         }
     }
 
     fun moveToLocalMode() {
-        synchronized(stateLock) {
-            onMoveToLocalMode()
-            secureSessionStore.clear()
-            localModeSessionStore.confirmLocalMode()
-            publishLocalMode()
-        }
+        invalidateSession()
+    }
+
+    fun invalidateSession(): Boolean = synchronized(stateLock) {
+        if (!confirmLocalMode()) return@synchronized false
+        if (!secureSessionStore.clear()) return@synchronized false
+        onMoveToLocalMode()
+        publishLocalMode()
+        true
     }
 
     fun clearPersistedSession(): Boolean = synchronized(stateLock) {
@@ -73,22 +118,22 @@ internal class AccountSessionCoordinator(
         }
     }
 
-    fun updateDeletionState(deletionState: AccountDeletionUiState) {
-        synchronized(stateLock) {
-            val current = mutableState.value
-            if (current.session !is AccountSession.SignedIn) return
-            sessionGeneration += 1
-            mutableState.value = current.copy(
-                deletionState = deletionState,
-                runtimeState = AccountRuntimeState(
-                    if (deletionState.isPending) {
-                        AccountRuntimeStatus.DeletionCoolingOff
-                    } else {
-                        AccountRuntimeStatus.Verified
-                    }
-                )
-            )
+    fun updateDeletionState(
+        expectedSessionToken: String,
+        deletionState: AccountDeletionUiState
+    ): AccountSessionMutationResult = synchronized(stateLock) {
+        val current = mutableState.value
+        val currentSession = current.session as? AccountSession.SignedIn
+            ?: return@synchronized AccountSessionMutationResult.StaleSession
+        if (currentSession.token != expectedSessionToken) {
+            return@synchronized AccountSessionMutationResult.StaleSession
         }
+        val credentials = currentSession.toCredentials(deletionState)
+        if (!persistSession(credentials)) {
+            return@synchronized AccountSessionMutationResult.PersistenceFailed
+        }
+        publishVerified(credentials)
+        AccountSessionMutationResult.Applied
     }
 
     private suspend fun restoreAndVerify() {
@@ -139,9 +184,19 @@ internal class AccountSessionCoordinator(
             AccountSessionVerificationDecision.ClearInvalidSession -> {
                 val movedToLocalMode = synchronized(stateLock) {
                     if (sessionGeneration != verificationGeneration) return@synchronized false
+                    if (!confirmLocalMode()) {
+                        mutableState.value = mutableState.value.copy(
+                            runtimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified)
+                        )
+                        return@synchronized false
+                    }
+                    if (!secureSessionStore.clear()) {
+                        mutableState.value = mutableState.value.copy(
+                            runtimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified)
+                        )
+                        return@synchronized false
+                    }
                     onMoveToLocalMode()
-                    secureSessionStore.clear()
-                    localModeSessionStore.confirmLocalMode()
                     publishLocalMode()
                     true
                 }

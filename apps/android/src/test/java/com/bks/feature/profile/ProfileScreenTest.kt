@@ -19,7 +19,7 @@ import androidx.compose.ui.test.then
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.bks.feature.account.AccountDeletionUiState
-import com.bks.feature.account.AccountManagementScreen
+import com.bks.feature.account.TestAccountManagementScreen
 import com.bks.feature.account.AccountRuntimeState
 import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
@@ -129,7 +129,7 @@ class ProfileScreenTest {
     fun signedInAccountManagementKeepsSignOutSeparateFromAccountDeletion() {
         var signedOut = false
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(phone = "13800138000"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),

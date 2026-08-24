@@ -169,14 +169,194 @@ class AccountSessionCoordinatorTest {
         assertEquals(AccountSessionRestoreResult.Restored(replacement), secureStore.restore())
     }
 
+    @Test
+    fun managementCommitPreservesCurrentDeletionStateAndRejectsStaleToken() = runTest {
+        val pending = AccountDeletionUiState(1_000L, 604_801_000L)
+        val restored = AccountCredentials("13800138000", "token-1", deletionState = pending)
+        secureStore.save(restored)
+        repository.verificationResult = AccountRepositoryResult.Success(restored)
+        val coordinator = coordinator()
+        coordinator.start()
+        advanceUntilIdle()
+
+        val refreshed = restored.copy(nickname = "new", deletionState = AccountDeletionUiState())
+        assertEquals(
+            AccountSessionMutationResult.Applied,
+            coordinator.commitManagementCredentials("token-1", refreshed)
+        )
+        assertEquals(pending, coordinator.state.value.deletionState)
+        assertEquals(
+            AccountSessionRestoreResult.Restored(refreshed.copy(deletionState = pending)),
+            secureStore.restore()
+        )
+
+        val beforeStaleCommit = coordinator.state.value
+        assertEquals(
+            AccountSessionMutationResult.StaleSession,
+            coordinator.commitManagementCredentials("stale-token", refreshed.copy(nickname = "stale"))
+        )
+        assertEquals(beforeStaleCommit, coordinator.state.value)
+    }
+
+    @Test
+    fun verificationCommitUsesServerAuthoritativeDeletionState() = runTest {
+        val restored = AccountCredentials("13800138000", "token-1")
+        secureStore.save(restored)
+        repository.verificationResult = AccountRepositoryResult.Success(restored)
+        val coordinator = coordinator()
+        coordinator.start()
+        advanceUntilIdle()
+
+        val pending = AccountDeletionUiState(1_000L, 604_801_000L)
+        assertEquals(
+            AccountSessionMutationResult.Applied,
+            coordinator.commitVerifiedCredentials("token-1", restored.copy(deletionState = pending))
+        )
+        assertEquals(pending, coordinator.state.value.deletionState)
+        assertEquals(
+            AccountRuntimeStatus.DeletionCoolingOff,
+            coordinator.state.value.runtimeState.status
+        )
+        assertEquals(
+            AccountSessionRestoreResult.Restored(restored.copy(deletionState = pending)),
+            secureStore.restore()
+        )
+
+        assertEquals(
+            AccountSessionMutationResult.Applied,
+            coordinator.commitVerifiedCredentials("token-1", restored)
+        )
+        assertEquals(AccountDeletionUiState(), coordinator.state.value.deletionState)
+        assertEquals(AccountRuntimeStatus.Verified, coordinator.state.value.runtimeState.status)
+        assertEquals(AccountSessionRestoreResult.Restored(restored), secureStore.restore())
+    }
+
+    @Test
+    fun deletionStateIsPersistedAndRestoredWhileOffline() = runTest {
+        val restored = AccountCredentials("13800138000", "token-1")
+        secureStore.save(restored)
+        repository.verificationResult = AccountRepositoryResult.Success(restored)
+        val coordinator = coordinator()
+        coordinator.start()
+        advanceUntilIdle()
+
+        val pending = AccountDeletionUiState(1_000L, 604_801_000L)
+        assertEquals(
+            AccountSessionMutationResult.Applied,
+            coordinator.updateDeletionState("token-1", pending)
+        )
+        assertEquals(
+            AccountSessionRestoreResult.Restored(restored.copy(deletionState = pending)),
+            secureStore.restore()
+        )
+
+        repository = TestAccountRepository().apply {
+            verificationResult = AccountRepositoryResult.Failure(
+                message = "offline",
+                kind = AccountFailureKind.Network
+            )
+        }
+        val offlineCoordinator = coordinator()
+        offlineCoordinator.start()
+        advanceUntilIdle()
+
+        assertEquals(pending, offlineCoordinator.state.value.deletionState)
+        assertEquals(
+            AccountRuntimeStatus.OfflineUnverified,
+            offlineCoordinator.state.value.runtimeState.status
+        )
+        assertEquals(
+            AccountSessionMutationResult.Applied,
+            offlineCoordinator.updateDeletionState("token-1", AccountDeletionUiState())
+        )
+        assertEquals(
+            AccountSessionRestoreResult.Restored(restored),
+            secureStore.restore()
+        )
+    }
+
+    @Test
+    fun deletionPersistenceFailureDoesNotPublishOrOverwriteStoredState() = runTest {
+        val restored = AccountCredentials("13800138000", "token-1")
+        secureStore.save(restored)
+        repository.verificationResult = AccountRepositoryResult.Success(restored)
+        var allowPersistence = true
+        val coordinator = coordinator(persistSession = { credentials ->
+            allowPersistence && secureStore.save(credentials)
+        })
+        coordinator.start()
+        advanceUntilIdle()
+        allowPersistence = false
+
+        assertEquals(
+            AccountSessionMutationResult.PersistenceFailed,
+            coordinator.updateDeletionState(
+                "token-1",
+                AccountDeletionUiState(1_000L, 604_801_000L)
+            )
+        )
+        assertEquals(AccountDeletionUiState(), coordinator.state.value.deletionState)
+        assertEquals(AccountSessionRestoreResult.Restored(restored), secureStore.restore())
+    }
+
+    @Test
+    fun sessionInvalidationClearsStorageAndCacheOnceBeforePublishingLocalMode() = runTest {
+        val restored = AccountCredentials("13800138000", "token-1")
+        secureStore.save(restored)
+        repository.verificationResult = AccountRepositoryResult.Success(restored)
+        var acceptedCalls = 0
+        var cacheClearCalls = 0
+        val coordinator = coordinator(
+            onCredentialsAccepted = { acceptedCalls += 1 },
+            onMoveToLocalMode = { cacheClearCalls += 1 }
+        )
+        coordinator.start()
+        advanceUntilIdle()
+        assertEquals(1, acceptedCalls)
+
+        assertTrue(coordinator.invalidateSession())
+
+        assertEquals(1, cacheClearCalls)
+        assertEquals(AccountSessionRestoreResult.Empty, secureStore.restore())
+        assertEquals(AccountSession.LocalMode, localStore.restoreSession())
+        assertEquals(AccountSession.LocalMode, coordinator.state.value.session)
+    }
+
+    @Test
+    fun localModePersistenceFailureDoesNotClearOrPublishSession() = runTest {
+        val restored = AccountCredentials("13800138000", "token-1")
+        secureStore.save(restored)
+        repository.verificationResult = AccountRepositoryResult.Success(restored)
+        var cacheClearCalls = 0
+        val coordinator = coordinator(
+            confirmLocalMode = { false },
+            onMoveToLocalMode = { cacheClearCalls += 1 }
+        )
+        coordinator.start()
+        advanceUntilIdle()
+
+        assertFalse(coordinator.invalidateSession())
+
+        assertEquals(0, cacheClearCalls)
+        assertEquals(AccountSessionRestoreResult.Restored(restored), secureStore.restore())
+        assertEquals(null, localStore.restoreSession())
+        assertEquals(restored.toSignedInSession(), coordinator.state.value.session)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.coordinator(
-        persistSession: (AccountCredentials) -> Boolean = secureStore::save
+        persistSession: (AccountCredentials) -> Boolean = secureStore::save,
+        confirmLocalMode: () -> Boolean = localStore::confirmLocalMode,
+        onCredentialsAccepted: (AccountCredentials) -> Unit = {},
+        onMoveToLocalMode: () -> Unit = {}
     ): AccountSessionCoordinator = AccountSessionCoordinator(
         accountRepository = repository,
         secureSessionStore = secureStore,
         localModeSessionStore = localStore,
         applicationScope = this,
-        persistSession = persistSession
+        persistSession = persistSession,
+        confirmLocalMode = confirmLocalMode,
+        onCredentialsAccepted = onCredentialsAccepted,
+        onMoveToLocalMode = onMoveToLocalMode
     )
 
     private fun clearStores() {

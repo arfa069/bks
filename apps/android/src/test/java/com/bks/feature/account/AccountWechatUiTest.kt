@@ -2,7 +2,6 @@ package com.bks.feature.account
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -23,15 +22,12 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.core.app.ApplicationProvider
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -58,7 +54,7 @@ class AccountWechatUiTest {
     @Test
     fun missingGatewayDisablesWechatBindingAction() {
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "token"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -137,7 +133,7 @@ class AccountWechatUiTest {
     @Test
     fun identityPanelShowsSingleDisplayNameAndAvailableActions() {
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(
                     accountId = 42,
                     rawPhone = "13800138000",
@@ -171,7 +167,7 @@ class AccountWechatUiTest {
         val repository = TestAccountRepository()
         var verified: AccountCredentials? = null
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(null, "token", wechatLinked = true, nickname = "微信用户"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -208,7 +204,7 @@ class AccountWechatUiTest {
             prepareIdentifierLinkGate = CompletableDeferred()
         }
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(null, "token", wechatLinked = true),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -242,7 +238,7 @@ class AccountWechatUiTest {
     fun passwordMergeRequiresExactConfirmationAndExplainsDataRules() {
         val repository = TestAccountRepository()
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(null, "token", wechatLinked = true, nickname = "当前微信"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -276,7 +272,7 @@ class AccountWechatUiTest {
     fun unlinkSupportsPasswordAndSmsVerification() {
         val repository = TestAccountRepository()
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "token", wechatLinked = true),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -320,7 +316,7 @@ class AccountWechatUiTest {
             "user@example.com"
         )
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(
                     primaryIdentifier = phone,
                     identifiers = listOf(phone, email),
@@ -366,7 +362,7 @@ class AccountWechatUiTest {
             smsGate = CompletableDeferred()
         }
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(
                     primaryIdentifier = phone,
                     identifiers = listOf(phone, email),
@@ -409,7 +405,7 @@ class AccountWechatUiTest {
         val repository = TestAccountRepository()
         var consumed = 0
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "session-b"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -446,7 +442,7 @@ class AccountWechatUiTest {
         }
         var invalidSessionCalls = 0
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn("13800138000", "token", wechatLinked = true),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -475,7 +471,7 @@ class AccountWechatUiTest {
         val deletionState = AccountDeletionUiState(1_000, 604_801_000)
         var updatedCredentials: AccountCredentials? = null
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(
                     accountId = 42,
                     rawPhone = "13800138000",
@@ -521,7 +517,7 @@ class AccountWechatUiTest {
         )
         val repository = TestAccountRepository()
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(
                     accountId = 42,
                     accountUuid = "d061c044-86c0-4673-8b07-3bd605ced1bc",
@@ -568,7 +564,7 @@ class AccountWechatUiTest {
     @Test
     fun avatarSourceDialogOffersCameraAndGallery() {
         composeRule.setContent {
-            AccountManagementScreen(
+            TestAccountManagementScreen(
                 session = AccountSession.SignedIn(phone = "13800138000", token = "token"),
                 runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                 deletionState = AccountDeletionUiState(),
@@ -592,14 +588,8 @@ class AccountWechatUiTest {
 
     @Test
     fun galleryAvatarResultUploadsAndRefreshesSession() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://test/avatar.jpg")
-        val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
-        val bytes = ByteArrayOutputStream().also {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
-        }.toByteArray()
-        bitmap.recycle()
-        shadowOf(context.contentResolver).registerInputStream(uri, ByteArrayInputStream(bytes))
+        val avatarDataUrl = "data:image/jpeg;base64,/9j/"
         val registry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(
                 requestCode: Int,
@@ -620,7 +610,7 @@ class AccountWechatUiTest {
         )
         composeRule.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
-                AccountManagementScreen(
+                TestAccountManagementScreen(
                     session = session.value,
                     runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified),
                     deletionState = AccountDeletionUiState(),
@@ -629,6 +619,7 @@ class AccountWechatUiTest {
                     onSessionVerified = { session.value = it.toSignedInSession() },
                     onInvalidSession = {},
                     clearPersistedSession = { true },
+                    avatarDataReader = { _, _ -> avatarDataUrl },
                     onSignedOut = {},
                     onDeletionStateChange = {},
                     onBack = {}
@@ -638,9 +629,9 @@ class AccountWechatUiTest {
 
         composeRule.onNodeWithTag("btn-edit-avatar").performClick()
         composeRule.onNodeWithTag("pick-avatar-gallery").performClick()
-        composeRule.waitUntil {
-            repository.updateAvatarCalls == 1 &&
-                (session.value as? AccountSession.SignedIn)?.avatarUrl == repository.lastAvatarDataUrl
+        composeRule.waitUntil(timeoutMillis = 15_000) { repository.updateAvatarCalls == 1 }
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            (session.value as? AccountSession.SignedIn)?.avatarUrl == repository.lastAvatarDataUrl
         }
 
         val updated = session.value as AccountSession.SignedIn

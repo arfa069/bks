@@ -24,25 +24,21 @@ internal data class WechatAvatarEditorState(
 
 internal data class WechatAvatarEditorActions(
     val onStateChange: (WechatAvatarEditorState) -> Unit,
-    val onOperationStarted: () -> Unit,
-    val onAvatarError: (String?) -> Unit,
-    val onFailureMessage: (String) -> Unit,
-    val onResult: suspend (AccountRepositoryResult<AccountCredentials>) -> Unit
+    val onAvatarReadStarted: () -> Unit,
+    val onAvatarReadCancelled: () -> Unit,
+    val onAvatarDataReady: (String) -> Unit,
+    val onAvatarReadFailure: (String) -> Unit
 )
 
 private data class WechatAvatarUpload(
     val context: Context,
-    val session: AccountSession.SignedIn,
-    val deletionState: AccountDeletionUiState,
-    val accountRepository: AccountRepository,
+    val avatarDataReader: suspend (Context, Uri) -> String,
     val actions: WechatAvatarEditorActions
 )
 
 @Composable
 internal fun WechatAccountAvatarEditor(
-    session: AccountSession.SignedIn,
-    deletionState: AccountDeletionUiState,
-    accountRepository: AccountRepository,
+    avatarDataReader: suspend (Context, Uri) -> String,
     state: WechatAvatarEditorState,
     actions: WechatAvatarEditorActions
 ) {
@@ -50,9 +46,7 @@ internal fun WechatAccountAvatarEditor(
     val coroutineScope = rememberCoroutineScope()
     val upload = WechatAvatarUpload(
         context = context,
-        session = session,
-        deletionState = deletionState,
-        accountRepository = accountRepository,
+        avatarDataReader = avatarDataReader,
         actions = actions
     )
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -83,7 +77,7 @@ internal fun WechatAccountAvatarEditor(
                         actions.onStateChange(state.copy(showSourceDialog = false))
                         val uri = runCatching { context.createAvatarCaptureUri() }
                             .getOrElse {
-                                actions.onAvatarError("无法启动相机，请稍后重试")
+                                actions.onAvatarReadFailure("无法启动相机，请稍后重试")
                                 return@Button
                             }
                         actions.onStateChange(
@@ -119,25 +113,20 @@ private fun CoroutineScope.submitAvatar(
     uri: Uri,
     deleteAfterRead: Boolean = false
 ) {
+    upload.actions.onAvatarReadStarted()
     launch {
-        upload.actions.onOperationStarted()
         val avatarDataUrl = try {
-            upload.context.readCompressedAvatarDataUrl(uri)
+            upload.avatarDataReader(upload.context, uri)
         } catch (error: CancellationException) {
+            upload.actions.onAvatarReadCancelled()
             throw error
         } catch (_: Exception) {
             val message = "无法读取图片，请换一张图片重试"
-            upload.actions.onAvatarError(message)
-            upload.actions.onFailureMessage(message)
+            upload.actions.onAvatarReadFailure(message)
             return@launch
         } finally {
             if (deleteAfterRead) upload.context.deleteAvatarCapture(uri)
         }
-        upload.actions.onResult(
-            upload.accountRepository.updateAvatar(
-                credentials = upload.session.toCredentials(upload.deletionState),
-                avatarDataUrl = avatarDataUrl
-            )
-        )
+        upload.actions.onAvatarDataReady(avatarDataUrl)
     }
 }
