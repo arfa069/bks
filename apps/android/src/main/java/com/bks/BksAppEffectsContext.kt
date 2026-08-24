@@ -5,7 +5,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
-import com.bks.feature.account.AccountSession
 import com.bks.ui.BksAppState
 
 internal data class BksAppEffectsContext(
@@ -43,13 +42,6 @@ private fun BksLocalPersistenceEffects(context: BksAppEffectsContext) {
     LaunchedEffect(dependencies.local.preferencesRepository) {
         dependencies.local.preferencesRepository.categorizationRules.collect {
             runtime.categorizationRules = it
-        }
-    }
-    LaunchedEffect(dependencies.local.preferencesRepository, runtime.accountSession) {
-        dependencies.local.preferencesRepository.userPreferences.collect { preferences ->
-            if (runtime.accountSession !is AccountSession.SignedIn) {
-                runtime.aiSettings = preferences.aiSettings
-            }
         }
     }
 }

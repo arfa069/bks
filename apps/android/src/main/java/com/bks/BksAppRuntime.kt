@@ -5,11 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.bks.feature.account.AccountDeletionUiState
 import com.bks.feature.account.AccountCloudSettingsOperationResult
-import com.bks.feature.account.AccountRuntimeState
-import com.bks.feature.account.AccountRuntimeStatus
+import com.bks.feature.account.AccountCloudSettingsState
 import com.bks.feature.account.AccountSession
+import com.bks.feature.account.AccountSessionCoordinatorState
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
 import com.bks.ui.BksAppState
@@ -17,13 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 internal class BksAppRuntimeState {
-    var accountSession by mutableStateOf<AccountSession?>(null)
-    var isRestoringAccountSession by mutableStateOf(true)
-    var accountDeletionState by mutableStateOf(AccountDeletionUiState())
-    var accountRuntimeState by mutableStateOf(AccountRuntimeState(AccountRuntimeStatus.LocalMode))
-    var aiSettings by mutableStateOf(AiCategorizationSettings())
-    var aiSettingsSyncInFlight by mutableStateOf(false)
-    var cloudAiSettingsLoadedToken by mutableStateOf<String?>(null)
     var categorizationRules by mutableStateOf(emptyList<CategorizationRule>())
 }
 
@@ -54,7 +46,10 @@ internal class BksAppActions(
                     appState.snackbarHostState.showSnackbar(result.reason.toAiSettingsMessage())
                 AccountCloudSettingsOperationResult.CloudWritesBlocked ->
                     appState.snackbarHostState.showSnackbar(
-                        if (runtime.accountSession !is AccountSession.SignedIn) {
+                        if (
+                            dependencies.account.sessionCoordinator.state.value.session !is
+                            AccountSession.SignedIn
+                        ) {
                             "登录后才能同步云端 AI 设置"
                         } else {
                             "账号当前不允许写入云端设置"
@@ -69,21 +64,32 @@ internal class BksAppActions(
 }
 
 internal data class BksAppPresentation(
-    val effectiveAiSettings: AiCategorizationSettings
+    val accountToken: String?,
+    val signedIn: Boolean,
+    val effectiveAiSettings: AiCategorizationSettings,
+    val cloudWritesPaused: Boolean,
+    val settingsSyncInFlight: Boolean
 )
 
-@Composable
-internal fun rememberBksAppPresentation(
-    runtime: BksAppRuntimeState
+internal fun bksAppPresentation(
+    accountState: AccountSessionCoordinatorState,
+    cloudSettingsState: AccountCloudSettingsState
 ): BksAppPresentation {
+    val signedIn = accountState.session as? AccountSession.SignedIn
+    val cloudWritesAllowed = accountState.runtimeState.cloudWritesAllowed &&
+        accountState.deletionState.cloudWritesAllowed
     return BksAppPresentation(
-        effectiveAiSettings = (runtime.accountSession as? AccountSession.SignedIn)
-            ?.takeIf { signedIn ->
-                signedIn.token == runtime.cloudAiSettingsLoadedToken &&
-                    runtime.accountRuntimeState.cloudWritesAllowed &&
-                    runtime.accountDeletionState.cloudWritesAllowed
+        accountToken = signedIn?.token,
+        signedIn = signedIn != null,
+        effectiveAiSettings = signedIn
+            ?.takeIf { session ->
+                session.token == cloudSettingsState.loadedToken && cloudWritesAllowed
             }
-            ?.let { runtime.aiSettings }
-            ?: AiCategorizationSettings()
+            ?.let { cloudSettingsState.aiSettings }
+            ?: AiCategorizationSettings(),
+        cloudWritesPaused = !cloudWritesAllowed,
+        settingsSyncInFlight = signedIn != null &&
+            cloudWritesAllowed &&
+            cloudSettingsState.settingsSyncInFlight
     )
 }

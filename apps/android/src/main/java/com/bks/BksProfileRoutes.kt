@@ -3,6 +3,7 @@ package com.bks
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -10,50 +11,49 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bks.feature.account.AccountDeletionUiState
 import com.bks.feature.account.AccountManagementScreen
 import com.bks.feature.account.AccountManagementScreenActions
 import com.bks.feature.account.AccountManagementScreenDependencies
 import com.bks.feature.account.AccountManagementScreenState
 import com.bks.feature.account.AccountManagementViewModel
+import com.bks.feature.account.AccountRuntimeState
 import com.bks.feature.account.AccountSession
+import com.bks.feature.account.WechatAuthCallback
+import com.bks.feature.account.WechatAvatarCache
+import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationAiUiState
+import com.bks.feature.categorization.CategorizationRule
 import com.bks.feature.categorization.CategorizationRulesActions
 import com.bks.feature.categorization.CategorizationRulesScreen
 import com.bks.feature.compliance.ComplianceAndPrivacyScreen
+import com.bks.feature.ledger.LedgerUiState
+import com.bks.feature.monitoring.AutomaticBookkeepingFeatureState
 import com.bks.feature.monitoring.AutomaticBookkeepingScreen
 import com.bks.feature.monitoring.AutomaticBookkeepingUiState
+import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
 import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.profile.ProfileOverviewScreen
-import com.bks.feature.settings.DataAndBackupScreen
 import com.bks.feature.settings.DataAndBackupActions
-import com.bks.ui.AccountEntryMode
-import com.bks.ui.AccountEntryReturnTarget
+import com.bks.feature.settings.DataAndBackupScreen
+import com.bks.feature.settings.DataAndBackupUiState
+import com.bks.feature.settings.DataAndBackupViewModel
+import com.bks.feature.settings.LedgerSyncSectionActions
+import com.bks.feature.sync.LedgerSyncUiState
+import com.bks.feature.sync.LedgerSyncViewModel
 
 @Composable
 internal fun BksProfileRoute(
-    context: BksRouteContext,
     activeAccountSession: AccountSession,
-    innerPadding: PaddingValues,
     destination: ProfileDestination?,
-    onNavigateHome: () -> Unit
+    accountManagementViewModelFactory: ViewModelProvider.Factory,
+    onAccountManagementSessionEnded: () -> Unit,
+    content: @Composable (ProfileDestination?, AccountManagementViewModel) -> Unit
 ) {
-    val dependencies = context.dependencies
-    val sessionCoordinator = dependencies.account.sessionCoordinator
     val accountManagementViewModel: AccountManagementViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = AccountManagementViewModel(
-                accountRepository = dependencies.account.accountRepository,
-                commitManagementCredentials = sessionCoordinator::commitManagementCredentials,
-                commitVerifiedCredentials = sessionCoordinator::commitVerifiedCredentials,
-                invalidateSession = sessionCoordinator::invalidateSession,
-                updateDeletionState = sessionCoordinator::updateDeletionState,
-                wechatAuthGateway = dependencies.account.wechatAuthGateway
-            ) as T
-        }
+        factory = accountManagementViewModelFactory
     )
     var managementHadSignedInSession by remember { mutableStateOf(false) }
     LaunchedEffect(destination, activeAccountSession) {
@@ -64,36 +64,25 @@ internal fun BksProfileRoute(
             managementHadSignedInSession = true
         } else if (managementHadSignedInSession) {
             accountManagementViewModel.closeManagement()
-            context.appState.profileDestination.value = null
+            onAccountManagementSessionEnded()
         }
     }
-    when (destination) {
-        null -> BksProfileOverviewRoute(context, activeAccountSession, innerPadding, onNavigateHome)
-        ProfileDestination.AccountManagement -> BksAccountManagementRoute(
-            context,
-            activeAccountSession,
-            accountManagementViewModel,
-            innerPadding
-        )
-        ProfileDestination.AutomaticBookkeeping -> BksAutomaticBookkeepingRoute(context, innerPadding)
-        ProfileDestination.CategorizationRules -> BksCategorizationRoute(context, innerPadding)
-        ProfileDestination.DataAndBackup -> BksDataAndBackupRoute(context, innerPadding)
-        ProfileDestination.ComplianceAndPrivacy -> BksComplianceRoute(context, innerPadding)
-    }
+    content(destination, accountManagementViewModel)
 }
 
 @Composable
-private fun BksProfileOverviewRoute(
-    context: BksRouteContext,
+internal fun BksProfileOverviewRoute(
     session: AccountSession,
+    ledgerSyncEnabled: Boolean,
     innerPadding: PaddingValues,
+    onDestinationSelected: (ProfileDestination) -> Unit,
     onNavigateHome: () -> Unit
 ) {
     ProfileOverviewScreen(
         session = session,
-        onDestinationSelected = { context.appState.profileDestination.value = it },
+        onDestinationSelected = onDestinationSelected,
         onNavigateHome = onNavigateHome,
-        ledgerSyncEnabled = context.ledgerSyncUiState.enabled,
+        ledgerSyncEnabled = ledgerSyncEnabled,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)
@@ -101,20 +90,26 @@ private fun BksProfileOverviewRoute(
 }
 
 @Composable
-private fun BksAutomaticBookkeepingRoute(
-    context: BksRouteContext,
+@Suppress("LongParameterList")
+internal fun BksAutomaticBookkeepingRoute(
+    state: AutomaticBookkeepingFeatureState,
+    viewModel: AutomaticBookkeepingViewModel,
+    accessibilityAccessGranted: Boolean,
+    accessibilityServiceConnected: Boolean,
+    onOpenAccessibilitySettings: () -> Unit,
+    onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
     AutomaticBookkeepingScreen(
         state = AutomaticBookkeepingUiState(
-            enabled = context.automaticBookkeepingState.enabled,
-            writeInProgress = context.automaticBookkeepingState.writeInProgress,
-            accessibilityAccessGranted = context.bindings.billSyncAccessibilityAccessGranted,
-            accessibilityServiceConnected = context.bindings.billSyncAccessibilityServiceConnected
+            enabled = state.enabled,
+            writeInProgress = state.writeInProgress,
+            accessibilityAccessGranted = accessibilityAccessGranted,
+            accessibilityServiceConnected = accessibilityServiceConnected
         ),
-        onEnabledChange = context.automaticBookkeepingViewModel::setEnabled,
-        onOpenAccessibilitySettings = context.bindings.onOpenBillSyncAccessibilitySettings,
-        onBack = { context.appState.profileDestination.value = null },
+        onEnabledChange = viewModel::setEnabled,
+        onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+        onBack = onBack,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)
@@ -122,40 +117,34 @@ private fun BksAutomaticBookkeepingRoute(
 }
 
 @Composable
-private fun BksAccountManagementRoute(
-    context: BksRouteContext,
+@Suppress("LongParameterList")
+internal fun BksAccountManagementRoute(
     session: AccountSession,
+    runtimeState: AccountRuntimeState,
+    deletionState: AccountDeletionUiState,
     viewModel: AccountManagementViewModel,
+    wechatAuthCallback: WechatAuthCallback?,
+    onWechatAuthCallbackConsumed: () -> Unit,
+    avatarCache: WechatAvatarCache,
+    onSignInOrRegister: () -> Unit,
+    onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
-    val runtime = context.runtime
-    val bindings = context.bindings
-    val dependencies = context.dependencies
-    val appState = context.appState
     AccountManagementScreen(
         screenState = AccountManagementScreenState(
             session = session,
-            runtimeState = runtime.accountRuntimeState,
-            deletionState = runtime.accountDeletionState
+            runtimeState = runtimeState,
+            deletionState = deletionState
         ),
         dependencies = AccountManagementScreenDependencies(
             viewModel = viewModel,
-            wechatAuthCallback = bindings.wechatAuthCallback,
-            onWechatAuthCallbackConsumed = bindings.onWechatAuthCallbackConsumed,
-            avatarCacheOverride = dependencies.account.wechatAvatarCache
+            wechatAuthCallback = wechatAuthCallback,
+            onWechatAuthCallbackConsumed = onWechatAuthCallbackConsumed,
+            avatarCacheOverride = avatarCache
         ),
         actions = AccountManagementScreenActions(
-            onSignInOrRegister = {
-                appState.openAccountEntry(
-                    mode = AccountEntryMode.SignInOrRegister,
-                    returnTarget = AccountEntryReturnTarget.AccountManagement
-                )
-                appState.profileDestination.value = null
-            },
-            onBack = {
-                viewModel.closeManagement()
-                appState.profileDestination.value = null
-            }
+            onSignInOrRegister = onSignInOrRegister,
+            onBack = onBack
         ),
         modifier = Modifier
             .padding(innerPadding)
@@ -164,63 +153,75 @@ private fun BksAccountManagementRoute(
 }
 
 @Composable
-private fun BksCategorizationRoute(
-    context: BksRouteContext,
+@Suppress("LongParameterList")
+internal fun BksCategorizationRoute(
+    rules: List<CategorizationRule>,
+    onRulesChange: (List<CategorizationRule>) -> Unit,
+    aiSettings: AiCategorizationSettings,
+    signedIn: Boolean,
+    cloudWritesPaused: Boolean,
+    settingsSyncInFlight: Boolean,
+    onAiSettingsChange: (AiCategorizationSettings) -> Unit,
+    onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
-    val runtime = context.runtime
     CategorizationRulesScreen(
-        rules = runtime.categorizationRules,
-        onRulesChange = context.actions::persistCategorizationRules,
+        rules = rules,
+        onRulesChange = onRulesChange,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding),
         aiUiState = CategorizationAiUiState(
-            settings = context.presentation.effectiveAiSettings,
-            signedIn = runtime.accountSession is AccountSession.SignedIn,
-            cloudWritesPaused = runtime.accountDeletionState.isPending ||
-                !runtime.accountRuntimeState.cloudWritesAllowed,
-            settingsSyncInFlight = runtime.aiSettingsSyncInFlight
+            settings = aiSettings,
+            signedIn = signedIn,
+            cloudWritesPaused = cloudWritesPaused,
+            settingsSyncInFlight = settingsSyncInFlight
         ),
         actions = CategorizationRulesActions(
-            onAiSettingsChange = context.actions::persistAiSettings,
-            onBack = { context.appState.profileDestination.value = null }
-        ),
+            onAiSettingsChange = onAiSettingsChange,
+            onBack = onBack
+        )
     )
 }
 
 @Composable
-private fun BksDataAndBackupRoute(
-    context: BksRouteContext,
+@Suppress("LongParameterList")
+internal fun BksDataAndBackupRoute(
+    ledgerState: LedgerUiState,
+    dataAndBackupState: DataAndBackupUiState,
+    dataAndBackupViewModel: DataAndBackupViewModel,
+    snackbarHostState: SnackbarHostState,
+    ledgerSyncState: LedgerSyncUiState,
+    ledgerSyncViewModel: LedgerSyncViewModel,
+    onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
-    val viewModel = context.dataAndBackupViewModel
     DataAndBackupScreen(
-        ledgerEntries = context.ledgerUiState.entries,
-        currentLedgerName = context.ledgerUiState.activeLedgerName,
-        dataAndBackupState = context.dataAndBackupUiState,
+        ledgerEntries = ledgerState.entries,
+        currentLedgerName = ledgerState.activeLedgerName,
+        dataAndBackupState = dataAndBackupState,
         dataAndBackupActions = DataAndBackupActions(
-            onExport = viewModel::export,
-            onValidate = viewModel::validate,
-            onImport = viewModel::import,
-            onDelete = viewModel::delete,
-            onAttachUi = viewModel::attachUi,
-            onDetachUi = viewModel::detachUi,
-            onAcknowledgeValidation = viewModel::acknowledgeValidation,
-            onEndValidatedContinuation = viewModel::endValidatedContinuation,
-            onClearValidation = viewModel::clearValidation,
-            onAcknowledgeNotice = viewModel::acknowledgeNotice
+            onExport = dataAndBackupViewModel::export,
+            onValidate = dataAndBackupViewModel::validate,
+            onImport = dataAndBackupViewModel::import,
+            onDelete = dataAndBackupViewModel::delete,
+            onAttachUi = dataAndBackupViewModel::attachUi,
+            onDetachUi = dataAndBackupViewModel::detachUi,
+            onAcknowledgeValidation = dataAndBackupViewModel::acknowledgeValidation,
+            onEndValidatedContinuation = dataAndBackupViewModel::endValidatedContinuation,
+            onClearValidation = dataAndBackupViewModel::clearValidation,
+            onAcknowledgeNotice = dataAndBackupViewModel::acknowledgeNotice
         ),
-        onBack = { context.appState.profileDestination.value = null },
-        snackbarHostState = context.appState.snackbarHostState,
-        ledgerSyncState = context.ledgerSyncUiState,
-        ledgerSyncActions = com.bks.feature.settings.LedgerSyncSectionActions(
-            onPreview = context.ledgerSyncViewModel::preview,
-            onDismissPreview = context.ledgerSyncViewModel::dismissPreview,
-            onEnable = context.ledgerSyncViewModel::enable,
-            onSyncNow = context.ledgerSyncViewModel::synchronize,
-            onDisable = context.ledgerSyncViewModel::disable,
-            onResolveConflict = context.ledgerSyncViewModel::resolveConflict
+        onBack = onBack,
+        snackbarHostState = snackbarHostState,
+        ledgerSyncState = ledgerSyncState,
+        ledgerSyncActions = LedgerSyncSectionActions(
+            onPreview = ledgerSyncViewModel::preview,
+            onDismissPreview = ledgerSyncViewModel::dismissPreview,
+            onEnable = ledgerSyncViewModel::enable,
+            onSyncNow = ledgerSyncViewModel::synchronize,
+            onDisable = ledgerSyncViewModel::disable,
+            onResolveConflict = ledgerSyncViewModel::resolveConflict
         ),
         modifier = Modifier
             .padding(innerPadding)
@@ -229,13 +230,13 @@ private fun BksDataAndBackupRoute(
 }
 
 @Composable
-private fun BksComplianceRoute(
-    context: BksRouteContext,
+internal fun BksComplianceRoute(
+    onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
     ComplianceAndPrivacyScreen(
         isDebugBuild = BuildConfig.DEBUG,
-        onBack = { context.appState.profileDestination.value = null },
+        onBack = onBack,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)

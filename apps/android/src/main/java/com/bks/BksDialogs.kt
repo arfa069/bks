@@ -3,18 +3,19 @@ package com.bks
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.bks.feature.account.AccountSession
 import com.bks.feature.sync.LedgerSyncOperationResult
+import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.ui.components.Button
 import com.bks.ui.components.TextButton
-import kotlinx.coroutines.launch
 
 @Composable
-internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
-    val runtime = context.runtime
-    val syncState = context.ledgerSyncUiState
+internal fun BksLedgerSyncAccountSwitchDialog(
+    signedIn: Boolean,
+    syncState: LedgerSyncUiState,
+    onSwitchAccount: () -> Unit,
+    onCancelAndSignOut: () -> Unit
+) {
     if (!syncState.showAccountSwitch) return
-    val signedIn = runtime.accountSession as? AccountSession.SignedIn
     AlertDialog(
         onDismissRequest = {},
         title = { Text("切换账户同步数据") },
@@ -29,22 +30,8 @@ internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (signedIn != null) {
-                        context.coroutineScope.launch {
-                            when (
-                                val result = context.ledgerSyncViewModel.switchAccount()
-                            ) {
-                                is LedgerSyncOperationResult.Success -> {
-                                    context.appState.snackbarHostState.showSnackbar("账户同步数据已切换")
-                                }
-                                is LedgerSyncOperationResult.Failure ->
-                                    context.appState.snackbarHostState.showSnackbar(result.message)
-                            }
-                        }
-                    }
-                },
-                enabled = signedIn != null &&
+                onClick = onSwitchAccount,
+                enabled = signedIn &&
                     syncState.pendingCount == 0 &&
                     !syncState.accountSwitchBusy
             ) {
@@ -53,18 +40,30 @@ internal fun BksLedgerSyncAccountSwitchDialog(context: BksRouteContext) {
         },
         dismissButton = {
             TextButton(
-                onClick = {
-                    if (signedIn != null) {
-                        context.coroutineScope.launch {
-                            context.dependencies.account.accountRepository.signOut(signedIn.token)
-                        }
-                    }
-                    context.dependencies.account.sessionCoordinator.moveToLocalMode()
-                },
+                onClick = onCancelAndSignOut,
                 enabled = !syncState.accountSwitchBusy
             ) {
                 Text("取消并退出当前账户")
             }
         }
     )
+}
+
+internal suspend fun runLedgerSyncAccountSwitchAction(
+    switchAccount: suspend () -> LedgerSyncOperationResult<Unit>,
+    showMessage: suspend (String) -> Unit
+) {
+    when (val result = switchAccount()) {
+        is LedgerSyncOperationResult.Success -> showMessage("账户同步数据已切换")
+        is LedgerSyncOperationResult.Failure -> showMessage(result.message)
+    }
+}
+
+internal fun cancelLedgerSyncAccountSwitch(
+    signedInToken: String?,
+    launchSignOut: (String) -> Unit,
+    moveToLocalMode: () -> Unit
+) {
+    signedInToken?.let(launchSignOut)
+    moveToLocalMode()
 }

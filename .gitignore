@@ -11,6 +11,7 @@ local.properties
 
 # Generated
 captures/
+**/bin/
 *.apk
 *.aab
 /trace_processor

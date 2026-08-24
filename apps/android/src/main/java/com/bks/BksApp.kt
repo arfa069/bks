@@ -2,6 +2,7 @@ package com.bks
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,28 +21,34 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.feature.account.AccountCloudSettingsCoordinator
 import com.bks.feature.account.AccountCredentials
 import com.bks.feature.account.AccountRepository
+import com.bks.feature.account.AccountSession
 import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.AccountSessionNotice
 import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.CloudAiSettingsGateway
+import com.bks.feature.home.HomeScreen
 import com.bks.feature.ledger.LedgerViewModel
 import com.bks.feature.ledger.LedgerUiState
 import com.bks.feature.monitoring.AutomaticBookkeepingFeatureState
 import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
+import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.review.ReviewQueueState
 import com.bks.feature.review.ReviewQueueViewModel
 import com.bks.feature.settings.DataAndBackupUiState
 import com.bks.feature.settings.DataAndBackupViewModel
 import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.feature.sync.LedgerSyncViewModel
+import com.bks.ui.AccountEntryMode
+import com.bks.ui.AccountEntryReturnTarget
 import com.bks.ui.components.SlidePageTransition
 import com.bks.ui.rememberBksAppState
 import com.bks.ui.theme.BksTheme
 import com.bks.ui.visual.AppWallpaper
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 data class BksAppBindings(
     val billSyncAccessibilityAccessGranted: Boolean = false,
@@ -60,6 +67,7 @@ data class BksAppOverrides(
 )
 
 @Composable
+@Suppress("LongMethod", "CyclomaticComplexMethod")
 fun BksApp(
     bindings: BksAppBindings = BksAppBindings(),
     overrides: BksAppOverrides = BksAppOverrides()
@@ -95,37 +103,10 @@ fun BksApp(
             coroutineScope = coroutineScope
         )
     }
-    val routeContext = BksRouteContext(
-        dependencies = dependencies,
-        runtime = runtime,
-        presentation = rememberBksAppPresentation(runtime),
-        bindings = bindings,
-        actions = actions,
-        appState = appState,
-        coroutineScope = coroutineScope,
-        automaticBookkeepingViewModel = owners.automaticBookkeepingViewModel,
-        automaticBookkeepingState = owners.automaticBookkeepingState,
-        ledgerViewModel = owners.ledgerViewModel,
-        ledgerUiState = owners.ledgerUiState,
-        reviewQueueViewModel = owners.reviewQueueViewModel,
-        reviewQueueState = owners.reviewQueueState,
-        dataAndBackupViewModel = owners.dataAndBackupViewModel,
-        dataAndBackupUiState = owners.dataAndBackupUiState,
-        ledgerSyncViewModel = owners.ledgerSyncViewModel,
-        ledgerSyncUiState = owners.ledgerSyncUiState
-    )
+    val presentation = bksAppPresentation(accountState, cloudSettingsState)
 
     BksAccountSessionNotices(accountSessionCoordinator, appState)
     BksFeatureNotices(owners, appState)
-    LaunchedEffect(accountState, cloudSettingsState) {
-        runtime.accountSession = accountState.session
-        runtime.isRestoringAccountSession = accountState.isRestoring
-        runtime.accountRuntimeState = accountState.runtimeState
-        runtime.accountDeletionState = accountState.deletionState
-        runtime.aiSettings = cloudSettingsState.aiSettings
-        runtime.cloudAiSettingsLoadedToken = cloudSettingsState.loadedToken
-        runtime.aiSettingsSyncInFlight = cloudSettingsState.settingsSyncInFlight
-    }
 
     BksAppEffects(
         context = BksAppEffectsContext(
@@ -154,14 +135,180 @@ fun BksApp(
                 modifier = Modifier.fillMaxSize()
             ) { (activeAccountSession, accountEntryMode) ->
                 if (activeAccountSession == null || accountEntryMode != null) {
-                    BksAccountEntry(routeContext)
+                    BksAccountEntry(
+                        appState = appState,
+                        accountSession = activeAccountSession,
+                        viewModelFactory = accountEntryFactory(dependencies, accountSessionCoordinator),
+                        wechatAuthCallback = bindings.wechatAuthCallback,
+                        onWechatAuthCallbackConsumed = bindings.onWechatAuthCallbackConsumed,
+                        avatarCache = dependencies.account.wechatAvatarCache
+                    )
                 } else {
-                    BksRouteHost(routeContext)
+                    BksRouteHost(appState) { targetRoute, innerPadding, onManualEntryClosed, onNavigateHome ->
+                        if (targetRoute.manualEntryOpen) {
+                            BksManualEntryRoute(
+                                ledgerState = owners.ledgerUiState,
+                                ledgerViewModel = owners.ledgerViewModel,
+                                innerPadding = innerPadding,
+                                onManualEntryClosed = onManualEntryClosed,
+                                onEntryCreated = {
+                                    appState.selectedTab.value = AppTab.Ledger
+                                    appState.profileDestination.value = null
+                                }
+                            )
+                        } else {
+                            when (targetRoute.tab) {
+                                null -> HomeScreen(modifier = Modifier.padding(innerPadding))
+                                AppTab.Review -> BksReviewRoute(
+                                    reviewState = owners.reviewQueueState,
+                                    reviewViewModel = owners.reviewQueueViewModel,
+                                    ledgerState = owners.ledgerUiState,
+                                    categorizationRules = runtime.categorizationRules,
+                                    onCategorizationRulesChange = actions::persistCategorizationRules,
+                                    accountToken = presentation.accountToken,
+                                    aiSettings = presentation.effectiveAiSettings,
+                                    aiCategorizationGateway = dependencies.aiCategorizationGateway,
+                                    innerPadding = innerPadding,
+                                    onNavigateHome = onNavigateHome
+                                )
+                                AppTab.Ledger -> BksLedgerRoute(
+                                    state = owners.ledgerUiState,
+                                    viewModel = owners.ledgerViewModel,
+                                    entryListState = appState.ledgerEntryListState,
+                                    snackbarHostState = appState.snackbarHostState,
+                                    innerPadding = innerPadding,
+                                    onNavigateHome = onNavigateHome
+                                )
+                                AppTab.Reports -> BksReportsRoute(
+                                    state = owners.ledgerUiState,
+                                    categoryRankingListState = appState.reportCategoryRankingListState,
+                                    innerPadding = innerPadding,
+                                    onNavigateHome = onNavigateHome
+                                )
+                                AppTab.Profile -> BksProfileRoute(
+                                    activeAccountSession = activeAccountSession,
+                                    destination = targetRoute.profileDestination,
+                                    accountManagementViewModelFactory = accountManagementFactory(
+                                        dependencies,
+                                        accountSessionCoordinator
+                                    ),
+                                    onAccountManagementSessionEnded = {
+                                        appState.profileDestination.value = null
+                                    }
+                                ) { destination, accountManagementViewModel ->
+                                    when (destination) {
+                                        null -> BksProfileOverviewRoute(
+                                            session = activeAccountSession,
+                                            ledgerSyncEnabled = owners.ledgerSyncUiState.enabled,
+                                            innerPadding = innerPadding,
+                                            onDestinationSelected = {
+                                                appState.profileDestination.value = it
+                                            },
+                                            onNavigateHome = onNavigateHome
+                                        )
+                                        ProfileDestination.AccountManagement -> BksAccountManagementRoute(
+                                            session = activeAccountSession,
+                                            runtimeState = accountState.runtimeState,
+                                            deletionState = accountState.deletionState,
+                                            viewModel = accountManagementViewModel,
+                                            wechatAuthCallback = bindings.wechatAuthCallback,
+                                            onWechatAuthCallbackConsumed =
+                                                bindings.onWechatAuthCallbackConsumed,
+                                            avatarCache = dependencies.account.wechatAvatarCache,
+                                            onSignInOrRegister = {
+                                                appState.openAccountEntry(
+                                                    mode = AccountEntryMode.SignInOrRegister,
+                                                    returnTarget = AccountEntryReturnTarget.AccountManagement
+                                                )
+                                                appState.profileDestination.value = null
+                                            },
+                                            onBack = {
+                                                accountManagementViewModel.closeManagement()
+                                                appState.profileDestination.value = null
+                                            },
+                                            innerPadding = innerPadding
+                                        )
+                                        ProfileDestination.AutomaticBookkeeping ->
+                                            BksAutomaticBookkeepingRoute(
+                                                state = owners.automaticBookkeepingState,
+                                                viewModel = owners.automaticBookkeepingViewModel,
+                                                accessibilityAccessGranted =
+                                                    bindings.billSyncAccessibilityAccessGranted,
+                                                accessibilityServiceConnected =
+                                                    bindings.billSyncAccessibilityServiceConnected,
+                                                onOpenAccessibilitySettings =
+                                                    bindings.onOpenBillSyncAccessibilitySettings,
+                                                onBack = {
+                                                    appState.profileDestination.value = null
+                                                },
+                                                innerPadding = innerPadding
+                                            )
+                                        ProfileDestination.CategorizationRules -> BksCategorizationRoute(
+                                            rules = runtime.categorizationRules,
+                                            onRulesChange = actions::persistCategorizationRules,
+                                            aiSettings = presentation.effectiveAiSettings,
+                                            signedIn = presentation.signedIn,
+                                            cloudWritesPaused = presentation.cloudWritesPaused,
+                                            settingsSyncInFlight = presentation.settingsSyncInFlight,
+                                            onAiSettingsChange = actions::persistAiSettings,
+                                            onBack = {
+                                                appState.profileDestination.value = null
+                                            },
+                                            innerPadding = innerPadding
+                                        )
+                                        ProfileDestination.DataAndBackup -> BksDataAndBackupRoute(
+                                            ledgerState = owners.ledgerUiState,
+                                            dataAndBackupState = owners.dataAndBackupUiState,
+                                            dataAndBackupViewModel = owners.dataAndBackupViewModel,
+                                            snackbarHostState = appState.snackbarHostState,
+                                            ledgerSyncState = owners.ledgerSyncUiState,
+                                            ledgerSyncViewModel = owners.ledgerSyncViewModel,
+                                            onBack = {
+                                                appState.profileDestination.value = null
+                                            },
+                                            innerPadding = innerPadding
+                                        )
+                                        ProfileDestination.ComplianceAndPrivacy -> BksComplianceRoute(
+                                            onBack = {
+                                                appState.profileDestination.value = null
+                                            },
+                                            innerPadding = innerPadding
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-    BksLedgerSyncAccountSwitchDialog(routeContext)
+    val signedInSession = accountState.session as? AccountSession.SignedIn
+    BksLedgerSyncAccountSwitchDialog(
+        signedIn = signedInSession != null,
+        syncState = owners.ledgerSyncUiState,
+        onSwitchAccount = {
+            coroutineScope.launch {
+                runLedgerSyncAccountSwitchAction(
+                    switchAccount = owners.ledgerSyncViewModel::switchAccount,
+                    showMessage = { message ->
+                        appState.snackbarHostState.showSnackbar(message)
+                    }
+                )
+            }
+        },
+        onCancelAndSignOut = {
+            cancelLedgerSyncAccountSwitch(
+                signedInToken = signedInSession?.token,
+                launchSignOut = { token ->
+                    coroutineScope.launch {
+                        dependencies.account.accountRepository.signOut(token)
+                    }
+                },
+                moveToLocalMode = accountSessionCoordinator::moveToLocalMode
+            )
+        }
+    )
 }
 
 private data class BksFeatureOwners(
