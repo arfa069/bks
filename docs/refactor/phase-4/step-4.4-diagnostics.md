@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Completed
 
 ## Goal
 
@@ -113,20 +113,34 @@ git diff --check
 
 ### Actual Changes
 
-尚未执行
+- 新增 `DiagnosticLogsViewModel`，以 `StateFlow<DiagnosticLogsUiState>` 拥有 Repository 的 enabled/events/stats 投影，以及 refresh、clear、export、cancel、failure 和 export result operation state；Application composition root 通过 lifecycle-scoped factory 注入既有 `DiagnosticLogRepository`。
+- 加密导出采用带 request ID 的 rendezvous Channel 交接：ViewModel 只生成密文并拒绝取消后的陈旧 writer completion，Screen 继续在 `Dispatchers.IO` 调用 MediaStore/platform writer，再把非敏感文件名或失败结果回报 ViewModel。密文、口令和 writer 均未进入持久 state、`SavedStateHandle` 或日志。
+- `DiagnosticLogsScreen` 不再获取 Repository，也不再通过 Compose scope 运行 refresh、clear 或加密业务 coroutine；Screen/Composition 继续持有 `FLAG_SECURE`、敏感显示、确认/口令 Dialog、平台 writer 和 writer Job。
+- stop、离开页面和显式取消会关闭导出 Dialog、取消在途生成/writer 并清除口令 Composition；success/failure 也先关闭口令 Dialog，再显示由 ViewModel stable state 持有、可按 ID 精确消费的非敏感结果。
+- writer Job 先登记再启动，旧 writer 的 `finally` 仅在共享槽位仍指向自身时清空，避免旧 writer 延迟退出后丢失新 writer 的 stop/cancel 句柄；refresh 成功只条件清除属于 refresh 的旧失败提示，不覆盖 clear/export 的并发消息。
+- 新增 `DiagnosticLogsViewModelTest`，更新 Screen owner test harness，并补充后台期间取消导出、重新进入时口令字段清空、旧/新 writer 重叠取消，以及 refresh 失败后成功恢复的 Robolectric/Compose 回归测试。
 
 ### Deviations From Plan
 
-无
+- `DiagnosticLogsContent.kt`、`AndroidDiagnosticLogRepository.kt`、`DiagnosticEncryptedStore.kt` 和 `DiagnosticSanitizer.kt` 无生产改动：当前接口/Flow、加密导出、轮转和双层脱敏已满足 ViewModel 迁移，不需要为 Plan 强制修改稳定实现。
+- one-shot 密文交接选用无缓冲 rendezvous Channel，而导出完成/失败/取消结果保留在 `StateFlow`：密文只在当前 Screen collector 存在时交接，关键可见结果不会因重组或 collector 切换而丢失；没有机械地把所有状态降为 Channel effect。
+- 当前基线的 `ON_STOP` 只重新遮罩敏感日志，未关闭导出口令 Dialog；本 Step 按 Planned Changes、Tests 和页面“仅本次会话”的安全语义补齐 stop 清理，并记录为计划假设与实际代码的偏差。
+- 未新增依赖、百分比 progress 或独立 writer abstraction：底层 Repository 没有稳定进度信号，平台 writer 继续由 Screen 的最小现有 MediaStore seam 承担。
 
 ### Test Results
 
-尚未执行
+- Step 专项命令通过：`DiagnosticLogsViewModelTest` 8、`DiagnosticLogsScreenTest` 9、`DiagnosticSecureWindowTest` 1、`AndroidDiagnosticLogRepositoryTest` 8、`DiagnosticExportCryptoTest` 2、`DiagnosticSanitizerTest` 4，共 32/32，0 skipped/failures/errors；其中新增测试直接覆盖复审发现的 writer identity 竞态和 refresh 失败→成功恢复。
+- Android Phase 全量 `:apps:android:testDebugUnitTest --max-workers=1` 通过：89 suites / 517 tests，0 skipped/failures/errors。首次默认并行全量仅有无关的 `SecureAccountSessionStoreTest.legacyVersionOnePhoneSessionRestoresAndNextSaveUpgradesIt` 因 Robolectric/SharedPreferences 状态未读到而失败；该账号测试类单独重跑通过，随后修复前后均按项目规则串行全量通过，未修改账号代码或测试。
+- `:apps:android:detekt` 通过；首次检查发现本 Step 新增的参数/长度/复杂度/函数数问题，已通过同职责内 Dialog 装配提取、overrides 值对象和 writer completion 合并消除，未新增 suppression 或 baseline。
+- `git diff --check` 通过。
+- 未运行 `assembleDebug`、Instrumentation 或真机测试：本 Step 未修改 Manifest、Resources、Gradle dependency、BuildConfig、Room/API/backup/platform 配置，计划与模块规则不要求 APK 验证。
 
 ### Remaining Risks
 
-尚未执行
+- MediaStore Downloads 的真实文件创建、OEM 文件系统行为、Activity/process recreation，以及 writer 已进入平台阻塞 I/O 后的取消时序未做设备端验收；ViewModel request ID 会拒绝取消后的陈旧 completion，Screen/Composition 会取消 writer Job，但 Robolectric 不能替代真实 ContentResolver 的中断/回滚行为。
+- `FLAG_SECURE` 由既有单元测试覆盖 flag add/clear，Screen 测试覆盖后台重新遮罩和口令清理；尚未在真实设备上观察系统截图、最近任务缩略图和后台/前台切换。
+- 加密格式、Keystore store、轮转与 Sanitizer 本轮保持原实现，并由专项回归覆盖；未用真实敏感生产样本或导出文件做手工解密验收，以避免扩大敏感数据边界。
 
 ### Final Status
 
-Pending
+Completed

@@ -10,207 +10,213 @@ import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.bksAppContainer
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private class DiagnosticLogsLocalState {
+    var showEnableConfirmation by mutableStateOf(false)
+    var showRevealConfirmation by mutableStateOf(false)
+    var showSensitive by mutableStateOf(false)
+    var showExportDialog by mutableStateOf(false)
+    var showClearConfirmation by mutableStateOf(false)
+    var exportWriterJob by mutableStateOf<Job?>(null)
+}
+
 @Composable
-fun DiagnosticLogsScreen(
+internal fun DiagnosticLogsScreen(
     isDebugBuild: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    repositoryOverride: DiagnosticLogRepository? = null,
-    applySecureWindowFlag: Boolean = true,
-    exportWriterOverride: ((String) -> String)? = null
+    overrides: DiagnosticLogsScreenOverrides = DiagnosticLogsScreenOverrides()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val repository = repositoryOverride ?: context.bksAppContainer.diagnosticLogs
-    val enabled by repository.enabled.collectAsState()
-    val events by repository.events.collectAsState()
-    val stats by repository.stats.collectAsState()
-    val scope = rememberCoroutineScope()
-    var showEnableConfirmation by remember { mutableStateOf(false) }
-    var showRevealConfirmation by remember { mutableStateOf(false) }
-    var showSensitive by remember { mutableStateOf(false) }
-    var showExportDialog by remember { mutableStateOf(false) }
-    var showClearConfirmation by remember { mutableStateOf(false) }
-    var statusMessage by remember { mutableStateOf<String?>(null) }
-    var isExporting by remember { mutableStateOf(false) }
-    var exportJob by remember { mutableStateOf<Job?>(null) }
-    var exportResult by remember { mutableStateOf<DiagnosticExportResult?>(null) }
-    val exportWriter = remember(context, exportWriterOverride) {
-        exportWriterOverride ?: { encrypted: String -> writeDiagnosticExport(context, encrypted) }
+    val defaultFactory = remember(context) {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                context.bksAppContainer.createDiagnosticLogsViewModel() as T
+        }
     }
-    val exportHandlers = DiagnosticExportHandlers({ isExporting = it }, { exportJob = it }, { showExportDialog = false }, { exportResult = it }, { statusMessage = it })
+    val logsViewModel: DiagnosticLogsViewModel = viewModel(
+        factory = overrides.viewModelFactory ?: defaultFactory
+    )
+    val state by logsViewModel.uiState.collectAsStateWithLifecycle()
+    val localState = remember { DiagnosticLogsLocalState() }
+    val exportWriter = remember(context, overrides.exportWriter) {
+        overrides.exportWriter ?: { encrypted: String -> writeDiagnosticExport(context, encrypted) }
+    }
 
-    DiagnosticLogsEffects(lifecycleOwner, repository, showSensitive, applySecureWindowFlag) { showSensitive = false }
+    LaunchedEffect(logsViewModel, exportWriter) {
+        logsViewModel.writeRequests.collect { request ->
+            if (logsViewModel.beginWrite(request.requestId)) {
+                lateinit var writerJob: Job
+                writerJob = launch(start = CoroutineStart.LAZY) {
+                    try {
+                        val displayName = withContext(Dispatchers.IO) {
+                            exportWriter(request.encrypted)
+                        }
+                        localState.showExportDialog = false
+                        logsViewModel.finishWrite(request.requestId, displayName)
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (_: Throwable) {
+                        localState.showExportDialog = false
+                        logsViewModel.finishWrite(request.requestId, displayName = null)
+                    } finally {
+                        if (localState.exportWriterJob === writerJob) {
+                            localState.exportWriterJob = null
+                        }
+                    }
+                }
+                localState.exportWriterJob = writerJob
+                writerJob.start()
+            }
+        }
+    }
+    DiagnosticLogsEffects(
+        lifecycleOwner = lifecycleOwner,
+        showSensitive = localState.showSensitive,
+        applySecureWindowFlag = overrides.applySecureWindowFlag,
+        onBackground = {
+            localState.showSensitive = false
+            localState.showExportDialog = false
+            localState.exportWriterJob?.cancel()
+            logsViewModel.cancelExport(showResult = false)
+        },
+        onDisposeScreen = {
+            localState.exportWriterJob?.cancel()
+            logsViewModel.cancelExport(showResult = false)
+        }
+    )
 
     DiagnosticLogsContent(
-        state = DiagnosticLogsContentState(enabled, stats, showSensitive, statusMessage),
-        events = events,
+        state = DiagnosticLogsContentState(
+            state.enabled,
+            state.stats,
+            localState.showSensitive,
+            state.statusMessage
+        ),
+        events = state.events,
         actions = DiagnosticLogsContentActions(
             onBack = onBack,
             onEnabledChange = { checked ->
-                if (checked && !isDebugBuild) showEnableConfirmation = true else repository.setEnabled(checked, userConfirmed = isDebugBuild)
+                if (checked && !isDebugBuild) {
+                    localState.showEnableConfirmation = true
+                } else {
+                    logsViewModel.setEnabled(checked, userConfirmed = isDebugBuild)
+                }
             },
-            onRefresh = { scope.launch { repository.refresh() } },
-            onExportClick = { showExportDialog = true },
-            onClearClick = { showClearConfirmation = true },
-            onToggleSensitive = { if (showSensitive) showSensitive = false else showRevealConfirmation = true }
+            onRefresh = logsViewModel::refresh,
+            onExportClick = { localState.showExportDialog = true },
+            onClearClick = { localState.showClearConfirmation = true },
+            onToggleSensitive = {
+                if (localState.showSensitive) {
+                    localState.showSensitive = false
+                } else {
+                    localState.showRevealConfirmation = true
+                }
+            }
         ),
         modifier = modifier
     )
 
-    if (showEnableConfirmation) {
+    DiagnosticLogsDialogs(localState, state, logsViewModel)
+}
+
+@Composable
+private fun DiagnosticLogsDialogs(
+    localState: DiagnosticLogsLocalState,
+    state: DiagnosticLogsUiState,
+    viewModel: DiagnosticLogsViewModel
+) {
+    LaunchedEffect(state.exportResult?.id) {
+        if (state.exportResult != null) localState.showExportDialog = false
+    }
+    if (localState.showEnableConfirmation) {
         EnableDiagnosticsConfirmationDialog(
             onConfirm = {
-                repository.setEnabled(true, userConfirmed = true)
-                showEnableConfirmation = false
+                viewModel.setEnabled(true, userConfirmed = true)
+                localState.showEnableConfirmation = false
             },
-            onDismiss = { showEnableConfirmation = false }
+            onDismiss = { localState.showEnableConfirmation = false }
         )
     }
-    if (showRevealConfirmation) {
+    if (localState.showRevealConfirmation) {
         RevealSensitiveConfirmationDialog(
             onConfirm = {
-                showSensitive = true
-                showRevealConfirmation = false
+                localState.showSensitive = true
+                localState.showRevealConfirmation = false
             },
-            onDismiss = { showRevealConfirmation = false }
+            onDismiss = { localState.showRevealConfirmation = false }
         )
     }
-    if (showClearConfirmation) {
+    if (localState.showClearConfirmation) {
         ClearDiagnosticsConfirmationDialog(
             onConfirm = {
-                showClearConfirmation = false
-                scope.launch {
-                    repository.clear()
-                    statusMessage = "诊断日志和设备密钥已清空。"
-                }
+                localState.showClearConfirmation = false
+                viewModel.clear()
             },
-            onDismiss = { showClearConfirmation = false }
+            onDismiss = { localState.showClearConfirmation = false }
         )
     }
-    if (showExportDialog) {
+    if (localState.showExportDialog) {
         DiagnosticExportDialog(
-            exporting = isExporting,
-            onDismiss = { cancelDiagnosticExport(exportJob, isExporting, exportHandlers) },
-            onExport = { passphrase ->
-                if (!isExporting) {
-                    isExporting = true
-                    exportJob = scope.launch { runDiagnosticExport(passphrase, repository, exportWriter, exportHandlers) }
-                }
-            }
+            exporting = state.exporting,
+            onDismiss = {
+                localState.exportWriterJob?.cancel()
+                viewModel.cancelExport()
+                localState.showExportDialog = false
+            },
+            onExport = viewModel::export
         )
     }
-    exportResult?.let { result ->
-        ExportResultDialog(result.title, result.message) { exportResult = null }
-    }
-}
-
-private data class DiagnosticExportResult(
-    val title: String,
-    val message: String
-)
-
-private class DiagnosticExportHandlers(
-    val onExportingChange: (Boolean) -> Unit,
-    val onJobChange: (Job?) -> Unit,
-    val onDialogClosed: () -> Unit,
-    val onResult: (DiagnosticExportResult) -> Unit,
-    val onMessage: (String) -> Unit
-)
-
-private fun cancelDiagnosticExport(
-    job: Job?,
-    wasExporting: Boolean,
-    handlers: DiagnosticExportHandlers
-) {
-    job?.cancel()
-    handlers.onJobChange(null)
-    handlers.onExportingChange(false)
-    handlers.onDialogClosed()
-    if (wasExporting) {
-        handlers.onResult(
-            DiagnosticExportResult(
-                title = "导出已取消",
-                message = "未创建诊断日志导出文件。"
-            )
-        )
-    }
-}
-
-private suspend fun runDiagnosticExport(
-    passphrase: CharArray,
-    repository: DiagnosticLogRepository,
-    exportWriter: (String) -> String,
-    handlers: DiagnosticExportHandlers
-) {
-    try {
-        val encrypted = repository.exportEncrypted(passphrase)
-        val displayName = withContext(Dispatchers.IO) {
-            exportWriter(encrypted)
+    state.exportResult?.let { result ->
+        ExportResultDialog(result.title, result.message) {
+            viewModel.dismissExportResult(result.id)
         }
-        val message = "已导出 $displayName 到 Downloads；删除本机数据不会删除该文件，请自行保管或删除。"
-        handlers.onMessage(message)
-        handlers.onResult(
-            DiagnosticExportResult(
-                title = "导出完成",
-                message = message
-            )
-        )
-        handlers.onDialogClosed()
-    } catch (_: CancellationException) {
-        // The dismiss action owns the visible cancellation result.
-    } catch (_: Throwable) {
-        val message = "导出失败，请确认本机存储状态后重试。"
-        handlers.onMessage(message)
-        handlers.onResult(
-            DiagnosticExportResult(
-                title = "导出失败",
-                message = message
-            )
-        )
-        handlers.onDialogClosed()
-    } finally {
-        passphrase.fill('\u0000')
-        handlers.onJobChange(null)
-        handlers.onExportingChange(false)
     }
 }
 
 @Composable
 private fun DiagnosticLogsEffects(
     lifecycleOwner: LifecycleOwner,
-    repository: DiagnosticLogRepository,
     showSensitive: Boolean,
     applySecureWindowFlag: Boolean,
-    onBackground: () -> Unit
+    onBackground: () -> Unit,
+    onDisposeScreen: () -> Unit
 ) {
-    LaunchedEffect(Unit) { repository.refresh() }
+    val currentOnBackground by rememberUpdatedState(onBackground)
+    val currentOnDisposeScreen by rememberUpdatedState(onDisposeScreen)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) onBackground()
+            if (event == Lifecycle.Event.ON_STOP) currentOnBackground()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            currentOnDisposeScreen()
         }
     }
     SecureWindowWhile(showSensitive && applySecureWindowFlag)

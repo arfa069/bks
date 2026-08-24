@@ -23,6 +23,7 @@ import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.categorization.HttpCloudAiSettingsGateway
 import com.bks.feature.diagnostics.DiagnosticLogRepository
 import com.bks.feature.diagnostics.DiagnosticLogs
+import com.bks.feature.diagnostics.DiagnosticLogsViewModel
 import com.bks.feature.review.ReviewQueuePersistence
 import com.bks.feature.settings.LocalDataBackupRepository
 import com.bks.feature.sync.HttpLedgerSyncRepository
@@ -151,6 +152,9 @@ internal class BksAppContainer(context: Context) {
         reviewQueuePersistence = ReviewQueuePersistence(ledgerRepository),
         preferencesRepository = preferencesRepository
     )
+
+    fun createDiagnosticLogsViewModel(): DiagnosticLogsViewModel =
+        DiagnosticLogsViewModel(diagnosticLogs)
 
     fun createBillSyncStateCoordinator(activity: ComponentActivity): BillSyncStateCoordinator =
         BillSyncStateCoordinator(activity)
