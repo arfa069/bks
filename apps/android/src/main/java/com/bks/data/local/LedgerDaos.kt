@@ -249,6 +249,9 @@ interface FundingAccountDao {
 
 @Dao
 interface PendingEntryDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnore(entry: PendingEntryEntity): Long
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entry: PendingEntryEntity)
 
@@ -279,7 +282,7 @@ interface PendingEntryDao {
     suspend fun countByFundingAccountId(fundingAccountId: Long): Int
 
     @Query("DELETE FROM pending_entries WHERE id = :id")
-    suspend fun deleteById(id: String)
+    suspend fun deleteById(id: String): Int
 
     @Query("DELETE FROM pending_entries")
     suspend fun deleteAll()
@@ -400,6 +403,12 @@ interface LedgerEntryDao {
     @Query("SELECT id FROM ledger_entries WHERE origin_pending_entry_id = :pendingEntryId LIMIT 1")
     suspend fun findIdByOriginPendingEntryId(pendingEntryId: String): String?
 
+    @Query(
+        "SELECT * FROM ledger_entries WHERE origin_pending_entry_id = :pendingEntryId " +
+            "AND deleted_at_epoch_millis IS NULL"
+    )
+    suspend fun listActiveByOriginPendingEntryId(pendingEntryId: String): List<LedgerEntryEntity>
+
     @Query("DELETE FROM ledger_entries WHERE origin_pending_entry_id = :pendingEntryId")
     suspend fun deleteByOriginPendingEntryId(pendingEntryId: String)
 
@@ -439,11 +448,14 @@ interface IgnoredEntryDao {
     @Query("SELECT * FROM ignored_entries ORDER BY ignored_at_epoch_millis DESC")
     suspend fun listAll(): List<IgnoredEntryEntity>
 
+    @Query("SELECT * FROM ignored_entries WHERE original_pending_entry_id = :pendingEntryId")
+    suspend fun listByOriginalPendingEntryId(pendingEntryId: String): List<IgnoredEntryEntity>
+
     @Query("SELECT COUNT(*) FROM ignored_entries WHERE funding_account_id = :fundingAccountId")
     suspend fun countByFundingAccountId(fundingAccountId: Long): Int
 
     @Query("DELETE FROM ignored_entries WHERE id = :id")
-    suspend fun deleteById(id: String)
+    suspend fun deleteById(id: String): Int
 
     @Query("DELETE FROM ignored_entries")
     suspend fun deleteAll()

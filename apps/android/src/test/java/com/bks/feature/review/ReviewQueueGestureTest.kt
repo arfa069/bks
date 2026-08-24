@@ -75,7 +75,7 @@ class ReviewQueueGestureTest {
     @Test
     fun longSwipeFromStartToEndConfirmsPendingEntry() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -95,7 +95,7 @@ class ReviewQueueGestureTest {
     @Test
     fun longSwipeFromEndToStartIgnoresPendingEntry() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -115,7 +115,7 @@ class ReviewQueueGestureTest {
     @Test
     fun confirmShowsUndoAndRestoresEntry() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -132,7 +132,7 @@ class ReviewQueueGestureTest {
     @Test
     fun ignoreCanBeRecoveredFromIgnoredList() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()

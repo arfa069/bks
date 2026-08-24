@@ -71,7 +71,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 |---|---|---|
 | 3.1 | [Ledger](./phase-3/step-3.1-ledger.md) | Completed |
 | 3.2 | [Categorization](./phase-3/step-3.2-categorization.md) | Completed |
-| 3.3 | [Review](./phase-3/step-3.3-review.md) | Pending |
+| 3.3 | [Review](./phase-3/step-3.3-review.md) | Completed |
 | 3.4 | [Automatic Bookkeeping](./phase-3/step-3.4-auto-bookkeeping.md) | Pending |
 
 ### Phase 4 — Account UI / Backup / Diagnostics

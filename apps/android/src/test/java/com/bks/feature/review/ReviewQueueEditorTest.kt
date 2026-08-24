@@ -35,11 +35,11 @@ class ReviewQueueEditorTest {
 
     @Test
     fun sharedEditorConfirmsSelectedCategoryAndFundingAccount() {
-        val nextState = AtomicReference<ReviewQueueState?>()
+        val nextCommand = AtomicReference<ReviewPersistenceCommand?>()
         composeRule.setContent {
             ReviewQueueScreen(
                 state = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
-                onStateChange = { nextState.set(it) },
+                onCommand = { nextCommand.set(it) },
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("shopping", "购物", TransactionKind.EXPENSE)
@@ -81,15 +81,16 @@ class ReviewQueueEditorTest {
         composeRule.onNodeWithText("这次不保存").performClick()
         composeRule.waitForIdle()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) { nextState.get() != null }
-        val confirmed = requireNotNull(nextState.get()).confirmedEntries.single().entry
-        assertEquals("工作餐", confirmed.title)
-        assertEquals(4_580L, confirmed.amountMinor)
-        assertEquals("shopping", confirmed.categoryId)
-        assertEquals("购物", confirmed.category)
-        assertEquals(84L, confirmed.fundingAccountId)
-        assertEquals("支付宝余额", confirmed.fundingAccountLabel)
-        assertEquals("客户会议", confirmed.note)
+        composeRule.waitUntil(timeoutMillis = 5_000) { nextCommand.get() != null }
+        val confirmed = requireNotNull(nextCommand.get()) as ReviewPersistenceCommand.Confirm
+        val edit = requireNotNull(confirmed.edit)
+        assertEquals("工作餐", edit.title)
+        assertEquals(4_580L, edit.amountMinor)
+        assertEquals("shopping", edit.categoryId)
+        assertEquals("购物", edit.category)
+        assertEquals(84L, edit.fundingAccountId)
+        assertEquals("支付宝余额", edit.fundingAccountLabel)
+        assertEquals("客户会议", edit.note)
     }
 
     @Test
@@ -126,7 +127,7 @@ class ReviewQueueEditorTest {
     @Test
     fun categoryCorrectionAsksBeforeSavingRule() {
         composeRule.setContent {
-            ReviewQueueScreen(
+            TestReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),

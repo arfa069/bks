@@ -25,14 +25,10 @@ class BillSyncCaptureProcessor(
 
         return captureCoordinator.serialize {
             reviewQueuePersistence.ensureSystemCategories()
-            val previousState = reviewQueuePersistence.observeState().first()
             val rules = preferencesRepository.categorizationRules.first()
             val createdEntries = result.createdEntries.map { it.applyCategorizationSuggestion(rules) }
             if (createdEntries.isNotEmpty()) {
-                val nextState = previousState.copy(
-                    pendingEntries = createdEntries + previousState.pendingEntries
-                )
-                reviewQueuePersistence.persistTransition(previousState, nextState)
+                reviewQueuePersistence.insertCapturedEntries(createdEntries)
             }
             result.copy(createdEntries = createdEntries)
         }

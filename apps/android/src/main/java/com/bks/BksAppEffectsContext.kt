@@ -6,12 +6,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.bks.feature.account.AccountSession
-import com.bks.feature.diagnostics.DiagnosticComponent
-import com.bks.feature.diagnostics.DiagnosticEvent
-import com.bks.feature.diagnostics.DiagnosticEventMetadata
-import com.bks.feature.diagnostics.DiagnosticLevel
-import com.bks.feature.diagnostics.DiagnosticSource
-import com.bks.feature.review.ReviewQueueState
 import com.bks.ui.BksAppState
 
 internal data class BksAppEffectsContext(
@@ -46,15 +40,6 @@ private fun BksSyncLifecycleEffects(context: BksAppEffectsContext) {
 private fun BksLocalPersistenceEffects(context: BksAppEffectsContext) {
     val dependencies = context.dependencies
     val runtime = context.runtime
-    LaunchedEffect(dependencies.local.reviewQueuePersistence) {
-        dependencies.local.reviewQueuePersistence.observeState().collect { persistedState ->
-            runtime.reviewState = persistedState.copy(
-                confirmedEntries = runtime.reviewState.confirmedEntries,
-                lastAction = runtime.reviewState.lastAction,
-                undoEventSequence = runtime.reviewState.undoEventSequence
-            )
-        }
-    }
     LaunchedEffect(dependencies.local.preferencesRepository) {
         dependencies.local.preferencesRepository.categorizationRules.collect {
             runtime.categorizationRules = it

@@ -20,12 +20,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.feature.account.AccountCloudSettingsCoordinator
 import com.bks.feature.account.AccountCredentials
 import com.bks.feature.account.AccountRepository
+import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.AccountSessionNotice
 import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.ledger.LedgerViewModel
+import com.bks.feature.ledger.LedgerUiState
+import com.bks.feature.review.ReviewQueueState
+import com.bks.feature.review.ReviewQueueViewModel
+import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.feature.sync.LedgerSyncViewModel
 import com.bks.ui.components.SlidePageTransition
 import com.bks.ui.rememberBksAppState
@@ -64,28 +69,28 @@ fun BksApp(
     val runtime = rememberBksAppRuntimeState()
     val accountSessionCoordinator = dependencies.account.sessionCoordinator
     val cloudSettingsCoordinator = dependencies.account.cloudSettingsCoordinator
-    val ledgerViewModel: LedgerViewModel = viewModel(factory = ledgerFactory(dependencies, cloudSettingsCoordinator))
-    val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerSyncViewModel(
-                runtime = dependencies.sync.runtime,
-                coordinator = dependencies.sync.coordinator,
-                accountSessionState = accountSessionCoordinator.state
-            ) as T
-        }
+    val owners = rememberBksFeatureOwners(
+        dependencies = dependencies,
+        accountSessionCoordinator = accountSessionCoordinator,
+        cloudSettingsCoordinator = cloudSettingsCoordinator
     )
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
     val cloudSettingsState by cloudSettingsCoordinator.state.collectAsStateWithLifecycle()
-    val ledgerUiState by ledgerViewModel.uiState.collectAsStateWithLifecycle()
-    val ledgerSyncUiState by ledgerSyncViewModel.uiState.collectAsStateWithLifecycle()
-    val actions = androidx.compose.runtime.remember(dependencies, runtime, appState, coroutineScope, ledgerViewModel) {
+    val actions = androidx.compose.runtime.remember(
+        dependencies,
+        runtime,
+        appState,
+        coroutineScope,
+        owners.ledgerViewModel,
+        owners.reviewQueueViewModel
+    ) {
         BksAppActions(
             dependencies = dependencies,
             runtime = runtime,
             appState = appState,
             coroutineScope = coroutineScope,
-            ledgerViewModel = ledgerViewModel
+            ledgerViewModel = owners.ledgerViewModel,
+            reviewQueueViewModel = owners.reviewQueueViewModel
         )
     }
     val routeContext = BksRouteContext(
@@ -96,24 +101,16 @@ fun BksApp(
         actions = actions,
         appState = appState,
         coroutineScope = coroutineScope,
-        ledgerViewModel = ledgerViewModel,
-        ledgerUiState = ledgerUiState,
-        ledgerSyncViewModel = ledgerSyncViewModel,
-        ledgerSyncUiState = ledgerSyncUiState
+        ledgerViewModel = owners.ledgerViewModel,
+        ledgerUiState = owners.ledgerUiState,
+        reviewQueueViewModel = owners.reviewQueueViewModel,
+        reviewQueueState = owners.reviewQueueState,
+        ledgerSyncViewModel = owners.ledgerSyncViewModel,
+        ledgerSyncUiState = owners.ledgerSyncUiState
     )
 
-    LaunchedEffect(accountSessionCoordinator) {
-        accountSessionCoordinator.notices.collect { notice ->
-            appState.snackbarHostState.showSnackbar(
-                when (notice) {
-                    AccountSessionNotice.RefreshedCredentialsNotPersisted ->
-                        "账号已验证，但最新资料未能保存到本机"
-                    AccountSessionNotice.InvalidSessionMovedToLocalMode ->
-                        "登录状态已失效，已切换到本地模式"
-                }
-            )
-        }
-    }
+    BksAccountSessionNotices(accountSessionCoordinator, appState)
+    BksReviewQueueNotices(owners.reviewQueueViewModel, appState)
     LaunchedEffect(accountState, cloudSettingsState) {
         runtime.accountSession = accountState.session
         runtime.isRestoringAccountSession = accountState.isRestoring
@@ -161,6 +158,81 @@ fun BksApp(
     BksLedgerSyncAccountSwitchDialog(routeContext)
 }
 
+private data class BksFeatureOwners(
+    val ledgerViewModel: LedgerViewModel,
+    val ledgerUiState: LedgerUiState,
+    val reviewQueueViewModel: ReviewQueueViewModel,
+    val reviewQueueState: ReviewQueueState,
+    val ledgerSyncViewModel: LedgerSyncViewModel,
+    val ledgerSyncUiState: LedgerSyncUiState
+)
+
+@Composable
+private fun rememberBksFeatureOwners(
+    dependencies: BksAppDependencies,
+    accountSessionCoordinator: AccountSessionCoordinator,
+    cloudSettingsCoordinator: AccountCloudSettingsCoordinator
+): BksFeatureOwners {
+    val ledgerViewModel: LedgerViewModel = viewModel(
+        factory = ledgerFactory(dependencies, cloudSettingsCoordinator)
+    )
+    val reviewQueueViewModel: ReviewQueueViewModel = viewModel(
+        factory = reviewQueueFactory(dependencies, ledgerViewModel)
+    )
+    val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerSyncViewModel(
+                runtime = dependencies.sync.runtime,
+                coordinator = dependencies.sync.coordinator,
+                accountSessionState = accountSessionCoordinator.state
+            ) as T
+        }
+    )
+    val ledgerUiState by ledgerViewModel.uiState.collectAsStateWithLifecycle()
+    val reviewQueueState by reviewQueueViewModel.uiState.collectAsStateWithLifecycle()
+    val ledgerSyncUiState by ledgerSyncViewModel.uiState.collectAsStateWithLifecycle()
+    return BksFeatureOwners(
+        ledgerViewModel = ledgerViewModel,
+        ledgerUiState = ledgerUiState,
+        reviewQueueViewModel = reviewQueueViewModel,
+        reviewQueueState = reviewQueueState,
+        ledgerSyncViewModel = ledgerSyncViewModel,
+        ledgerSyncUiState = ledgerSyncUiState
+    )
+}
+
+@Composable
+private fun BksReviewQueueNotices(
+    reviewQueueViewModel: ReviewQueueViewModel,
+    appState: com.bks.ui.BksAppState
+) {
+    LaunchedEffect(reviewQueueViewModel) {
+        reviewQueueViewModel.notices.collect { message ->
+            appState.snackbarHostState.showSnackbar(message)
+        }
+    }
+}
+
+@Composable
+private fun BksAccountSessionNotices(
+    accountSessionCoordinator: AccountSessionCoordinator,
+    appState: com.bks.ui.BksAppState
+) {
+    LaunchedEffect(accountSessionCoordinator) {
+        accountSessionCoordinator.notices.collect { notice ->
+            appState.snackbarHostState.showSnackbar(
+                when (notice) {
+                    AccountSessionNotice.RefreshedCredentialsNotPersisted ->
+                        "账号已验证，但最新资料未能保存到本机"
+                    AccountSessionNotice.InvalidSessionMovedToLocalMode ->
+                        "登录状态已失效，已切换到本地模式"
+                }
+            )
+        }
+    }
+}
+
 private fun ledgerFactory(
     dependencies: BksAppDependencies,
     cloudSettingsCoordinator: AccountCloudSettingsCoordinator
@@ -169,5 +241,16 @@ private fun ledgerFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerViewModel(
         repository = dependencies.local.ledgerRepository,
         cloudSettingsCoordinator = cloudSettingsCoordinator
+    ) as T
+}
+
+private fun reviewQueueFactory(
+    dependencies: BksAppDependencies,
+    ledgerViewModel: LedgerViewModel
+) = object : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T = ReviewQueueViewModel(
+        persistence = dependencies.local.reviewQueuePersistence,
+        localDataReplacementInFlight = ledgerViewModel.localDataReplacementInFlight
     ) as T
 }

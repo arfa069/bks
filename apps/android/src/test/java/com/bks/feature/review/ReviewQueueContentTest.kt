@@ -148,7 +148,7 @@ class ReviewQueueContentTest {
     @Test
     fun detailShowsEvidenceAndCanConfirmOrIgnore() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()

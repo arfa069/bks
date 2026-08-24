@@ -1,23 +1,20 @@
 package com.bks.feature.review
 
-import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
 import com.bks.data.local.LocalLedgerRepository
+import com.bks.data.local.PendingEntryEdit
+import com.bks.data.local.ReviewMutationResult
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class ReviewQueuePersistence(
     private val repository: LocalLedgerRepository,
     private val nowProvider: () -> Long = { System.currentTimeMillis() },
     private val zoneId: ZoneId = ZoneId.systemDefault()
 ) {
-    private val transitionMutex = Mutex()
-
     fun observeState(): Flow<ReviewQueueState> {
         val nowEpochMillis = nowProvider()
         return combine(
@@ -36,106 +33,87 @@ class ReviewQueuePersistence(
         }
     }
 
+    internal suspend fun loadState(): ReviewQueueState = observeState().first()
+
     suspend fun ensureSystemCategories() {
         repository.seedSystemCategories()
     }
 
-    suspend fun persistTransition(
-        previous: ReviewQueueState,
-        next: ReviewQueueState,
-        targetLedgerBookId: String = DEFAULT_LEDGER_BOOK_ID
-    ): Unit = transitionMutex.withLock {
-        // Re-read Room while holding the lock so stale UI snapshots cannot erase capture changes.
-        val persistedState = observeState().first()
-        val previousPendingById = persistedState.pendingEntries.associateBy { it.id }
-        val requestedPreviousPendingById = previous.pendingEntries.associateBy { it.id }
-        val previousPendingIds = previousPendingById.keys
-        val persistedPendingIds = previousPendingById.keys
-        val nextPendingIds = next.pendingEntries.map { it.id }.toSet() +
-            (persistedPendingIds - previous.pendingEntries.map { it.id }.toSet())
-        val previousConfirmedOriginIds = repository.listLedgerEntries()
-            .mapNotNull { it.originPendingEntryId }
-            .toSet()
-        val persistedConfirmedOriginIds = previousConfirmedOriginIds
-        val nextConfirmedOriginIds = next.confirmedEntries.map { it.originPendingId }.toSet() +
-            (persistedConfirmedOriginIds - previous.confirmedEntries.map { it.originPendingId }.toSet())
-        val previousIgnoredById = persistedState.ignoredEntries.associateBy { it.id }
-        val nextIgnoredById = next.ignoredEntries.associateBy { it.id } +
-            persistedState.ignoredEntries
-                .filter { it.id !in previous.ignoredEntries.map { ignored -> ignored.id } }
-                .associateBy { it.id }
+    internal suspend fun insertCapturedEntries(entries: List<ReviewQueueEntry>): Int =
+        entries.count { entry ->
+            repository.insertPendingIfAbsent(entry.toEntity(zoneId))
+        }
 
-        next.confirmedEntries
-            .filterNot { it.originPendingId in previousConfirmedOriginIds }
-            .forEach { confirmed ->
-                confirmThroughRepository(confirmed, targetLedgerBookId)
-            }
+    internal suspend fun execute(command: ReviewPersistenceCommand): ReviewPersistenceResult =
+        when (command) {
+            is ReviewPersistenceCommand.Edit -> repository.editPendingForReview(
+                pendingEntryId = command.stableId,
+                edit = command.edit.toPendingEntryEdit()
+            ).toPersistenceResult()
 
-        nextIgnoredById.values
-            .filterNot { it.id in previousIgnoredById }
-            .forEach { ignored ->
-                repository.upsertIgnored(ignored.toEntity(zoneId))
-            }
-
-        next.pendingEntries
-            .filter { entry -> requestedPreviousPendingById[entry.id] != entry }
-            .forEach { entry ->
-                repository.upsertPending(entry.toEntity(zoneId))
-            }
-
-        previousIgnoredById.values
-            .filterNot { it.id in nextIgnoredById }
-            .forEach { ignored ->
-                val recovered = runCatching { repository.recoverIgnored(ignored.id) }.isSuccess
-                if (!recovered) {
-                    repository.deleteIgnored(ignored.id)
-                    repository.upsertPending(ignored.entry.toEntity(zoneId))
+            is ReviewPersistenceCommand.Confirm -> command.targetLedgerBookId?.let { ledgerBookId ->
+                repository.confirmPendingForReview(
+                    pendingEntryId = command.stableId,
+                    ledgerBookId = ledgerBookId,
+                    edit = command.edit?.toPendingEntryEdit()
+                ).toPersistenceResult { receipt ->
+                    ReviewPersistenceResult.Applied(
+                        ReviewPersistenceUndo.Confirmed(
+                            receipt = receipt,
+                            entry = receipt.pendingSnapshot.toReviewEntry(zoneId)
+                        )
+                    )
                 }
+            } ?: ReviewPersistenceResult.NotFound
+
+            is ReviewPersistenceCommand.Ignore -> repository.ignorePendingForReview(
+                pendingEntryId = command.stableId,
+                ignoredAtEpochMillis = nowProvider()
+            ).toPersistenceResult { ignored ->
+                ReviewPersistenceResult.Applied(
+                    ReviewPersistenceUndo.Ignored(
+                        ignoredEntryId = ignored.id,
+                        entry = ignored.toReviewIgnoredEntry(zoneId).entry
+                    )
+                )
             }
 
-        previousConfirmedOriginIds
-            .filterNot { it in nextConfirmedOriginIds }
-            .forEach { pendingEntryId ->
-                repository.moveLedgerEntryToDeletedByOriginPendingEntryId(pendingEntryId)
-            }
+            is ReviewPersistenceCommand.Recover -> repository.recoverIgnoredForReview(
+                ignoredEntryId = command.ignoredEntryId,
+                expectedPendingEntryId = command.stableId
+            ).toPersistenceResult()
 
-        previousPendingIds
-            .filterNot { it in nextPendingIds }
-            .filterNot { it in nextConfirmedOriginIds }
-            .forEach { pendingEntryId ->
-                repository.deletePending(pendingEntryId)
-            }
-    }
+            is ReviewPersistenceCommand.UndoConfirm -> repository.undoConfirmedReview(
+                receipt = command.receipt,
+                deletedAtEpochMillis = nowProvider()
+            ).toPersistenceResult()
 
-    private suspend fun confirmThroughRepository(
-        confirmed: ReviewQueueConfirmedEntry,
-        targetLedgerBookId: String
-    ) {
-        repository.upsertPending(confirmed.entry.toEntity(zoneId))
-        val result = runCatching {
-            repository.confirmPending(
-                pendingEntryId = confirmed.originPendingId,
-                ledgerBookId = targetLedgerBookId,
-                categoryId = confirmed.entry.categoryId
-                    ?: confirmed.entry.category.toCategoryIdOrNull(
-                        confirmed.entry.kindLabel.toTransactionKind()
-                    ),
-                note = confirmed.entry.note
-            )
+            is ReviewPersistenceCommand.UndoIgnore -> repository.recoverIgnoredForReview(
+                ignoredEntryId = command.ignoredEntryId,
+                expectedPendingEntryId = command.stableId
+            ).toPersistenceResult()
         }
-        if (result.isFailure) {
-            repository.upsertPending(confirmed.entry.toEntity(zoneId))
-            repository.confirmPending(
-                pendingEntryId = confirmed.originPendingId,
-                ledgerBookId = targetLedgerBookId,
-                categoryId = confirmed.entry.categoryId
-                    ?: confirmed.entry.category.toCategoryIdOrNull(
-                        confirmed.entry.kindLabel.toTransactionKind()
-                    ),
-                note = confirmed.entry.note
-            )
-        }
-    }
+}
+
+private fun ReviewEntryEdit.toPendingEntryEdit(): PendingEntryEdit = PendingEntryEdit(
+    merchantTitle = title,
+    amountMinor = amountMinor,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    transactionKind = transactionKind,
+    suggestedCategoryId = categoryId,
+    suggestedCategoryLabel = category,
+    fundingAccountId = fundingAccountId,
+    fundingAccountLabel = fundingAccountLabel,
+    note = note
+)
+
+private inline fun <T> ReviewMutationResult<T>.toPersistenceResult(
+    applied: (T) -> ReviewPersistenceResult.Applied = { ReviewPersistenceResult.Applied() }
+): ReviewPersistenceResult = when (this) {
+    is ReviewMutationResult.Applied -> applied(value)
+    ReviewMutationResult.NotFound -> ReviewPersistenceResult.NotFound
+    ReviewMutationResult.AlreadyApplied -> ReviewPersistenceResult.AlreadyApplied
+    ReviewMutationResult.Conflict -> ReviewPersistenceResult.Conflict
 }
 
 private fun todayStartEpochMillis(

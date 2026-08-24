@@ -108,8 +108,8 @@ internal fun ReviewQueueListContent(
             ) { entry ->
                 ReviewEntryRow(
                     entry = entry,
-                    onConfirm = { actions.onAction(ReviewQueueAction.Confirm(entry.id)) },
-                    onIgnore = { actions.onAction(ReviewQueueAction.Ignore(entry.id)) },
+                    onConfirm = { actions.onConfirm(entry.id) },
+                    onIgnore = { actions.onIgnore(entry.id) },
                     onEdit = { actions.onEdit(entry) }
                 )
             }

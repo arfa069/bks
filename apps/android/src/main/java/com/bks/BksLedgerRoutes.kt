@@ -19,13 +19,17 @@ internal fun BksReviewRoute(
     val runtime = context.runtime
     val presentation = context.presentation
     val ledgerState = context.ledgerUiState
+    val reviewQueueViewModel = context.reviewQueueViewModel
     ReviewQueueScreen(
-        state = runtime.reviewState,
+        state = context.reviewQueueState,
+        targetLedgerBookId = ledgerState.activeLedgerBookId,
         targetLedgerName = ledgerState.activeLedgerName,
         categories = ledgerState.categories,
         fundingAccounts = ledgerState.fundingAccounts,
         defaultFundingAccountSyncId = ledgerState.defaultFundingAccountSyncId,
-        onStateChange = context.actions::persistReviewState,
+        onCommand = reviewQueueViewModel::execute,
+        onUndo = reviewQueueViewModel::undoLastAction,
+        onDismissUndo = reviewQueueViewModel::dismissUndo,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding),

@@ -49,17 +49,20 @@ internal data class PendingReviewEdit(
     val fundingAccount: String,
     val note: String
 ) {
-    fun toSaveAction(entryId: String): ReviewQueueAction.SaveEdit = ReviewQueueAction.SaveEdit(
-        entryId = entryId,
+    fun toEntryEdit(): ReviewEntryEdit = ReviewEntryEdit(
         title = title,
-        amountText = amountText,
-        timeText = timeText,
-        transactionKind = transactionKind,
+        amountMinor = requireNotNull(parseReviewAmountMinor(amountText)) {
+            "Review amount is invalid"
+        },
+        transactionTimeEpochMillis = requireNotNull(
+            parseReviewDateTime(timeText, java.time.ZoneId.systemDefault())
+        ) { "Review transaction time is invalid" },
+        transactionKind = transactionKind.toTransactionKind(),
         categoryId = categoryId,
         category = category,
         fundingAccountId = fundingAccountId,
-        fundingAccount = fundingAccount,
-        note = note
+        fundingAccountLabel = fundingAccount,
+        note = note.trim().ifBlank { null }
     )
 
     companion object {

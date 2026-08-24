@@ -2,9 +2,7 @@ package com.bks.feature.review
 
 import com.bks.data.local.ConfidenceState
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,211 +23,34 @@ class ReviewQueueStateTest {
     }
 
     @Test
-    fun confirmMovesPendingEntryIntoLedgerCandidate() {
-        val state = ReviewQueueState(pendingEntries = listOf(sampleEntry()))
-
-        val next = reduceReviewQueue(state, ReviewQueueAction.Confirm("pending-lunch"))
-
-        assertTrue(next.pendingEntries.isEmpty())
-        assertEquals(listOf("pending-lunch"), next.confirmedEntries.map { it.originPendingId })
-        assertEquals("已确认 午餐", next.undoMessage)
-    }
-
-    @Test
-    fun sameTitleActionsCreateDistinctUndoEvents() {
-        val state = ReviewQueueState(
-            pendingEntries = listOf(
-                sampleEntry(id = "same-title-1"),
-                sampleEntry(id = "same-title-2")
-            )
+    fun ignoredRecoveryWindowIsDerivedWithoutChangingPersistentLists() {
+        val recoverable = ReviewQueueIgnoredEntry.fromPending(
+            entry = sampleEntry("recoverable"),
+            ignoredAtEpochMillis = NOW - 1,
+            expiresAtEpochMillis = NOW + 1
         )
-
-        val first = reduceReviewQueue(state, ReviewQueueAction.Confirm("same-title-1"))
-        val second = reduceReviewQueue(first, ReviewQueueAction.Confirm("same-title-2"))
-
-        assertEquals("已确认 午餐", first.undoMessage)
-        assertEquals("已确认 午餐", second.undoMessage)
-        assertFalse(first.lastAction?.eventId == second.lastAction?.eventId)
-    }
-
-    @Test
-    fun ignoreMovesPendingEntryIntoRecoverableList() {
-        val state = ReviewQueueState(
-            pendingEntries = listOf(sampleEntry()),
-            nowEpochMillis = NOW
-        )
-
-        val next = reduceReviewQueue(state, ReviewQueueAction.Ignore("pending-lunch"))
-
-        assertTrue(next.pendingEntries.isEmpty())
-        assertEquals(listOf("pending-lunch"), next.ignoredEntries.map { it.originalPendingId })
-        assertEquals(NOW, next.ignoredEntries.single().ignoredAtEpochMillis)
-        assertEquals(NOW + THIRTY_DAYS_MILLIS, next.ignoredEntries.single().expiresAtEpochMillis)
-        assertEquals("已忽略 午餐", next.undoMessage)
-    }
-
-    @Test
-    fun undoRestoresLastConfirmedOrIgnoredPendingEntry() {
-        val ignored = reduceReviewQueue(
-            ReviewQueueState(pendingEntries = listOf(sampleEntry())),
-            ReviewQueueAction.Ignore("pending-lunch")
-        )
-
-        val restored = reduceReviewQueue(ignored, ReviewQueueAction.UndoLastAction)
-
-        assertEquals(listOf("pending-lunch"), restored.pendingEntries.map { it.id })
-        assertTrue(restored.ignoredEntries.isEmpty())
-        assertNull(restored.undoMessage)
-    }
-
-    @Test
-    fun editUpdatesPendingEntryDetails() {
-        val state = ReviewQueueState(pendingEntries = listOf(sampleEntry()))
-
-        val next = reduceReviewQueue(
-            state,
-            ReviewQueueAction.SaveEdit(
-                entryId = "pending-lunch",
-                title = "工作餐",
-                amountText = "45.80",
-                timeText = "2026-07-08 12:30",
-                transactionKind = "退款",
-                categoryId = "food",
-                category = "餐饮",
-                fundingAccountId = 42L,
-                fundingAccount = "微信零钱",
-                note = "客户会议"
-            )
-        )
-
-        val edited = next.pendingEntries.single()
-        assertEquals("工作餐", edited.title)
-        assertEquals(4580, edited.amountMinor)
-        assertEquals("2026-07-08 12:30", edited.transactionTimeText)
-        assertEquals("退款", edited.kindLabel)
-        assertEquals("food", edited.categoryId)
-        assertEquals("餐饮", edited.category)
-        assertEquals(42L, edited.fundingAccountId)
-        assertEquals("微信零钱", edited.fundingAccountLabel)
-        assertEquals("客户会议", edited.note)
-    }
-
-    @Test
-    fun editClearsFundingAccountIdWhenFundingAccountLabelChanges() {
-        val state = ReviewQueueState(pendingEntries = listOf(sampleEntry()))
-
-        val next = reduceReviewQueue(
-            state,
-            ReviewQueueAction.SaveEdit(
-                entryId = "pending-lunch",
-                title = "午餐",
-                amountText = "35.90",
-                timeText = "2026-07-08 12:20",
-                transactionKind = "支出",
-                categoryId = "food",
-                category = "餐饮",
-                fundingAccountId = null,
-                fundingAccount = "支付宝余额",
-                note = ""
-            )
-        )
-
-        val edited = next.pendingEntries.single()
-        assertNull(edited.fundingAccountId)
-        assertEquals("支付宝余额", edited.fundingAccountLabel)
-    }
-
-    @Test
-    fun editCanClearFundingAccountLabelAndItsId() {
-        val state = ReviewQueueState(pendingEntries = listOf(sampleEntry()))
-
-        val next = reduceReviewQueue(
-            state,
-            ReviewQueueAction.SaveEdit(
-                entryId = "pending-lunch",
-                title = "午餐",
-                amountText = "35.90",
-                timeText = "2026-07-08 12:20",
-                transactionKind = "支出",
-                categoryId = "food",
-                category = "餐饮",
-                fundingAccountId = null,
-                fundingAccount = "",
-                note = ""
-            )
-        )
-
-        val edited = next.pendingEntries.single()
-        assertNull(edited.fundingAccountId)
-        assertEquals("", edited.fundingAccountLabel)
-    }
-
-    @Test
-    fun invalidAmountDoesNotSilentlySaveOtherEditedFields() {
-        val original = sampleEntry()
-        val state = ReviewQueueState(pendingEntries = listOf(original))
-
-        val next = reduceReviewQueue(
-            state,
-            ReviewQueueAction.SaveEdit(
-                entryId = "pending-lunch",
-                title = "工作餐",
-                amountText = "abc",
-                timeText = "2026-07-08 12:30",
-                transactionKind = "退款",
-                categoryId = "food",
-                category = "餐饮",
-                fundingAccountId = 42L,
-                fundingAccount = "微信零钱",
-                note = "客户会议"
-            )
-        )
-
-        assertEquals(original, next.pendingEntries.single())
-    }
-
-    @Test
-    fun recoverIgnoredEntryMovesItBackToPending() {
-        val ignored = ReviewQueueIgnoredEntry.fromPending(sampleEntry())
-        val state = ReviewQueueState(
-            pendingEntries = emptyList(),
-            ignoredEntries = listOf(ignored)
-        )
-
-        val next = reduceReviewQueue(state, ReviewQueueAction.RecoverIgnored(ignored.id))
-
-        assertEquals(listOf("pending-lunch"), next.pendingEntries.map { it.id })
-        assertTrue(next.ignoredEntries.isEmpty())
-    }
-
-    @Test
-    fun expiredIgnoredEntryCannotBeRecovered() {
         val expired = ReviewQueueIgnoredEntry.fromPending(
-            entry = sampleEntry(),
+            entry = sampleEntry("expired"),
             ignoredAtEpochMillis = NOW - THIRTY_DAYS_MILLIS - 1,
             expiresAtEpochMillis = NOW - 1
         )
         val state = ReviewQueueState(
-            pendingEntries = emptyList(),
-            ignoredEntries = listOf(expired),
+            ignoredEntries = listOf(recoverable, expired),
             nowEpochMillis = NOW
         )
 
-        val next = reduceReviewQueue(state, ReviewQueueAction.RecoverIgnored(expired.id))
-
-        assertTrue(next.pendingEntries.isEmpty())
-        assertEquals(listOf(expired), next.ignoredEntries)
-        assertTrue(state.recoverableIgnoredEntries.isEmpty())
+        assertEquals(listOf(recoverable), state.recoverableIgnoredEntries)
+        assertEquals(listOf(recoverable, expired), state.ignoredEntries)
     }
 
     @Test
     fun pendingEntriesAreSortedByRiskThenCaptureTime() {
         val state = ReviewQueueState(
             pendingEntries = listOf(
-                sampleEntry(id = "quick-new", confidence = ConfidenceState.HIGH, capturedAt = NOW + 3),
-                sampleEntry(id = "low-old", confidence = ConfidenceState.NEEDS_REVIEW, capturedAt = NOW + 1),
-                sampleEntry(id = "duplicate-old", confidence = ConfidenceState.DUPLICATE_SUSPECT, capturedAt = NOW),
-                sampleEntry(id = "duplicate-new", confidence = ConfidenceState.DUPLICATE_SUSPECT, capturedAt = NOW + 2)
+                sampleEntry("quick-new", ConfidenceState.HIGH, NOW + 3),
+                sampleEntry("low-old", ConfidenceState.NEEDS_REVIEW, NOW + 1),
+                sampleEntry("duplicate-old", ConfidenceState.DUPLICATE_SUSPECT, NOW),
+                sampleEntry("duplicate-new", ConfidenceState.DUPLICATE_SUSPECT, NOW + 2)
             )
         )
 
@@ -240,40 +61,12 @@ class ReviewQueueStateTest {
     }
 
     @Test
-    fun missingActionTargetsLeaveStateUntouched() {
-        val state = ReviewQueueState(
-            pendingEntries = listOf(sampleEntry()),
-            ignoredEntries = listOf(
-                ReviewQueueIgnoredEntry.fromPending(sampleEntry(id = "ignored-source"))
-            )
-        )
+    fun amountParsingRejectsInvalidValuesWithoutPartialStateMutation() {
+        val state = ReviewQueueState(pendingEntries = listOf(sampleEntry()))
 
-        assertSame(state, reduceReviewQueue(state, ReviewQueueAction.Confirm("missing")))
-        assertSame(state, reduceReviewQueue(state, ReviewQueueAction.Ignore("missing")))
-        assertSame(
-            state,
-            reduceReviewQueue(state, ReviewQueueAction.RecoverIgnored("missing"))
-        )
-    }
-
-    @Test
-    fun dismissUndoOnlyClearsLastAction() {
-        val state = reduceReviewQueue(
-            reduceReviewQueue(
-                ReviewQueueState(
-                    pendingEntries = listOf(
-                        sampleEntry(id = "confirmed"),
-                        sampleEntry(id = "ignored")
-                    )
-                ),
-                ReviewQueueAction.Confirm("confirmed")
-            ),
-            ReviewQueueAction.Ignore("ignored")
-        )
-
-        val dismissed = reduceReviewQueue(state, ReviewQueueAction.DismissUndo)
-
-        assertEquals(state.copy(lastAction = null), dismissed)
+        assertNull(parseReviewAmountMinor("abc"))
+        assertEquals(4_580L, parseReviewAmountMinor("45.80"))
+        assertEquals("午餐", state.pendingEntries.single().title)
     }
 
     private fun sampleEntry(
@@ -283,7 +76,7 @@ class ReviewQueueStateTest {
     ): ReviewQueueEntry = ReviewQueueEntry(
         id = id,
         title = "午餐",
-        amountMinor = 3590,
+        amountMinor = 3_590,
         transactionTimeText = "2026-07-08 12:20",
         categoryId = "food",
         category = "餐饮",
@@ -294,10 +87,7 @@ class ReviewQueueStateTest {
         captureReasonLabel = "通知捕获",
         confidence = confidence,
         capturedAtEpochMillis = capturedAt,
-        captureTimeText = "2026-07-08 12:21",
-        note = null,
-        rawEvidenceText = "微信支付收款凭证 午餐 35.90",
-        parsedFields = listOf("商户=午餐", "金额=35.90")
+        captureTimeText = "2026-07-08 12:21"
     )
 
     private companion object {

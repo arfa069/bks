@@ -237,6 +237,41 @@ class LedgerViewModelTest {
     }
 
     @Test
+    fun externalLocalDataReplacementUsesTheSameWriteGate() = runTest {
+        withViewModel { viewModel ->
+            viewModel.awaitReady()
+            viewModel.createManualEntry(input(title = "替换前账目"))
+            viewModel.awaitState { it.entries.singleOrNull()?.title == "替换前账目" }
+            val allowReplacement = CompletableDeferred<Unit>()
+
+            val replacementJob = async {
+                viewModel.runLocalDataReplacement {
+                    allowReplacement.await()
+                    repository.clearLocalData()
+                }
+            }
+            runCurrent()
+
+            assertTrue(viewModel.localDataReplacementInFlight.value)
+            val failure = runCatching {
+                viewModel.createManualEntry(input(title = "替换期间账目"))
+            }.exceptionOrNull()
+            assertEquals("本机数据正在删除，请稍后重试", failure?.message)
+
+            allowReplacement.complete(Unit)
+            replacementJob.await()
+
+            assertFalse(viewModel.localDataReplacementInFlight.value)
+            viewModel.createManualEntry(input(title = "替换后账目"))
+            assertEquals(
+                listOf("替换后账目"),
+                viewModel.awaitState { it.entries.singleOrNull()?.title == "替换后账目" }
+                    .entries.map(LedgerUiEntry::title)
+            )
+        }
+    }
+
+    @Test
     fun initialStateIsEmptyUntilRoomEmits() = runTest {
         withViewModel(advanceBeforeBlock = false) { viewModel ->
             assertTrue(viewModel.uiState.value.entries.isEmpty())

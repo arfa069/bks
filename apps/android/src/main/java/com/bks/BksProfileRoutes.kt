@@ -149,7 +149,6 @@ private fun BksDataAndBackupRoute(
     context: BksRouteContext,
     innerPadding: PaddingValues
 ) {
-    val runtime = context.runtime
     val dependencies = context.dependencies
     DataAndBackupScreen(
         ledgerEntries = context.ledgerUiState.entries,
@@ -161,8 +160,10 @@ private fun BksDataAndBackupRoute(
             dependencies.local.dataBackupRepository.validateEncryptedBackup(backup, passphrase)
         },
         onImportEncryptedBackup = { backup, passphrase ->
-            dependencies.local.dataBackupRepository.importEncryptedBackup(backup, passphrase)
-            runtime.reviewState = com.bks.feature.review.ReviewQueueState()
+            context.ledgerViewModel.runLocalDataReplacement {
+                context.reviewQueueViewModel.awaitIdleAndResetForLocalDataReplacement()
+                dependencies.local.dataBackupRepository.importEncryptedBackup(backup, passphrase)
+            }
         },
         onDeleteLocalData = context.actions::clearLocalData,
         onBack = { context.appState.profileDestination.value = null },

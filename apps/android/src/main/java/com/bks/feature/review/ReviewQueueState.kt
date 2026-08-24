@@ -6,16 +6,12 @@ import java.math.RoundingMode
 
 data class ReviewQueueState(
     val pendingEntries: List<ReviewQueueEntry> = emptyList(),
-    val confirmedEntries: List<ReviewQueueConfirmedEntry> = emptyList(),
     val ignoredEntries: List<ReviewQueueIgnoredEntry> = emptyList(),
-    val lastAction: ReviewQueueLastAction? = null,
-    val undoEventSequence: Long = 0,
+    val operation: ReviewQueueOperation = ReviewQueueOperation.Idle,
+    val undoEvent: ReviewQueueUndoEvent? = null,
     val nowEpochMillis: Long = SAMPLE_NOW_EPOCH_MILLIS,
     val todayStartEpochMillis: Long = SAMPLE_TODAY_START_EPOCH_MILLIS
 ) {
-    val undoMessage: String?
-        get() = lastAction?.message
-
     val sortedPendingEntries: List<ReviewQueueEntry>
         get() = pendingEntries.sortedWith(
             compareBy<ReviewQueueEntry> { it.reviewPriority }
@@ -31,6 +27,29 @@ data class ReviewQueueState(
     val todaysNewlyCapturedCount: Int
         get() = pendingEntries.count { it.capturedAtEpochMillis >= todayStartEpochMillis }
 }
+
+sealed interface ReviewQueueOperation {
+    data object Idle : ReviewQueueOperation
+
+    data class InFlight(
+        val stableId: String,
+        val kind: ReviewQueueOperationKind
+    ) : ReviewQueueOperation
+}
+
+enum class ReviewQueueOperationKind {
+    EDIT,
+    CONFIRM,
+    IGNORE,
+    RECOVER,
+    UNDO_CONFIRM,
+    UNDO_IGNORE
+}
+
+data class ReviewQueueUndoEvent(
+    val eventId: String,
+    val message: String
+)
 
 data class ReviewQueueEntry(
     val id: String,
@@ -94,21 +113,6 @@ private val REVIEW_EVIDENCE_HEADER_REGEX = Regex(
     pattern = "(?m)^\\[([^]\\r\\n]+)]\\s*$"
 )
 
-data class ReviewQueueConfirmedEntry(
-    val id: String,
-    val originPendingId: String,
-    val entry: ReviewQueueEntry
-) {
-    companion object {
-        fun fromPending(entry: ReviewQueueEntry): ReviewQueueConfirmedEntry =
-            ReviewQueueConfirmedEntry(
-                id = "ledger-${entry.id}",
-                originPendingId = entry.id,
-                entry = entry
-            )
-    }
-}
-
 data class ReviewQueueIgnoredEntry(
     val id: String,
     val originalPendingId: String,
@@ -129,168 +133,6 @@ data class ReviewQueueIgnoredEntry(
                 ignoredAtEpochMillis = ignoredAtEpochMillis,
                 expiresAtEpochMillis = expiresAtEpochMillis
             )
-    }
-}
-
-sealed interface ReviewQueueAction {
-    data class Confirm(val entryId: String) : ReviewQueueAction
-    data class Ignore(val entryId: String) : ReviewQueueAction
-    data object UndoLastAction : ReviewQueueAction
-    data object DismissUndo : ReviewQueueAction
-    data class RecoverIgnored(val ignoredEntryId: String) : ReviewQueueAction
-    data class SaveEdit(
-        val entryId: String,
-        val title: String,
-        val amountText: String,
-        val timeText: String,
-        val transactionKind: String,
-        val categoryId: String?,
-        val category: String,
-        val fundingAccountId: Long?,
-        val fundingAccount: String,
-        val note: String
-    ) : ReviewQueueAction
-}
-
-sealed interface ReviewQueueLastAction {
-    val eventId: String
-    val entry: ReviewQueueEntry
-    val message: String
-
-    data class Confirmed(
-        override val eventId: String,
-        override val entry: ReviewQueueEntry,
-        val ledgerEntry: ReviewQueueConfirmedEntry
-    ) : ReviewQueueLastAction {
-        override val message: String = "已确认 ${entry.title}"
-    }
-
-    data class Ignored(
-        override val eventId: String,
-        override val entry: ReviewQueueEntry,
-        val ignoredEntry: ReviewQueueIgnoredEntry
-    ) : ReviewQueueLastAction {
-        override val message: String = "已忽略 ${entry.title}"
-    }
-}
-
-fun reduceReviewQueue(
-    state: ReviewQueueState,
-    action: ReviewQueueAction
-): ReviewQueueState = when (action) {
-    is ReviewQueueAction.Confirm -> ReviewQueueTransitions.confirmPendingEntry(state, action.entryId)
-    is ReviewQueueAction.Ignore -> ReviewQueueTransitions.ignorePendingEntry(state, action.entryId)
-    ReviewQueueAction.UndoLastAction -> ReviewQueueTransitions.undoReviewQueueAction(state)
-    ReviewQueueAction.DismissUndo -> state.copy(lastAction = null)
-    is ReviewQueueAction.RecoverIgnored ->
-        ReviewQueueTransitions.recoverIgnoredEntry(state, action.ignoredEntryId)
-    is ReviewQueueAction.SaveEdit -> ReviewQueueTransitions.saveReviewEdit(state, action)
-}
-
-private object ReviewQueueTransitions {
-    fun confirmPendingEntry(
-        state: ReviewQueueState,
-        entryId: String
-    ): ReviewQueueState {
-        val entry = state.pendingEntries.firstOrNull { it.id == entryId }
-            ?: return state
-        val ledgerEntry = ReviewQueueConfirmedEntry.fromPending(entry)
-        val nextEventSequence = state.undoEventSequence + 1
-        return state.copy(
-            pendingEntries = state.pendingEntries.filterNot { it.id == entryId },
-            confirmedEntries = state.confirmedEntries + ledgerEntry,
-            lastAction = ReviewQueueLastAction.Confirmed(
-                eventId = "review-undo-$nextEventSequence",
-                entry = entry,
-                ledgerEntry = ledgerEntry
-            ),
-            undoEventSequence = nextEventSequence
-        )
-    }
-
-    fun ignorePendingEntry(
-        state: ReviewQueueState,
-        entryId: String
-    ): ReviewQueueState {
-        val entry = state.pendingEntries.firstOrNull { it.id == entryId }
-            ?: return state
-        val ignoredEntry = ReviewQueueIgnoredEntry.fromPending(
-            entry = entry,
-            ignoredAtEpochMillis = state.nowEpochMillis
-        )
-        val nextEventSequence = state.undoEventSequence + 1
-        return state.copy(
-            pendingEntries = state.pendingEntries.filterNot { it.id == entryId },
-            ignoredEntries = state.ignoredEntries + ignoredEntry,
-            lastAction = ReviewQueueLastAction.Ignored(
-                eventId = "review-undo-$nextEventSequence",
-                entry = entry,
-                ignoredEntry = ignoredEntry
-            ),
-            undoEventSequence = nextEventSequence
-        )
-    }
-
-    fun undoReviewQueueAction(state: ReviewQueueState): ReviewQueueState =
-        when (val lastAction = state.lastAction) {
-            is ReviewQueueLastAction.Confirmed -> state.copy(
-                pendingEntries = listOf(lastAction.entry) + state.pendingEntries,
-                confirmedEntries = state.confirmedEntries.filterNot {
-                    it.id == lastAction.ledgerEntry.id
-                },
-                lastAction = null
-            )
-
-            is ReviewQueueLastAction.Ignored -> state.copy(
-                pendingEntries = listOf(lastAction.entry) + state.pendingEntries,
-                ignoredEntries = state.ignoredEntries.filterNot {
-                    it.id == lastAction.ignoredEntry.id
-                },
-                lastAction = null
-            )
-
-            null -> state
-        }
-
-    fun recoverIgnoredEntry(
-        state: ReviewQueueState,
-        ignoredEntryId: String
-    ): ReviewQueueState {
-        val ignored = state.recoverableIgnoredEntries.firstOrNull { it.id == ignoredEntryId }
-            ?: return state
-        return state.copy(
-            pendingEntries = listOf(ignored.entry) + state.pendingEntries,
-            ignoredEntries = state.ignoredEntries.filterNot { it.id == ignored.id },
-            lastAction = null
-        )
-    }
-
-    fun saveReviewEdit(
-        state: ReviewQueueState,
-        action: ReviewQueueAction.SaveEdit
-    ): ReviewQueueState {
-        val amountMinor = parseReviewAmountMinor(action.amountText) ?: return state
-        return state.copy(
-            pendingEntries = state.pendingEntries.map { entry ->
-                if (entry.id != action.entryId) {
-                    entry
-                } else {
-                    val normalizedFundingAccount = action.fundingAccount.trim()
-                    entry.copy(
-                        title = action.title.trim().ifBlank { entry.title },
-                        amountMinor = amountMinor,
-                        transactionTimeText = action.timeText.trim()
-                            .ifBlank { entry.transactionTimeText },
-                        kindLabel = action.transactionKind.trim().ifBlank { entry.kindLabel },
-                        categoryId = action.categoryId,
-                        category = action.category.trim().ifBlank { entry.category },
-                        fundingAccountId = action.fundingAccountId,
-                        fundingAccountLabel = normalizedFundingAccount,
-                        note = action.note.trim().ifBlank { null }
-                    )
-                }
-            }
-        )
     }
 }
 

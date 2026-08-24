@@ -10,11 +10,9 @@ import com.bks.data.local.ConfidenceState
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
 import com.bks.data.local.PaymentSource
-import com.bks.feature.review.ReviewQueueAction
 import com.bks.feature.review.ReviewQueuePersistence
-import com.bks.feature.review.reduceReviewQueue
+import com.bks.feature.review.ReviewPersistenceCommand
 import java.time.ZoneId
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -71,9 +69,12 @@ class BillSyncCaptureProcessorTest {
         assertNull(pending.evidenceSummary)
         assertTrue(database.ledgerEntryDao().listLedgerEntries().isEmpty())
 
-        val previous = persistence.observeState().first()
-        val confirmed = reduceReviewQueue(previous, ReviewQueueAction.Confirm(pending.id))
-        persistence.persistTransition(previous, confirmed)
+        persistence.execute(
+            ReviewPersistenceCommand.Confirm(
+                stableId = pending.id,
+                targetLedgerBookId = com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
+            )
+        )
 
         assertNull(database.pendingEntryDao().getById(pending.id))
         val ledger = database.ledgerEntryDao().listLedgerEntries().single()

@@ -28,6 +28,35 @@ sealed interface FundingAccountDeleteResult {
     ) : FundingAccountDeleteResult
 }
 
+data class PendingEntryEdit(
+    val merchantTitle: String,
+    val amountMinor: Long,
+    val transactionTimeEpochMillis: Long,
+    val transactionKind: TransactionKind,
+    val suggestedCategoryId: String?,
+    val suggestedCategoryLabel: String?,
+    val fundingAccountId: Long?,
+    val fundingAccountLabel: String?,
+    val note: String?
+)
+
+data class ReviewConfirmationReceipt(
+    val pendingSnapshot: PendingEntryEntity,
+    val ledgerEntry: LedgerEntryEntity
+)
+
+data class ReviewConfirmationOverrides(
+    val categoryId: String? = null,
+    val note: String? = null
+)
+
+sealed interface ReviewMutationResult<out T> {
+    data class Applied<T>(val value: T) : ReviewMutationResult<T>
+    data object NotFound : ReviewMutationResult<Nothing>
+    data object AlreadyApplied : ReviewMutationResult<Nothing>
+    data object Conflict : ReviewMutationResult<Nothing>
+}
+
 data class LedgerRepositoryState(
     val ledgerBooks: List<LedgerBookEntryCounts> = emptyList(),
     val activeLedgerBook: LedgerBookEntity? = null,
@@ -150,12 +179,184 @@ class LocalLedgerRepository private constructor(
         database.pendingEntryDao().upsert(entry)
     }
 
+    suspend fun insertPendingIfAbsent(entry: PendingEntryEntity): Boolean = database.withTransaction {
+        val pendingExists = database.pendingEntryDao().getById(entry.id) != null
+        val activeLedgerExists = database.ledgerEntryDao()
+            .listActiveByOriginPendingEntryId(entry.id)
+            .isNotEmpty()
+        val ignoredExists = database.ignoredEntryDao()
+            .listByOriginalPendingEntryId(entry.id)
+            .isNotEmpty()
+        if (pendingExists || activeLedgerExists || ignoredExists) {
+            false
+        } else {
+            database.pendingEntryDao().insertIgnore(entry) != -1L
+        }
+    }
+
     suspend fun deletePending(pendingEntryId: String) {
         database.pendingEntryDao().deleteById(pendingEntryId)
     }
 
     suspend fun upsertIgnored(entry: IgnoredEntryEntity) {
         database.ignoredEntryDao().upsert(entry)
+    }
+
+    suspend fun editPendingForReview(
+        pendingEntryId: String,
+        edit: PendingEntryEdit
+    ): ReviewMutationResult<PendingEntryEntity> = database.withTransaction {
+        val pending = database.pendingEntryDao().getById(pendingEntryId)
+        val ledgerEntries = database.ledgerEntryDao().listActiveByOriginPendingEntryId(pendingEntryId)
+        val ignoredEntries = database.ignoredEntryDao().listByOriginalPendingEntryId(pendingEntryId)
+        if (pending == null) {
+            return@withTransaction transitionedReviewResult(
+                expectedTransition = ReviewExpectedTransition.EDIT,
+                ledgerEntryCount = ledgerEntries.size,
+                ignoredEntryCount = ignoredEntries.size
+            )
+        }
+        if (ledgerEntries.isNotEmpty() || ignoredEntries.isNotEmpty()) {
+            return@withTransaction ReviewMutationResult.Conflict
+        }
+        val updated = pending.applyEdit(edit)
+        database.pendingEntryDao().upsert(updated)
+        ReviewMutationResult.Applied(updated)
+    }
+
+    suspend fun confirmPendingForReview(
+        pendingEntryId: String,
+        ledgerBookId: String,
+        edit: PendingEntryEdit? = null,
+        overrides: ReviewConfirmationOverrides = ReviewConfirmationOverrides(),
+        confirmedAtEpochMillis: Long = clock()
+    ): ReviewMutationResult<ReviewConfirmationReceipt> = database.withTransaction {
+        val pending = database.pendingEntryDao().getById(pendingEntryId)
+        val ledgerEntries = database.ledgerEntryDao().listActiveByOriginPendingEntryId(pendingEntryId)
+        val ignoredEntries = database.ignoredEntryDao().listByOriginalPendingEntryId(pendingEntryId)
+        if (pending == null) {
+            return@withTransaction transitionedReviewResult(
+                expectedTransition = ReviewExpectedTransition.CONFIRM,
+                ledgerEntryCount = ledgerEntries.size,
+                ignoredEntryCount = ignoredEntries.size
+            )
+        }
+        if (ledgerEntries.isNotEmpty() || ignoredEntries.isNotEmpty()) {
+            return@withTransaction ReviewMutationResult.Conflict
+        }
+        val targetLedgerBook = components.ledgerBooks.requireForWrite(ledgerBookId)
+        val pendingToConfirm = edit?.let(pending::applyEdit) ?: pending.copy(
+            suggestedCategoryId = overrides.categoryId ?: pending.suggestedCategoryId,
+            note = overrides.note ?: pending.note
+        )
+        val ledgerEntry = pendingToConfirm.toConfirmedLedgerEntry(
+            id = idGenerator(),
+            ledgerBookId = targetLedgerBook.id,
+            confirmedAtEpochMillis = confirmedAtEpochMillis,
+            fundingAccountId = components.fundingAccounts.resolvePending(pendingToConfirm)
+        )
+        database.pendingEntryDao().upsert(pendingToConfirm)
+        database.ledgerEntryDao().upsert(ledgerEntry)
+        check(database.pendingEntryDao().deleteById(pendingEntryId) == 1)
+        LocalSyncMutationRecorder(database, clock, idGenerator).record(ledgerEntry)
+        ReviewMutationResult.Applied(
+            ReviewConfirmationReceipt(
+                pendingSnapshot = pendingToConfirm,
+                ledgerEntry = ledgerEntry
+            )
+        )
+    }
+
+    suspend fun ignorePendingForReview(
+        pendingEntryId: String,
+        reason: IgnoreReason = IgnoreReason.USER_IGNORED,
+        ignoredAtEpochMillis: Long = clock()
+    ): ReviewMutationResult<IgnoredEntryEntity> = database.withTransaction {
+        val pending = database.pendingEntryDao().getById(pendingEntryId)
+        val ledgerEntries = database.ledgerEntryDao().listActiveByOriginPendingEntryId(pendingEntryId)
+        val ignoredEntries = database.ignoredEntryDao().listByOriginalPendingEntryId(pendingEntryId)
+        if (pending == null) {
+            return@withTransaction transitionedReviewResult(
+                expectedTransition = ReviewExpectedTransition.IGNORE,
+                ledgerEntryCount = ledgerEntries.size,
+                ignoredEntryCount = ignoredEntries.size
+            )
+        }
+        if (ledgerEntries.isNotEmpty() || ignoredEntries.isNotEmpty()) {
+            return@withTransaction ReviewMutationResult.Conflict
+        }
+        val ignoredEntry = pending.toIgnoredEntry(
+            id = idGenerator(),
+            reason = reason,
+            ignoredAtEpochMillis = ignoredAtEpochMillis
+        )
+        database.ignoredEntryDao().upsert(ignoredEntry)
+        check(database.pendingEntryDao().deleteById(pendingEntryId) == 1)
+        ReviewMutationResult.Applied(ignoredEntry)
+    }
+
+    suspend fun recoverIgnoredForReview(
+        ignoredEntryId: String,
+        expectedPendingEntryId: String
+    ): ReviewMutationResult<PendingEntryEntity> = database.withTransaction {
+        val ignored = database.ignoredEntryDao().getById(ignoredEntryId)
+        val currentPending = database.pendingEntryDao().getById(expectedPendingEntryId)
+        if (ignored == null) {
+            return@withTransaction if (currentPending != null) {
+                ReviewMutationResult.AlreadyApplied
+            } else {
+                ReviewMutationResult.NotFound
+            }
+        }
+        val sameOriginIgnored = database.ignoredEntryDao()
+            .listByOriginalPendingEntryId(expectedPendingEntryId)
+        val ledgerEntries = database.ledgerEntryDao()
+            .listActiveByOriginPendingEntryId(expectedPendingEntryId)
+        val ignoredTargetMismatch = ignored.originalPendingEntryId != expectedPendingEntryId
+        val lifecycleConflict = currentPending != null ||
+            sameOriginIgnored.any { it.id != ignoredEntryId } ||
+            ledgerEntries.isNotEmpty()
+        if (ignoredTargetMismatch || lifecycleConflict) {
+            return@withTransaction ReviewMutationResult.Conflict
+        }
+        val restored = ignored.toPendingEntry()
+        check(database.pendingEntryDao().insertIgnore(restored) != -1L)
+        check(database.ignoredEntryDao().deleteById(ignoredEntryId) == 1)
+        ReviewMutationResult.Applied(restored)
+    }
+
+    suspend fun undoConfirmedReview(
+        receipt: ReviewConfirmationReceipt,
+        deletedAtEpochMillis: Long = clock()
+    ): ReviewMutationResult<PendingEntryEntity> = database.withTransaction {
+        val pendingEntryId = receipt.pendingSnapshot.id
+        val currentPending = database.pendingEntryDao().getById(pendingEntryId)
+        val currentLedger = database.ledgerEntryDao().getById(receipt.ledgerEntry.id)
+        val activeOriginLedgers = database.ledgerEntryDao()
+            .listActiveByOriginPendingEntryId(pendingEntryId)
+        val originIgnoredEntries = database.ignoredEntryDao()
+            .listByOriginalPendingEntryId(pendingEntryId)
+        if (currentLedger == null || currentLedger.deletedAtEpochMillis != null) {
+            return@withTransaction completedUndoResult(
+                expectedPending = receipt.pendingSnapshot,
+                currentPending = currentPending,
+                activeLedgerCount = activeOriginLedgers.size,
+                ignoredEntryCount = originIgnoredEntries.size
+            )
+        }
+        val ledgerIdentityMatches = currentLedger.originPendingEntryId == pendingEntryId &&
+            activeOriginLedgers.singleOrNull()?.id == currentLedger.id
+        val ledgerSnapshotMatches = currentLedger == receipt.ledgerEntry
+        val lifecycleConflict = currentPending != null || originIgnoredEntries.isNotEmpty()
+        if (!ledgerIdentityMatches || !ledgerSnapshotMatches || lifecycleConflict) {
+            return@withTransaction ReviewMutationResult.Conflict
+        }
+        check(database.pendingEntryDao().insertIgnore(receipt.pendingSnapshot) != -1L)
+        check(database.ledgerEntryDao().moveToDeleted(currentLedger.id, deletedAtEpochMillis) == 1)
+        LocalSyncMutationRecorder(database, clock, idGenerator).record(
+            currentLedger.copy(deletedAtEpochMillis = deletedAtEpochMillis)
+        )
+        ReviewMutationResult.Applied(receipt.pendingSnapshot)
     }
 
     suspend fun confirmPending(
@@ -180,99 +381,36 @@ class LocalLedgerRepository private constructor(
         categoryId: String? = null,
         note: String? = null,
         confirmedAtEpochMillis: Long = clock()
-    ): LedgerEntryEntity = database.withTransaction {
-        val targetLedgerBook = components.ledgerBooks.requireForWrite(ledgerBookId)
-        val pending = requireNotNull(database.pendingEntryDao().getById(pendingEntryId)) {
-            "Pending entry not found: $pendingEntryId"
-        }
-        val ledgerEntry = LedgerEntryEntity(
-            id = idGenerator(),
-            ledgerBookId = targetLedgerBook.id,
-            paymentSource = pending.source,
-            originalCaptureSource = pending.source,
-            entryOrigin = pending.captureReason.toEntryOrigin(),
-            originPendingEntryId = pending.id,
-            flowDirection = pending.transactionKind.defaultFlowDirection(),
-            transactionKind = pending.transactionKind,
-            amountMinor = pending.amountMinor,
-            currency = pending.currency,
-            merchantTitle = pending.merchantTitle,
-            transactionTimeEpochMillis = pending.transactionTimeEpochMillis,
-            categoryId = categoryId ?: pending.suggestedCategoryId,
-            fundingAccountId = components.fundingAccounts.resolvePending(pending),
-            note = note ?: pending.note,
-            evidenceSummary = pending.evidenceSummary,
-            parsedFieldsText = pending.parsedFieldsText,
-            confirmedAtEpochMillis = confirmedAtEpochMillis,
-            updatedAtEpochMillis = confirmedAtEpochMillis,
-            deletedAtEpochMillis = null
-        )
-
-        database.ledgerEntryDao().upsert(ledgerEntry)
-        database.pendingEntryDao().deleteById(pendingEntryId)
-        LocalSyncMutationRecorder(database, clock, idGenerator).record(ledgerEntry)
-        ledgerEntry
+    ): LedgerEntryEntity {
+        return confirmPendingForReview(
+            pendingEntryId = pendingEntryId,
+            ledgerBookId = ledgerBookId,
+            overrides = ReviewConfirmationOverrides(categoryId = categoryId, note = note),
+            confirmedAtEpochMillis = confirmedAtEpochMillis
+        ).requireApplied("Pending entry cannot be confirmed: $pendingEntryId").ledgerEntry
     }
 
     suspend fun ignorePending(
         pendingEntryId: String,
         reason: IgnoreReason = IgnoreReason.USER_IGNORED,
         ignoredAtEpochMillis: Long = clock()
-    ): IgnoredEntryEntity = database.withTransaction {
-        val pending = requireNotNull(database.pendingEntryDao().getById(pendingEntryId)) {
-            "Pending entry not found: $pendingEntryId"
-        }
-        val ignoredEntry = IgnoredEntryEntity(
-            id = idGenerator(),
-            originalPendingEntryId = pending.id,
-            source = pending.source,
-            captureReason = pending.captureReason,
-            confidence = pending.confidence,
-            transactionKind = pending.transactionKind,
-            amountMinor = pending.amountMinor,
-            currency = pending.currency,
-            merchantTitle = pending.merchantTitle,
-            transactionTimeEpochMillis = pending.transactionTimeEpochMillis,
-            capturedAtEpochMillis = pending.capturedAtEpochMillis,
-            suggestedCategoryId = pending.suggestedCategoryId,
-            fundingAccountId = pending.fundingAccountId,
-            fundingAccountLabel = pending.fundingAccountLabel,
-            note = pending.note,
-            evidenceSummary = pending.evidenceSummary,
-            parsedFieldsText = pending.parsedFieldsText,
-            ignoredAtEpochMillis = ignoredAtEpochMillis,
-            expiresAtEpochMillis = ignoredAtEpochMillis + IGNORED_RETENTION_MILLIS,
-            reason = reason,
-            suggestedCategoryLabel = pending.suggestedCategoryLabel
-        )
+    ): IgnoredEntryEntity = ignorePendingForReview(
+        pendingEntryId = pendingEntryId,
+        reason = reason,
+        ignoredAtEpochMillis = ignoredAtEpochMillis
+    ).requireApplied("Pending entry cannot be ignored: $pendingEntryId")
 
-        database.ignoredEntryDao().upsert(ignoredEntry)
-        database.pendingEntryDao().deleteById(pendingEntryId)
-        ignoredEntry
-    }
-
-    suspend fun recoverIgnored(ignoredEntryId: String): PendingEntryEntity = database.withTransaction {
-        val ignored = requireNotNull(database.ignoredEntryDao().getById(ignoredEntryId)) {
-            "Ignored entry not found: $ignoredEntryId"
-        }
-        val restored = ignored.toPendingEntry()
-        database.pendingEntryDao().upsert(restored)
-        database.ignoredEntryDao().deleteById(ignoredEntryId)
-        restored
+    suspend fun recoverIgnored(ignoredEntryId: String): PendingEntryEntity {
+        val ignored = database.ignoredEntryDao().getById(ignoredEntryId)
+            ?: error("Ignored entry not found: $ignoredEntryId")
+        return recoverIgnoredForReview(
+            ignoredEntryId = ignoredEntryId,
+            expectedPendingEntryId = ignored.originalPendingEntryId
+        ).requireApplied("Ignored entry cannot be recovered: $ignoredEntryId")
     }
 
     suspend fun deleteIgnored(ignoredEntryId: String) {
         database.ignoredEntryDao().deleteById(ignoredEntryId)
-    }
-
-    suspend fun moveLedgerEntryToDeletedByOriginPendingEntryId(pendingEntryId: String) {
-        val ledgerEntryId = database.ledgerEntryDao().findIdByOriginPendingEntryId(pendingEntryId)
-            ?: return
-        components.ledgerEntries.moveLedgerEntryToDeleted(ledgerEntryId)
-    }
-
-    suspend fun deleteLedgerByOriginPendingEntryId(pendingEntryId: String) {
-        database.ledgerEntryDao().deleteByOriginPendingEntryId(pendingEntryId)
     }
 
     suspend fun clearLocalData() = database.withTransaction {
@@ -321,6 +459,116 @@ data class LedgerEntryInput(
     val note: String?,
     val paymentSource: PaymentSource?
 )
+
+private fun PendingEntryEntity.applyEdit(edit: PendingEntryEdit): PendingEntryEntity {
+    require(edit.amountMinor > 0) { "Amount must be greater than zero" }
+    return copy(
+        merchantTitle = edit.merchantTitle.trim().ifBlank { merchantTitle },
+        amountMinor = edit.amountMinor,
+        transactionTimeEpochMillis = edit.transactionTimeEpochMillis,
+        transactionKind = edit.transactionKind,
+        suggestedCategoryId = edit.suggestedCategoryId,
+        suggestedCategoryLabel = edit.suggestedCategoryLabel?.trim()?.ifBlank { null },
+        fundingAccountId = edit.fundingAccountId,
+        fundingAccountLabel = edit.fundingAccountLabel?.trim()?.ifBlank { null },
+        note = edit.note?.trim()?.ifBlank { null }
+    )
+}
+
+private fun PendingEntryEntity.toConfirmedLedgerEntry(
+    id: String,
+    ledgerBookId: String,
+    confirmedAtEpochMillis: Long,
+    fundingAccountId: Long?
+): LedgerEntryEntity = LedgerEntryEntity(
+    id = id,
+    ledgerBookId = ledgerBookId,
+    paymentSource = source,
+    originalCaptureSource = source,
+    entryOrigin = captureReason.toEntryOrigin(),
+    originPendingEntryId = this.id,
+    flowDirection = transactionKind.defaultFlowDirection(),
+    transactionKind = transactionKind,
+    amountMinor = amountMinor,
+    currency = currency,
+    merchantTitle = merchantTitle,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    categoryId = suggestedCategoryId,
+    fundingAccountId = fundingAccountId,
+    note = note,
+    evidenceSummary = evidenceSummary,
+    parsedFieldsText = parsedFieldsText,
+    confirmedAtEpochMillis = confirmedAtEpochMillis,
+    updatedAtEpochMillis = confirmedAtEpochMillis,
+    deletedAtEpochMillis = null
+)
+
+private fun PendingEntryEntity.toIgnoredEntry(
+    id: String,
+    reason: IgnoreReason,
+    ignoredAtEpochMillis: Long
+): IgnoredEntryEntity = IgnoredEntryEntity(
+    id = id,
+    originalPendingEntryId = this.id,
+    source = source,
+    captureReason = captureReason,
+    confidence = confidence,
+    transactionKind = transactionKind,
+    amountMinor = amountMinor,
+    currency = currency,
+    merchantTitle = merchantTitle,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    capturedAtEpochMillis = capturedAtEpochMillis,
+    suggestedCategoryId = suggestedCategoryId,
+    fundingAccountId = fundingAccountId,
+    fundingAccountLabel = fundingAccountLabel,
+    note = note,
+    evidenceSummary = evidenceSummary,
+    parsedFieldsText = parsedFieldsText,
+    ignoredAtEpochMillis = ignoredAtEpochMillis,
+    expiresAtEpochMillis = ignoredAtEpochMillis + LocalLedgerRepository.IGNORED_RETENTION_MILLIS,
+    reason = reason,
+    suggestedCategoryLabel = suggestedCategoryLabel
+)
+
+private enum class ReviewExpectedTransition {
+    EDIT,
+    CONFIRM,
+    IGNORE
+}
+
+private fun <T> transitionedReviewResult(
+    expectedTransition: ReviewExpectedTransition,
+    ledgerEntryCount: Int,
+    ignoredEntryCount: Int
+): ReviewMutationResult<T> = when {
+    ledgerEntryCount == 0 && ignoredEntryCount == 0 -> ReviewMutationResult.NotFound
+    expectedTransition == ReviewExpectedTransition.CONFIRM &&
+        ledgerEntryCount == 1 && ignoredEntryCount == 0 -> ReviewMutationResult.AlreadyApplied
+    expectedTransition == ReviewExpectedTransition.IGNORE &&
+        ledgerEntryCount == 0 && ignoredEntryCount == 1 -> ReviewMutationResult.AlreadyApplied
+    else -> ReviewMutationResult.Conflict
+}
+
+private fun <T> completedUndoResult(
+    expectedPending: PendingEntryEntity,
+    currentPending: PendingEntryEntity?,
+    activeLedgerCount: Int,
+    ignoredEntryCount: Int
+): ReviewMutationResult<T> = when {
+    currentPending == expectedPending && activeLedgerCount == 0 && ignoredEntryCount == 0 ->
+        ReviewMutationResult.AlreadyApplied
+    currentPending != null || activeLedgerCount > 0 || ignoredEntryCount > 0 ->
+        ReviewMutationResult.Conflict
+    else -> ReviewMutationResult.NotFound
+}
+
+private fun <T> ReviewMutationResult<T>.requireApplied(message: String): T = when (this) {
+    is ReviewMutationResult.Applied -> value
+    ReviewMutationResult.NotFound -> error(message)
+    ReviewMutationResult.AlreadyApplied -> error("$message (already applied)")
+    ReviewMutationResult.Conflict -> error("$message (conflict)")
+}
 
 private fun IgnoredEntryEntity.toPendingEntry(): PendingEntryEntity = PendingEntryEntity(
     id = originalPendingEntryId,

@@ -151,7 +151,7 @@ internal class LedgerViewModel(
         }
     }
 
-    suspend fun clearLocalData(beforeClear: suspend () -> Unit) {
+    suspend fun runLocalDataReplacement(replacement: suspend () -> Unit) {
         check(
             mutableLocalDataReplacementInFlight.compareAndSet(
                 expect = false,
@@ -159,15 +159,21 @@ internal class LedgerViewModel(
             )
         ) { LOCAL_DATA_REPLACEMENT_MESSAGE }
         try {
-            beforeClear()
-            repository.clearLocalData()
-            val clearedRepositoryState = repository.state.first()
-            repositoryState.first { it == clearedRepositoryState }
-            val clearedUiState = clearedRepositoryState.toUiState()
+            replacement()
+            val replacedRepositoryState = repository.state.first()
+            repositoryState.first { it == replacedRepositoryState }
+            val replacedUiState = replacedRepositoryState.toUiState()
             mutableLocalDataReplacementInFlight.value = false
-            uiState.first { it == clearedUiState }
+            uiState.first { it == replacedUiState }
         } finally {
             mutableLocalDataReplacementInFlight.value = false
+        }
+    }
+
+    suspend fun clearLocalData(beforeClear: suspend () -> Unit) {
+        runLocalDataReplacement {
+            beforeClear()
+            repository.clearLocalData()
         }
     }
 

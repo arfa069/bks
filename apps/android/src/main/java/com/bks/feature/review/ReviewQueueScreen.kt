@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
 import com.bks.data.local.DefaultCategories
 import com.bks.feature.categorization.AiCategorizationClient
 import com.bks.feature.categorization.AiCategorizationGateway
@@ -33,9 +34,10 @@ import com.bks.feature.ledger.toLedgerCategoryUiModel
 
 @Composable
 @Suppress("LongParameterList")
-fun ReviewQueueScreen(
+internal fun ReviewQueueScreen(
     modifier: Modifier = Modifier,
     initialState: ReviewQueueState = ReviewQueueState(),
+    targetLedgerBookId: String? = DEFAULT_LEDGER_BOOK_ID,
     targetLedgerName: String = "默认账本",
     categories: List<LedgerCategoryUiModel> = emptyList(),
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
@@ -44,12 +46,14 @@ fun ReviewQueueScreen(
     accountToken: String? = null,
     aiSettings: AiCategorizationSettings = AiCategorizationSettings(),
     aiCategorizationGateway: AiCategorizationGateway? = null,
+    onCommand: (ReviewPersistenceCommand) -> Unit = {},
+    onUndo: () -> Unit = {},
+    onDismissUndo: () -> Unit = {},
     onNavigateHome: () -> Unit = {}
 ) {
-    var state by remember { mutableStateOf(initialState) }
     ReviewQueueScreen(
-        state = state,
-        onStateChange = { state = it },
+        state = initialState,
+        targetLedgerBookId = targetLedgerBookId,
         targetLedgerName = targetLedgerName,
         categories = categories,
         fundingAccounts = fundingAccounts,
@@ -59,15 +63,18 @@ fun ReviewQueueScreen(
         accountToken = accountToken,
         aiSettings = aiSettings,
         aiCategorizationGateway = aiCategorizationGateway,
+        onCommand = onCommand,
+        onUndo = onUndo,
+        onDismissUndo = onDismissUndo,
         onNavigateHome = onNavigateHome
     )
 }
 
 @Composable
 @Suppress("LongParameterList", "LongMethod")
-fun ReviewQueueScreen(
+internal fun ReviewQueueScreen(
     state: ReviewQueueState,
-    onStateChange: (ReviewQueueState) -> Unit,
+    targetLedgerBookId: String? = DEFAULT_LEDGER_BOOK_ID,
     targetLedgerName: String = "默认账本",
     categories: List<LedgerCategoryUiModel> = emptyList(),
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
@@ -77,6 +84,9 @@ fun ReviewQueueScreen(
     accountToken: String? = null,
     aiSettings: AiCategorizationSettings = AiCategorizationSettings(),
     aiCategorizationGateway: AiCategorizationGateway? = null,
+    onCommand: (ReviewPersistenceCommand) -> Unit = {},
+    onUndo: () -> Unit = {},
+    onDismissUndo: () -> Unit = {},
     onNavigateHome: () -> Unit = {}
 ) {
     var editingEntryId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -87,13 +97,14 @@ fun ReviewQueueScreen(
     var showIgnoredList by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    fun dispatch(action: ReviewQueueAction) {
-        onStateChange(reduceReviewQueue(state, action))
-    }
-
     fun confirmEdit(entry: ReviewQueueEntry, edit: PendingReviewEdit) {
-        val editedState = reduceReviewQueue(state, edit.toSaveAction(entry.id))
-        onStateChange(reduceReviewQueue(editedState, ReviewQueueAction.Confirm(entry.id)))
+        onCommand(
+            ReviewPersistenceCommand.Confirm(
+                stableId = entry.id,
+                targetLedgerBookId = targetLedgerBookId,
+                edit = edit.toEntryEdit()
+            )
+        )
         pendingRuleSave = null
         editingEntryId = null
     }
@@ -102,21 +113,15 @@ fun ReviewQueueScreen(
         confirmEdit(pending.entry, pending.edit)
     }
 
-    val lastAction = state.lastAction
-    LaunchedEffect(lastAction?.eventId) {
-        val undoAction = lastAction ?: return@LaunchedEffect
+    val undoEvent = state.undoEvent
+    LaunchedEffect(undoEvent?.eventId) {
+        val activeUndoEvent = undoEvent ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(
-            message = undoAction.message,
+            message = activeUndoEvent.message,
             actionLabel = "撤销",
             duration = SnackbarDuration.Short
         )
-        dispatch(
-            if (result == SnackbarResult.ActionPerformed) {
-                ReviewQueueAction.UndoLastAction
-            } else {
-                ReviewQueueAction.DismissUndo
-            }
-        )
+        if (result == SnackbarResult.ActionPerformed) onUndo() else onDismissUndo()
     }
 
     val activeEdit = editingEntry
@@ -131,7 +136,17 @@ fun ReviewQueueScreen(
                 state = state,
                 targetLedgerName = targetLedgerName,
                 actions = ReviewQueueListActions(
-                    onAction = ::dispatch,
+                    onConfirm = { entryId ->
+                        onCommand(
+                            ReviewPersistenceCommand.Confirm(
+                                stableId = entryId,
+                                targetLedgerBookId = targetLedgerBookId
+                            )
+                        )
+                    },
+                    onIgnore = { entryId ->
+                        onCommand(ReviewPersistenceCommand.Ignore(entryId))
+                    },
                     onEdit = { editingEntryId = it.id },
                     onShowIgnoredList = { showIgnoredList = true },
                     onNavigateHome = onNavigateHome
@@ -212,7 +227,14 @@ fun ReviewQueueScreen(
             ignoredEntries = state.recoverableIgnoredEntries,
             onDismiss = { showIgnoredList = false },
             onRecover = {
-                dispatch(ReviewQueueAction.RecoverIgnored(it))
+                state.ignoredEntries.firstOrNull { ignored -> ignored.id == it }?.let { ignored ->
+                    onCommand(
+                        ReviewPersistenceCommand.Recover(
+                            ignoredEntryId = ignored.id,
+                            stableId = ignored.originalPendingId
+                        )
+                    )
+                }
                 showIgnoredList = false
             }
         )
