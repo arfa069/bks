@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked
+Completed
 
 ## Goal
 
@@ -127,31 +127,46 @@ git status --short
 
 ## Execution Record
 
+### Prior Blocked Attempt
+
+- 第一次执行在生产代码改动前按 Stop Conditions 停止：当时 Step 6.2 仍为 `Blocked`，且没有连接设备可补齐强制真机证据。
+- 恢复本 Step 前重新核对了 Step 6.2 的最终记录：Xiaomi Android 16 真机已完成 Accessibility Enabled/Bound 与同一次 `event → capture → roots → collected → processed recognized=true created=1` 链路，重复事件未重复落库；Step 6.2 已更新为 `Completed`，前置门禁解除。
+
 ### Actual Changes
 
-- 完成执行前门禁核对：当前工作区无既有未提交改动，HEAD 为 Step 6.2 的实现结果；生产代码仍由 `BksApp` 消费 `BksAppRuntimeState`、`BksAppActions`、`BksAppPresentation` 与 `BksAppEffectsContext`，符合 Step 7.1 尚未开始清理的现状。
-- 复核 Step 6.2 的 Execution Record、实现与测试入口：Accessibility 拆分代码、Coordinator、Service adapter 和对应 JVM 测试均已落地，但 Step 6.2 仍因缺少授权真机链路证据而明确标记为 `Blocked`。
-- 通过本机 Android SDK 的 ADB 再次检查设备，设备列表为空；未安装 APK、未修改系统授权、未执行真机操作。
-- 命中本 Step Stop Conditions 后停止；未删除旧符号、未修改生产代码、测试、架构说明或其他 Step 实施方案。
+- 删除 `BksAppRuntime.kt`、`BksAppEffectsContext.kt`、`BksAppDependencies.kt` 及旧 `BksAppRuntimeTest`，移除 Root runtime/actions/presentation/effects 和 Local/Account/Sync dependency facade；`BksRouteContext`、`BksRouteContentContext`、`rememberBksAppDependencies` 与 `BksLegacy*Bridge` 在恢复执行前已不存在，未为符合旧 Plan 创建替代类型。
+- `BksApp` 直接 lifecycle-aware 收集 `AccountSessionCoordinator`、`AccountCloudSettingsCoordinator`、Feature ViewModel state 与 `LocalPreferencesRepository.categorizationRules`；AI 设置直接使用现有 owner 的有效快照，规则写入直接调用 Repository，`ON_RESUME` 直接转发给匹配的 `LedgerSyncRuntime`。
+- 子代理复审发现分类规则在 Room Flow 回流前连续操作时，两个整表快照可能发生 last-write-wins 覆盖；规则回调现改为传递纯变换，并由 `LocalPreferencesRepository.updateCategorizationRules` 在同一 Room transaction 内读取最新规则、应用变换、全表写入和记录 outbox。规则管理页与 Review 创建规则共用该入口，没有恢复 Root/Compose 镜像，也没有新增微型 ViewModel。
+- 手工新建规则 ID 改为基于事务内最新规则的最大 `rule-N` 生成下一个编号，避免删除中间规则后因 `rules.size + 1` 与既有 ID 冲突；`cloudWritesPaused` 与 `settingsSyncInFlight` 则保留为 account feature 内的纯派生函数并补回直接单测。
+- `BksAppContainer` 保留唯一生产 graph，并以三个 lifecycle resolver 保持测试 override 的 Session、Cloud Settings、Sync owner 来自同一 coordinator graph；`BksRouteFactories` 改为接收明确的 `AccountRepository`、`WechatAuthGateway` 和 Session owner，不再接收聚合 facade。
+- 将旧 Root presentation 的跨账号、注销冷静期与登出行为测试迁到 `feature/account/AccountAiSettingsTest`；更新 Container 测试，证明生产 owner 仍复用 Application singleton，账号 override 仍创建相互隔离的 Session/Cloud/Sync owner，并继续复用生产 Room graph。
+- 最终 `build` 发现 Benchmark CSV 调用仍传入旧 Ledger UI 模型；调用方已显式映射为当前 `BackupLedgerEntryUiModel`，CSV 字段与备份实现不变。
+- 最终 Lint 发现 `assists-base` 传递引入的 `utilcodex` 中未被调用的 `NotificationUtils` 触发权限误报。字节码依赖检查确认 `assists-base` 没有引用该类后，新增只匹配其完整类名的 `lint.xml` ignore；没有声明通知权限、关闭整个规则或改变 Manifest/运行时行为。
+- `docs/ARCHITECTURE.md` 已按最终代码更新 Composition Root、Repository/Coordinator ownership、Route/Screen 边界与 Accessibility adapter 说明。
 
 ### Deviations From Plan
 
-- 未执行 Planned Changes。原因是前置 Step 6.2 尚未达到 Completion Criteria，并被标记为 `Blocked`；本 Step 明确禁止在此前提下删除桥接或进入最终验证。
-- 未运行 Android JVM tests、Detekt、`assembleDebug` 或完整 `build`。这些命令属于完成清理后的验证，当前在任何生产改动前已触发停止条件，运行它们不能替代 Step 6.2 缺失的授权真机证据。
+- Plan 列出的 `BksRouteContext.kt`、`BksRouteContentContext`、`rememberBksAppDependencies`、`BksLegacy*Bridge` 和 Sync legacy projection 在当前代码中已不存在，因此本轮只用结构搜索确认，没有强行创建或删除替代物。
+- 未删除 Room/Backup/Secure Session/Review 中承担真实旧数据兼容职责的 migration、codec 和清洗逻辑；这些不是临时架构 bridge，删除会改变数据兼容行为。
+- 未创建 `CategorizationViewModel` 或新的聚合 composition data class；分类规则仍以 Repository Flow 为唯一持久真实源，符合 Step 3.2 的 owner 准入决定。
+- 复审修复没有采用原建议的 Feature 乐观镜像；当前调用链改为把规则变换送入 Repository transaction，直接从最新持久化快照计算结果。这同时覆盖规则管理页和 Review 页，并继续保持 Room Flow 是唯一 UI/持久化 source of truth。
+- 为通过本 Step 强制的完整 `build`，额外修复了一个已存在的 Benchmark source-set 类型漂移，并加入一个精确到未使用第三方类名的 Lint 过滤；两项均为验证期间暴露的最小收口，不修改依赖、权限、业务或数据契约。
 
 ### Test Results
 
-- 前置结构搜索完成：`BksAppRuntimeState`、`BksAppActions`、`BksAppPresentation` 与 `BksAppEffectsContext` 仍存在生产定义及消费者；`BksRouteContext.kt` 已不存在。
-- Step 6.2 落地抽查完成：`BillSyncAccessibilityService` 仅保留 Android callback/lifecycle 委托，`BillSyncCaptureCoordinator` 及其测试存在，Container/Application 持有并启动 Coordinator；本轮未重新执行其测试。
-- ADB 设备检查完成：ADB 可用，但 `adb devices -l` 无连接设备，无法取得 `dumpsys accessibility` 和同一次 `event → capture → roots → collected → processed` 的授权真机证据。
-- 文档更新后 `git diff --check -- docs/` 通过，未完成标记检查无命中；diff scope 检查确认仅修改本 Step 与重构总览文档。
+- 专项：`BksAppContainerTest`、`MainActivityTest`、`AccountAiSettingsTest`、`LocalPreferencesRepositoryTest`、`CategorizationRulesScreenTest` 与 `:apps:android:detekt` 通过。复审新增用例覆盖事务内连续规则变换、删除后的唯一规则 ID，以及 `cloudWritesPaused` / `settingsSyncInFlight` 派生。
+- Android 全量：复审修复后的 `:apps:android:testDebugUnitTest` 最终 547 项通过、0 failed、0 skipped。此前首轮曾有 `SecureAccountSessionStoreTest.corruptedCiphertextIsClearedAndDowngradesSafely` 受 Robolectric 未执行主线程任务影响返回 `Empty`；该类独立复跑通过，随后完整测试持续通过。
+- 静态与产物：`:apps:android:detekt`、`:apps:android:lintDebug`、`:apps:android:assembleDebug`、`:apps:android:compileBenchmarkReleaseKotlin`、`:apps:android:compileNonMinifiedReleaseKotlin` 均通过。
+- 全仓库：复审修复后的 `:apps:android:assembleDebug build` 无排除项通过；Android、Macrobenchmark、Backend 与 Shared API 的编译、测试、Detekt/Lint、Release/Benchmark 打包聚合成功。构建仅保留既有微信 SDK D8/R8 stack-map warnings 与既有 deprecated API warning。
+- 结构：旧符号与 dependency facade 搜索零命中；所有 `*Route*.kt` / `*Screen*.kt` 对 Database、DAO、Container 的禁止依赖搜索零命中；`git diff --check` 通过。
+- Scope：diff 未触及 Room schema、`services/backend`、`shared/api`、API/sync protocol、backup format、依赖版本、Manifest 或 Accessibility 采集范围；本 Step 未重复执行真机操作，复用了已记录并完成门禁的 Step 6.2 真机证据。
 
 ### Remaining Risks
 
-- Step 6.2 的真机风险仍未关闭：OEM Accessibility 重连、真实事件窗口读取、卡顿改善与最终 Review Queue 落库链路尚无授权真机证据。
-- 旧 Application-level God Layer 及 dependency facade 仍在生产路径中；这是本 Step 被阻塞后有意保留的可回滚状态，不得在前置门禁解除前删除。
-- 恢复条件：另行完成并将 Step 6.2 更新为 `Completed`，包括经授权真机验证；随后重新开始 Step 7.1 的代码核对、清理和完整验证。
+- `BksApp` 仍是较长的根组合函数，但只承担 Composition、Navigation、lifecycle forwarding、Route callback 与全局 Dialog；现有 `LongMethod`/`CyclomaticComplexMethod` suppression 未增加，且没有 Root 镜像 state 或 dependency facade。
+- `lint.xml` 的精确过滤依赖当前 `assists-base 3.5.5` 未调用 `NotificationUtils` 的事实；未来升级 Assists/utilcodex 时应重新做字节码依赖检查，若实际引入通知能力则必须设计权限与运行时申请流程。
+- 微信 SDK 在 D8/R8 阶段继续输出既有 stack-map warnings，当前所有 APK/Release 构建成功；本 Step 未升级或改写第三方依赖。
 
 ### Final Status
 
-Blocked — Step 6.2 仍为 `Blocked`，且当前无连接设备可补齐其强制真机门禁；已按 Stop Conditions 在任何生产代码改动前停止，不进入后续 Step。
+Completed — 前置真机门禁已解除，旧 Application-level God Layer、dependency facade 与临时 projection 已删除；最终架构说明、旧符号/禁止依赖搜索、Android 全量、Detekt、Lint、Debug APK 和完整 `build` 均达到 Completion Criteria。停止于 Step 7.1，不进入后续工作。

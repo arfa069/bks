@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -15,10 +16,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bks.data.local.LocalLedgerRepository
+import com.bks.data.local.LocalPreferencesRepository
 import com.bks.feature.account.AccountCloudSettingsCoordinator
+import com.bks.feature.account.AccountCloudSettingsOperationResult
 import com.bks.feature.account.AccountCredentials
 import com.bks.feature.account.AccountRepository
 import com.bks.feature.account.AccountSession
@@ -26,8 +32,12 @@ import com.bks.feature.account.AccountSessionCoordinator
 import com.bks.feature.account.AccountSessionNotice
 import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthGateway
+import com.bks.feature.account.cloudWritesPaused
+import com.bks.feature.account.effectiveAiCategorizationSettings
+import com.bks.feature.account.settingsSyncInFlight
 import com.bks.feature.categorization.AiCategorizationGateway
 import com.bks.feature.categorization.AiCategorizationClient
+import com.bks.feature.categorization.CategorizationRulesUpdate
 import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.home.HomeScreen
 import com.bks.feature.ledger.LedgerViewModel
@@ -37,8 +47,10 @@ import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
 import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.review.ReviewQueueState
 import com.bks.feature.review.ReviewQueueViewModel
+import com.bks.feature.review.ReviewQueuePersistence
 import com.bks.feature.settings.DataAndBackupUiState
 import com.bks.feature.settings.DataAndBackupViewModel
+import com.bks.feature.sync.LedgerSyncRuntime
 import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.feature.sync.LedgerSyncViewModel
 import com.bks.ui.AccountEntryMode
@@ -78,47 +90,49 @@ fun BksApp(
     val appState = rememberBksAppState()
     val applicationContext = LocalContext.current.applicationContext
     val container = remember(applicationContext) { applicationContext.bksAppContainer }
-    val dependencies = remember(container, overrides) {
-        container.createAppDependencies(overrides)
+    val accountRepository = overrides.accountRepository ?: container.accountRepository
+    val wechatAuthGateway = overrides.wechatAuthGateway ?: container.wechatAuthGateway
+    val aiCategorizationGateway = overrides.aiCategorizationGateway ?: container.aiCategorizationGateway
+    val accountSessionCoordinator = remember(container, overrides) {
+        container.resolveAccountSessionCoordinator(overrides)
     }
-    val runtime = rememberBksAppRuntimeState()
-    val accountSessionCoordinator = dependencies.account.sessionCoordinator
-    val cloudSettingsCoordinator = dependencies.account.cloudSettingsCoordinator
+    val cloudSettingsCoordinator = remember(container, overrides, accountSessionCoordinator) {
+        container.resolveAccountCloudSettingsCoordinator(overrides, accountSessionCoordinator)
+    }
+    val ledgerSyncRuntime = remember(container, overrides, accountSessionCoordinator) {
+        container.resolveLedgerSyncRuntime(overrides, accountSessionCoordinator)
+    }
     val owners = rememberBksFeatureOwners(
-        dependencies = dependencies,
+        container = container,
+        aiCategorizationGateway = aiCategorizationGateway,
         accountSessionCoordinator = accountSessionCoordinator,
-        cloudSettingsCoordinator = cloudSettingsCoordinator
+        cloudSettingsCoordinator = cloudSettingsCoordinator,
+        ledgerSyncRuntime = ledgerSyncRuntime
     )
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
     val cloudSettingsState by cloudSettingsCoordinator.state.collectAsStateWithLifecycle()
-    val actions = androidx.compose.runtime.remember(
-        dependencies,
-        runtime,
-        appState,
-        coroutineScope
-    ) {
-        BksAppActions(
-            dependencies = dependencies,
-            runtime = runtime,
-            appState = appState,
-            coroutineScope = coroutineScope
-        )
+    val categorizationRules by container.preferencesRepository.categorizationRules
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val signedIn = accountState.session is AccountSession.SignedIn
+    val areCloudWritesPaused = cloudWritesPaused(accountState)
+    val isSettingsSyncInFlight = settingsSyncInFlight(accountState, cloudSettingsState)
+    val effectiveAiSettings = effectiveAiCategorizationSettings(accountState, cloudSettingsState)
+    val onCategorizationRulesChange: (CategorizationRulesUpdate) -> Unit = { update ->
+        coroutineScope.launch {
+            container.preferencesRepository.updateCategorizationRules(update)
+        }
     }
-    val presentation = bksAppPresentation(accountState, cloudSettingsState)
 
     BksAccountSessionNotices(accountSessionCoordinator, appState)
     BksFeatureNotices(owners, appState)
 
-    BksAppEffects(
-        context = BksAppEffectsContext(
-            dependencies = dependencies,
-            bindings = bindings,
-            runtime = runtime,
-            actions = actions,
-            appState = appState,
-            lifecycleOwner = lifecycleOwner
-        )
-    )
+    DisposableEffect(lifecycleOwner, ledgerSyncRuntime) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) ledgerSyncRuntime.onResume()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     BksTheme {
         if (accountState.isRestoring) {
@@ -139,10 +153,14 @@ fun BksApp(
                     BksAccountEntry(
                         appState = appState,
                         accountSession = activeAccountSession,
-                        viewModelFactory = accountEntryFactory(dependencies, accountSessionCoordinator),
+                        viewModelFactory = accountEntryFactory(
+                            accountRepository = accountRepository,
+                            wechatAuthGateway = wechatAuthGateway,
+                            sessionCoordinator = accountSessionCoordinator
+                        ),
                         wechatAuthCallback = bindings.wechatAuthCallback,
                         onWechatAuthCallbackConsumed = bindings.onWechatAuthCallbackConsumed,
-                        avatarCache = dependencies.account.wechatAvatarCache
+                        avatarCache = container.wechatAvatarCache
                     )
                 } else {
                     BksRouteHost(appState) { targetRoute, innerPadding, onManualEntryClosed, onNavigateHome ->
@@ -164,8 +182,7 @@ fun BksApp(
                                     reviewState = owners.reviewQueueState,
                                     reviewViewModel = owners.reviewQueueViewModel,
                                     ledgerState = owners.ledgerUiState,
-                                    categorizationRules = runtime.categorizationRules,
-                                    onCategorizationRulesChange = actions::persistCategorizationRules,
+                                    onCategorizationRulesChange = onCategorizationRulesChange,
                                     innerPadding = innerPadding,
                                     onNavigateHome = onNavigateHome
                                 )
@@ -187,8 +204,9 @@ fun BksApp(
                                     activeAccountSession = activeAccountSession,
                                     destination = targetRoute.profileDestination,
                                     accountManagementViewModelFactory = accountManagementFactory(
-                                        dependencies,
-                                        accountSessionCoordinator
+                                        accountRepository = accountRepository,
+                                        wechatAuthGateway = wechatAuthGateway,
+                                        sessionCoordinator = accountSessionCoordinator
                                     ),
                                     onAccountManagementSessionEnded = {
                                         appState.profileDestination.value = null
@@ -212,7 +230,7 @@ fun BksApp(
                                             wechatAuthCallback = bindings.wechatAuthCallback,
                                             onWechatAuthCallbackConsumed =
                                                 bindings.onWechatAuthCallbackConsumed,
-                                            avatarCache = dependencies.account.wechatAvatarCache,
+                                            avatarCache = container.wechatAvatarCache,
                                             onSignInOrRegister = {
                                                 appState.openAccountEntry(
                                                     mode = AccountEntryMode.SignInOrRegister,
@@ -242,13 +260,36 @@ fun BksApp(
                                                 innerPadding = innerPadding
                                             )
                                         ProfileDestination.CategorizationRules -> BksCategorizationRoute(
-                                            rules = runtime.categorizationRules,
-                                            onRulesChange = actions::persistCategorizationRules,
-                                            aiSettings = presentation.effectiveAiSettings,
-                                            signedIn = presentation.signedIn,
-                                            cloudWritesPaused = presentation.cloudWritesPaused,
-                                            settingsSyncInFlight = presentation.settingsSyncInFlight,
-                                            onAiSettingsChange = actions::persistAiSettings,
+                                            rules = categorizationRules,
+                                            onRulesChange = onCategorizationRulesChange,
+                                            aiSettings = effectiveAiSettings,
+                                            signedIn = signedIn,
+                                            cloudWritesPaused = areCloudWritesPaused,
+                                            settingsSyncInFlight = isSettingsSyncInFlight,
+                                            onAiSettingsChange = { nextSettings ->
+                                                coroutineScope.launch {
+                                                    when (
+                                                        val result = cloudSettingsCoordinator
+                                                            .updateAiSettings(nextSettings)
+                                                    ) {
+                                                        is AccountCloudSettingsOperationResult.CloudFailure ->
+                                                            appState.snackbarHostState.showSnackbar(
+                                                                result.reason.toAiSettingsMessage()
+                                                            )
+                                                        AccountCloudSettingsOperationResult.CloudWritesBlocked ->
+                                                            appState.snackbarHostState.showSnackbar(
+                                                                if (!signedIn) {
+                                                                    "登录后才能同步云端 AI 设置"
+                                                                } else {
+                                                                    "账号当前不允许写入云端设置"
+                                                                }
+                                                            )
+                                                        AccountCloudSettingsOperationResult.InFlight,
+                                                        AccountCloudSettingsOperationResult.Stale,
+                                                        AccountCloudSettingsOperationResult.Success -> Unit
+                                                    }
+                                                }
+                                            },
                                             onBack = {
                                                 appState.profileDestination.value = null
                                             },
@@ -300,7 +341,7 @@ fun BksApp(
                 signedInToken = signedInSession?.token,
                 launchSignOut = { token ->
                     coroutineScope.launch {
-                        dependencies.account.accountRepository.signOut(token)
+                        accountRepository.signOut(token)
                     }
                 },
                 moveToLocalMode = accountSessionCoordinator::moveToLocalMode
@@ -333,36 +374,45 @@ private fun BksFeatureNotices(
 
 @Composable
 private fun rememberBksFeatureOwners(
-    dependencies: BksAppDependencies,
+    container: BksAppContainer,
+    aiCategorizationGateway: AiCategorizationGateway,
     accountSessionCoordinator: AccountSessionCoordinator,
-    cloudSettingsCoordinator: AccountCloudSettingsCoordinator
+    cloudSettingsCoordinator: AccountCloudSettingsCoordinator,
+    ledgerSyncRuntime: LedgerSyncRuntime
 ): BksFeatureOwners {
     val ledgerViewModel: LedgerViewModel = viewModel(
-        factory = ledgerFactory(dependencies, cloudSettingsCoordinator)
+        factory = ledgerFactory(container.ledgerRepository, cloudSettingsCoordinator)
     )
     val reviewQueueViewModel: ReviewQueueViewModel = viewModel(
         factory = reviewQueueFactory(
-            dependencies = dependencies,
+            persistence = container.reviewQueuePersistence,
+            aiCategorizationGateway = aiCategorizationGateway,
             ledgerViewModel = ledgerViewModel,
             accountSessionCoordinator = accountSessionCoordinator,
             cloudSettingsCoordinator = cloudSettingsCoordinator
         )
     )
     val dataAndBackupViewModel: DataAndBackupViewModel = viewModel(
-        factory = dataAndBackupFactory(dependencies, ledgerViewModel, reviewQueueViewModel)
+        factory = dataAndBackupFactory(
+            container = container,
+            ledgerSyncRuntime = ledgerSyncRuntime,
+            cloudSettingsCoordinator = cloudSettingsCoordinator,
+            ledgerViewModel = ledgerViewModel,
+            reviewQueueViewModel = reviewQueueViewModel
+        )
     )
     val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerSyncViewModel(
-                runtime = dependencies.sync.runtime,
-                coordinator = dependencies.sync.coordinator,
+                runtime = ledgerSyncRuntime,
+                coordinator = container.ledgerSyncCoordinator,
                 accountSessionState = accountSessionCoordinator.state
             ) as T
         }
     )
     val automaticBookkeepingViewModel: AutomaticBookkeepingViewModel = viewModel(
-        factory = automaticBookkeepingFactory(dependencies)
+        factory = automaticBookkeepingFactory(container.preferencesRepository)
     )
     val ledgerUiState by ledgerViewModel.uiState.collectAsStateWithLifecycle()
     val reviewQueueState by reviewQueueViewModel.uiState.collectAsStateWithLifecycle()
@@ -428,61 +478,63 @@ private fun BksAccountSessionNotices(
 }
 
 private fun ledgerFactory(
-    dependencies: BksAppDependencies,
+    repository: LocalLedgerRepository,
     cloudSettingsCoordinator: AccountCloudSettingsCoordinator
 ) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerViewModel(
-        repository = dependencies.local.ledgerRepository,
+        repository = repository,
         cloudSettingsCoordinator = cloudSettingsCoordinator
     ) as T
 }
 
 private fun reviewQueueFactory(
-    dependencies: BksAppDependencies,
+    persistence: ReviewQueuePersistence,
+    aiCategorizationGateway: AiCategorizationGateway,
     ledgerViewModel: LedgerViewModel,
     accountSessionCoordinator: AccountSessionCoordinator,
     cloudSettingsCoordinator: AccountCloudSettingsCoordinator
 ) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = ReviewQueueViewModel(
-        persistence = dependencies.local.reviewQueuePersistence,
+        persistence = persistence,
         localDataReplacementInFlight = ledgerViewModel.localDataReplacementInFlight,
-        aiCategorizationClient = AiCategorizationClient(dependencies.aiCategorizationGateway),
+        aiCategorizationClient = AiCategorizationClient(aiCategorizationGateway),
         accountSessionState = accountSessionCoordinator.state,
         cloudSettingsState = cloudSettingsCoordinator.state
     ) as T
 }
 
 private fun dataAndBackupFactory(
-    dependencies: BksAppDependencies,
+    container: BksAppContainer,
+    ledgerSyncRuntime: LedgerSyncRuntime,
+    cloudSettingsCoordinator: AccountCloudSettingsCoordinator,
     ledgerViewModel: LedgerViewModel,
     reviewQueueViewModel: ReviewQueueViewModel
 ) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = DataAndBackupViewModel(
-        exportEncryptedBackup = dependencies.local.dataBackupRepository::exportEncryptedBackup,
-        validateEncryptedBackup = dependencies.local.dataBackupRepository::validateEncryptedBackup,
-        importEncryptedBackup = dependencies.local.dataBackupRepository::importEncryptedBackup,
-        serializeWithSync = dependencies.sync.coordinator::withLocalDataReplacement,
+        exportEncryptedBackup = container.dataBackupRepository::exportEncryptedBackup,
+        validateEncryptedBackup = container.dataBackupRepository::validateEncryptedBackup,
+        importEncryptedBackup = container.dataBackupRepository::importEncryptedBackup,
+        serializeWithSync = container.ledgerSyncCoordinator::withLocalDataReplacement,
         runLocalDataReplacement = ledgerViewModel::runLocalDataReplacement,
         clearLocalData = ledgerViewModel::clearLocalData,
         awaitReviewIdle = reviewQueueViewModel::awaitIdleAndResetForLocalDataReplacement,
-        clearAvatarCache = dependencies.account.wechatAvatarCache::clear,
-        clearCloudSettingsLocalState = dependencies.account.cloudSettingsCoordinator::clearLocalState,
-        disableSync = dependencies.sync.runtime::disable,
+        clearAvatarCache = container.wechatAvatarCache::clear,
+        clearCloudSettingsLocalState = cloudSettingsCoordinator::clearLocalState,
+        disableSync = ledgerSyncRuntime::disable,
         clearDiagnostics = {
-            dependencies.diagnosticLogs.clear(keepEnabledPreference = false)
+            container.diagnosticLogs.clear(keepEnabledPreference = false)
         }
     ) as T
 }
 
 private fun automaticBookkeepingFactory(
-    dependencies: BksAppDependencies
+    repository: LocalPreferencesRepository
 ) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        val repository = dependencies.local.preferencesRepository
         return AutomaticBookkeepingViewModel(
             enabled = repository.userPreferences
                 .map { it.automaticBookkeepingEnabled }

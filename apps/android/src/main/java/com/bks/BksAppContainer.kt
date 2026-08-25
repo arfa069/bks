@@ -48,6 +48,9 @@ internal class BksAppContainer(context: Context) {
     val ledgerRepository: LocalLedgerRepository by lazy { LocalLedgerRepository(database) }
     val preferencesRepository: LocalPreferencesRepository by lazy { LocalPreferencesRepository(database) }
     val dataBackupRepository: LocalDataBackupRepository by lazy { LocalDataBackupRepository(database) }
+    val reviewQueuePersistence: ReviewQueuePersistence by lazy {
+        ReviewQueuePersistence(ledgerRepository)
+    }
     val ledgerSyncLocalStore: LedgerSyncLocalStore by lazy { LedgerSyncLocalStore(database) }
     val localModeSessionStore: LocalModeSessionStore by lazy { LocalModeSessionStore(applicationContext) }
     val secureAccountSessionStore: SecureAccountSessionStore by lazy {
@@ -120,50 +123,33 @@ internal class BksAppContainer(context: Context) {
         )
     }
 
-    fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies {
-        val sessionCoordinator = if (overrides.hasAccountSessionOverrides()) {
-            createAccountSessionCoordinator(overrides).also { it.start() }
-        } else {
-            accountSessionCoordinator
-        }
-        val cloudSettingsCoordinator = if (overrides.hasCloudSettingsOverrides()) {
-            createAccountCloudSettingsCoordinator(
-                sessionCoordinator = sessionCoordinator,
-                gateway = overrides.cloudAiSettingsGateway ?: cloudAiSettingsGateway
-            ).also { it.start() }
-        } else {
-            accountCloudSettingsCoordinator
-        }
-        val syncRuntime = if (overrides.hasAccountSessionOverrides()) {
-            createLedgerSyncRuntime(sessionCoordinator).also { it.start() }
-        } else {
-            ledgerSyncRuntime
-        }
-        return BksAppDependencies(
-            context = applicationContext,
-            local = BksLocalDependencies(
-                database = database,
-                ledgerRepository = ledgerRepository,
-                preferencesRepository = preferencesRepository,
-                dataBackupRepository = dataBackupRepository,
-                reviewQueuePersistence = ReviewQueuePersistence(ledgerRepository)
-            ),
-            account = BksAccountDependencies(
-                accountRepository = overrides.accountRepository ?: accountRepository,
-                sessionCoordinator = sessionCoordinator,
-                cloudSettingsCoordinator = cloudSettingsCoordinator,
-                wechatAuthGateway = overrides.wechatAuthGateway ?: wechatAuthGateway,
-                wechatAvatarCache = wechatAvatarCache,
-                installationIdStore = installationIdStore
-            ),
-            sync = BksSyncDependencies(
-                localStore = ledgerSyncLocalStore,
-                coordinator = ledgerSyncCoordinator,
-                runtime = syncRuntime
-            ),
-            aiCategorizationGateway = overrides.aiCategorizationGateway ?: aiCategorizationGateway,
-            diagnosticLogs = diagnosticLogs
-        )
+    fun resolveAccountSessionCoordinator(
+        overrides: BksAppOverrides
+    ): AccountSessionCoordinator = if (overrides.hasAccountSessionOverrides()) {
+        createAccountSessionCoordinator(overrides).also { it.start() }
+    } else {
+        accountSessionCoordinator
+    }
+
+    fun resolveAccountCloudSettingsCoordinator(
+        overrides: BksAppOverrides,
+        sessionCoordinator: AccountSessionCoordinator
+    ): AccountCloudSettingsCoordinator = if (overrides.hasCloudSettingsOverrides()) {
+        createAccountCloudSettingsCoordinator(
+            sessionCoordinator = sessionCoordinator,
+            gateway = overrides.cloudAiSettingsGateway ?: cloudAiSettingsGateway
+        ).also { it.start() }
+    } else {
+        accountCloudSettingsCoordinator
+    }
+
+    fun resolveLedgerSyncRuntime(
+        overrides: BksAppOverrides,
+        sessionCoordinator: AccountSessionCoordinator
+    ): LedgerSyncRuntime = if (overrides.hasAccountSessionOverrides()) {
+        createLedgerSyncRuntime(sessionCoordinator).also { it.start() }
+    } else {
+        ledgerSyncRuntime
     }
 
     fun createBillSyncCaptureProcessor(): BillSyncCaptureProcessor = BillSyncCaptureProcessor(

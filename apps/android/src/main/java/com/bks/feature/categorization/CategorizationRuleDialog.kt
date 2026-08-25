@@ -112,3 +112,12 @@ internal fun CategorizationRuleDialog(
 
 internal fun List<CategorizationRule>.nextUpdatedAt(): Long =
     (maxOfOrNull { it.updatedAtEpochMillis } ?: 0L) + 1L
+
+internal fun List<CategorizationRule>.nextRuleId(): String {
+    val nextIndex = asSequence()
+        .mapNotNull { rule -> rule.id.removePrefix("rule-").toLongOrNull() }
+        .maxOrNull()
+        ?.plus(1L)
+        ?: 1L
+    return "rule-$nextIndex"
+}

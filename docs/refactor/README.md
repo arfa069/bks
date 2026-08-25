@@ -101,7 +101,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 7.1 | [Legacy Cleanup](./phase-7/step-7.1-legacy-cleanup.md) | Blocked |
+| 7.1 | [Legacy Cleanup](./phase-7/step-7.1-legacy-cleanup.md) | Completed |
 
 ## 执行规则
 

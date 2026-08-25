@@ -22,6 +22,7 @@ import com.bks.feature.account.HttpUrlConnectionAccountTransport
 import com.bks.feature.account.LocalModeSessionStore
 import com.bks.feature.account.SecureAccountSessionStore
 import com.bks.feature.ledger.toLedgerUiEntry
+import com.bks.feature.settings.BackupLedgerEntryUiModel
 import com.bks.feature.settings.LocalDataBackupRepository
 import com.bks.feature.settings.exportLedgerCsv
 import java.util.Locale
@@ -110,7 +111,22 @@ class BenchmarkDataProvider : ContentProvider() {
             Trace.beginAsyncSection(csvTraceName, csvTraceCookie)
             val csv = try {
                 withContext(Dispatchers.Default) {
-                    exportLedgerCsv(entries.map { it.toLedgerUiEntry() })
+                    exportLedgerCsv(
+                        entries.map { entity ->
+                            val entry = entity.toLedgerUiEntry()
+                            BackupLedgerEntryUiModel(
+                                id = entry.id,
+                                transactionTimeText = entry.transactionTimeText,
+                                title = entry.title,
+                                amountMinor = entry.amountMinor,
+                                flowType = entry.flowType.name,
+                                category = entry.category,
+                                sourceLabel = entry.sourceLabel,
+                                kindLabel = entry.kindLabel,
+                                note = entry.note
+                            )
+                        }
+                    )
                 }
             } finally {
                 Trace.endAsyncSection(csvTraceName, csvTraceCookie)

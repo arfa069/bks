@@ -60,11 +60,11 @@ flowchart LR
   - `BksAppState`: 统一管理顶层 Tab、个人中心子页面、手动录入入口、列表滚动状态及 `SnackbarHostState`；`MainActivity` 只保留系统生命周期、外部 Intent 转换和 `setContent`。
   - `BksAppBindings` 承载系统权限、设置跳转、外部导航及微信回调，`BksAppOverrides` 仅承载测试替身；生产依赖、Session 恢复、同步副作用和本地状态持久化继续由应用根组合层统一装配。
   - 审核编辑器、账本列表、账本表单模型和账号管理对话框分别位于独立文件，Screen 入口只负责页面状态与事件编排。
-  - `BillSyncAccessibilityService` 继承 `AssistsService`，接收全部无障碍事件并立即读取事件对应窗口；同一窗口成功页面只创建一次，不查询候选或历史记录，销毁时取消 Service 协程。
-- **第三轮根组合重构（2026-08-02）**：`BksApp` 保留为唯一根组合入口，但将职责拆分为可独立核对的边界：
-  - `BksAppDependencies` 负责 Room、账号、AI、微信、备份和账本同步等生产依赖的记忆化装配；`BksAppOverrides` 只向测试注入替身，不改变生产依赖图。
-  - `BksAppRuntime` 集中账号 Session、账本/同步状态、动作和展示模型；`BksAppEffectsContext` 及其副作用函数集中恢复、校验、导航、持久化和同步生命周期，避免路由组件直接拥有后台任务。
-  - `BksRouteContext` 作为路由共享上下文，`BksRouteHost` 负责账号入口、已登录应用壳、手动录入和主 Tab 分发；账本/待确认/报表与 Profile 子页分别由 `BksLedgerRoutes`、`BksProfileRoutes` 编排。
+  - `BillSyncAccessibilityService` 是 `AssistsService` 的薄 Android adapter，只转发连接、事件、解绑和销毁回调；Application-owned `BillSyncCaptureCoordinator` 持有开关观察、Service capture session、窗口选择、去重记忆和异步持久化交接，同一窗口成功页面只创建一次。
+- **Application composition root 收口（2026-08-25）**：`BksAppContainer` 是唯一生产 Composition Root，持有 Room、Repository、Gateway 及真正的 Application-level Coordinator/Runtime；测试 override 通过 Container 的 lifecycle resolver 创建相互匹配的 Session、Cloud Settings 和 Sync owner，不存在额外 dependency facade。
+  - `BksApp` 是唯一根组合入口，只直接收集现有 owner/Repository state、派生路由所需只读值、转发 `ON_RESUME`、装配 Feature ViewModel/Route 和显示真正全局 Dialog；不持有 Account、Categorization、Review、Ledger、Sync 或 Backup 的镜像状态。
+  - 分类规则直接以 `LocalPreferencesRepository.categorizationRules` 为持久真实源；AI 设置由 `AccountSessionCoordinator` 与 `AccountCloudSettingsCoordinator` 共同决定，长期同步任务仍由 Application scope 中的 `LedgerSyncRuntime` 执行。
+  - `BksRouteHost` 仅持有 Navigation shell；各 Route 接收 owner、state 与平台 callback 后装配 Screen，Route/Screen 不直接访问 Database、DAO 或 Container。
   - `BksLedgerSyncAccountSwitchDialog` 必须在 `BksTheme` 组合结束后调用。这样账本同步发现账号与本地 Profile 不一致时，AlertDialog 继续使用重构前的主题作用域，不会因结构拆分意外继承应用自定义颜色、字体或组件主题。
 - **第四轮 Ledger + Review UI 职责拆分（2026-08-02）**：保持产品交互、Room/同步、OCR、后端契约和数据语义不变，将核心页面拆成可独立核对的渲染与编排边界：
   - Ledger 表单字段与配置位于 `LedgerEntryFormFields.kt`、`LedgerEntryFormConfig.kt`；最近删除、账本管理和资金账户管理分别位于独立 Screen 文件，`LedgerScreen` 只负责路由和 action holder 装配。

@@ -8,6 +8,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.bks.feature.categorization.CategorizationRule
+import com.bks.feature.categorization.CategorizationRulesUpdate
 import com.bks.feature.ledger.LedgerScreen
 import com.bks.feature.ledger.LedgerUiState
 import com.bks.feature.ledger.LedgerViewModel
@@ -23,8 +24,7 @@ internal fun BksReviewRoute(
     reviewState: ReviewQueueState,
     reviewViewModel: ReviewQueueViewModel,
     ledgerState: LedgerUiState,
-    categorizationRules: List<CategorizationRule>,
-    onCategorizationRulesChange: (List<CategorizationRule>) -> Unit,
+    onCategorizationRulesChange: (CategorizationRulesUpdate) -> Unit,
     innerPadding: PaddingValues,
     onNavigateHome: () -> Unit
 ) {
@@ -43,8 +43,8 @@ internal fun BksReviewRoute(
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding),
         onCategorizationRuleRequested = { request ->
-            onCategorizationRulesChange(
-                categorizationRules.upsert(
+            onCategorizationRulesChange { currentRules ->
+                currentRules.upsert(
                     CategorizationRule(
                         id = request.id,
                         merchantContains = request.merchantContains,
@@ -54,7 +54,7 @@ internal fun BksReviewRoute(
                         updatedAtEpochMillis = request.updatedAtEpochMillis
                     )
                 )
-            )
+            }
         },
         onAiSuggest = reviewViewModel::suggestCategory,
         onNavigateHome = onNavigateHome

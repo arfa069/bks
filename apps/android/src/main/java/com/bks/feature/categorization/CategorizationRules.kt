@@ -12,6 +12,9 @@ data class CategorizationRule(
     val updatedAtEpochMillis: Long = 0
 )
 
+typealias CategorizationRulesUpdate =
+    (List<CategorizationRule>) -> List<CategorizationRule>
+
 data class CategorizationTransaction(
     val merchantTitle: String,
     val sourceLabel: String,

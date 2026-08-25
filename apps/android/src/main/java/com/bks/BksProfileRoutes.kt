@@ -26,6 +26,7 @@ import com.bks.feature.account.WechatAvatarCache
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationAiUiState
 import com.bks.feature.categorization.CategorizationRule
+import com.bks.feature.categorization.CategorizationRulesUpdate
 import com.bks.feature.categorization.CategorizationRulesActions
 import com.bks.feature.categorization.CategorizationRulesScreen
 import com.bks.feature.compliance.ComplianceAndPrivacyScreen
@@ -159,7 +160,7 @@ internal fun BksAccountManagementRoute(
 @Suppress("LongParameterList")
 internal fun BksCategorizationRoute(
     rules: List<CategorizationRule>,
-    onRulesChange: (List<CategorizationRule>) -> Unit,
+    onRulesChange: (CategorizationRulesUpdate) -> Unit,
     aiSettings: AiCategorizationSettings,
     signedIn: Boolean,
     cloudWritesPaused: Boolean,

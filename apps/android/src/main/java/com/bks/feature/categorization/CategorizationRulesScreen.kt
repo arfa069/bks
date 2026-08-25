@@ -61,7 +61,7 @@ fun CategorizationRulesScreen(
     var rules by remember { mutableStateOf(emptyList<CategorizationRule>()) }
     CategorizationRulesScreen(
         rules = rules,
-        onRulesChange = { rules = it },
+        onRulesChange = { update -> rules = update(rules) },
         modifier = modifier,
         aiUiState = aiUiState,
         actions = CategorizationRulesActions(
@@ -74,7 +74,7 @@ fun CategorizationRulesScreen(
 @Composable
 fun CategorizationRulesScreen(
     rules: List<CategorizationRule>,
-    onRulesChange: (List<CategorizationRule>) -> Unit,
+    onRulesChange: (CategorizationRulesUpdate) -> Unit,
     modifier: Modifier = Modifier,
     aiUiState: CategorizationAiUiState = CategorizationAiUiState(),
     actions: CategorizationRulesActions = CategorizationRulesActions()
@@ -117,7 +117,9 @@ fun CategorizationRulesScreen(
                 isCreating = false
             },
             onDelete = { rule ->
-                onRulesChange(rules.filterNot { it.id == rule.id })
+                onRulesChange { currentRules ->
+                    currentRules.filterNot { it.id == rule.id }
+                }
             }
         )
 
@@ -132,21 +134,22 @@ fun CategorizationRulesScreen(
                 editingRuleId = null
             },
             onSave = { savedRule ->
-                val nextRules = if (editingRule == null) {
-                    rules + savedRule.copy(
-                        id = "rule-${rules.size + 1}",
-                        updatedAtEpochMillis = rules.nextUpdatedAt()
-                    )
-                } else {
-                    rules.map { existing ->
-                        if (existing.id == savedRule.id) {
-                            savedRule.copy(updatedAtEpochMillis = rules.nextUpdatedAt())
-                        } else {
-                            existing
+                onRulesChange { currentRules ->
+                    if (editingRule == null) {
+                        currentRules + savedRule.copy(
+                            id = currentRules.nextRuleId(),
+                            updatedAtEpochMillis = currentRules.nextUpdatedAt()
+                        )
+                    } else {
+                        currentRules.map { existing ->
+                            if (existing.id == savedRule.id) {
+                                savedRule.copy(updatedAtEpochMillis = currentRules.nextUpdatedAt())
+                            } else {
+                                existing
+                            }
                         }
                     }
                 }
-                onRulesChange(nextRules)
                 isCreating = false
                 editingRuleId = null
             }

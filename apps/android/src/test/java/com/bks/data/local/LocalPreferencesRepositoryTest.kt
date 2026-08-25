@@ -8,7 +8,9 @@ import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
 import com.bks.feature.review.ReviewQueueEntry
 import com.bks.feature.review.applyCategorizationSuggestion
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -77,7 +79,7 @@ class LocalPreferencesRepositoryTest {
                 .map { rule ->
                     if (rule.id == "default-food") rule.copy(category = "购物") else rule
                 }
-            repository.replaceCategorizationRules(rules)
+            repository.updateCategorizationRules { rules }
         }
         database.close()
 
@@ -90,6 +92,40 @@ class LocalPreferencesRepositoryTest {
         assertEquals("购物", persistedRules.first { it.id == "default-food" }.category)
         reopened.close()
         context.deleteDatabase(databaseName)
+    }
+
+    @Test
+    fun concurrentRuleUpdatesUseTheLatestPersistedSnapshot() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(), BksDatabase::class.java
+        ).allowMainThreadQueries().build()
+        val repository = LocalPreferencesRepository(database)
+        repository.updateCategorizationRules {
+            listOf(
+                sampleRule(id = "rule-a"),
+                sampleRule(id = "rule-b"),
+                sampleRule(id = "rule-c")
+            )
+        }
+
+        coroutineScope {
+            launch {
+                repository.updateCategorizationRules { rules ->
+                    rules.filterNot { it.id == "rule-a" }
+                }
+            }
+            launch {
+                repository.updateCategorizationRules { rules ->
+                    rules.filterNot { it.id == "rule-b" }
+                }
+            }
+        }
+
+        assertEquals(
+            listOf("rule-c"),
+            database.categorizationRuleDao().listRules().map { it.id }
+        )
+        database.close()
     }
 
     @Test
@@ -125,7 +161,7 @@ class LocalPreferencesRepositoryTest {
         val database = openDatabase(context, databaseName)
         val repository = LocalPreferencesRepository(database)
         runBlocking {
-            repository.replaceCategorizationRules(
+            repository.updateCategorizationRules {
                 listOf(
                     sampleRule(
                         id = "ride",
@@ -135,7 +171,7 @@ class LocalPreferencesRepositoryTest {
                         updatedAtEpochMillis = 20
                     )
                 )
-            )
+            }
             repository.updateAiSettings(
                 AiCategorizationSettings(
                     aiConsentGranted = true,
@@ -203,7 +239,7 @@ class LocalPreferencesRepositoryTest {
 
         val database = openDatabase(context, databaseName)
         runBlocking {
-            LocalPreferencesRepository(database).replaceCategorizationRules(
+            LocalPreferencesRepository(database).updateCategorizationRules {
                 listOf(
                     sampleRule(
                         id = "coffee",
@@ -213,7 +249,7 @@ class LocalPreferencesRepositoryTest {
                         category = "food"
                     )
                 )
-            )
+            }
         }
         database.close()
 
@@ -247,7 +283,7 @@ class LocalPreferencesRepositoryTest {
         val repository = LocalPreferencesRepository(database)
 
         runBlocking {
-            repository.replaceCategorizationRules(listOf(sampleRule()))
+            repository.updateCategorizationRules { listOf(sampleRule()) }
             repository.updateAiSettings(AiCategorizationSettings(aiConsentGranted = true))
             repository.setAutomaticBookkeepingEnabled(true)
 

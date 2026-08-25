@@ -18,28 +18,36 @@ class BksAppContainerTest {
     @Test
     fun applicationOwnsOneContainerAndOneDatabaseGraph() {
         val container = application.appContainer
-        val firstDependencies = container.createAppDependencies(BksAppOverrides())
-        val secondDependencies = container.createAppDependencies(BksAppOverrides())
+        val overrides = BksAppOverrides()
 
         assertSame(container, application.appContainer)
-        assertSame(container.database, firstDependencies.local.database)
-        assertSame(firstDependencies.local.database, secondDependencies.local.database)
-        assertSame(container.ledgerRepository, firstDependencies.local.ledgerRepository)
-        assertSame(container.preferencesRepository, firstDependencies.local.preferencesRepository)
-        assertSame(container.accountSessionCoordinator, firstDependencies.account.sessionCoordinator)
-        assertSame(firstDependencies.account.sessionCoordinator, secondDependencies.account.sessionCoordinator)
+        assertSame(
+            container.database,
+            application.appContainer.database
+        )
+        assertSame(
+            container.ledgerRepository,
+            application.appContainer.ledgerRepository
+        )
+        assertSame(
+            container.preferencesRepository,
+            application.appContainer.preferencesRepository
+        )
+        assertSame(
+            container.accountSessionCoordinator,
+            container.resolveAccountSessionCoordinator(overrides)
+        )
         assertSame(
             container.accountCloudSettingsCoordinator,
-            firstDependencies.account.cloudSettingsCoordinator
+            container.resolveAccountCloudSettingsCoordinator(
+                overrides,
+                container.accountSessionCoordinator
+            )
         )
         assertSame(
-            firstDependencies.account.cloudSettingsCoordinator,
-            secondDependencies.account.cloudSettingsCoordinator
+            container.ledgerSyncRuntime,
+            container.resolveLedgerSyncRuntime(overrides, container.accountSessionCoordinator)
         )
-        assertSame(container.ledgerSyncCoordinator, firstDependencies.sync.coordinator)
-        assertSame(firstDependencies.sync.coordinator, secondDependencies.sync.coordinator)
-        assertSame(container.ledgerSyncRuntime, firstDependencies.sync.runtime)
-        assertSame(firstDependencies.sync.runtime, secondDependencies.sync.runtime)
     }
 
     @Test
@@ -47,18 +55,22 @@ class BksAppContainerTest {
         val container = application.appContainer
         val accountRepository = FakeAccountRepository()
 
-        val dependencies = container.createAppDependencies(
-            BksAppOverrides(accountRepository = accountRepository)
+        val overrides = BksAppOverrides(accountRepository = accountRepository)
+        val sessionCoordinator = container.resolveAccountSessionCoordinator(overrides)
+        val cloudSettingsCoordinator = container.resolveAccountCloudSettingsCoordinator(
+            overrides,
+            sessionCoordinator
         )
+        val syncRuntime = container.resolveLedgerSyncRuntime(overrides, sessionCoordinator)
 
-        assertSame(accountRepository, dependencies.account.accountRepository)
-        assertNotSame(container.accountSessionCoordinator, dependencies.account.sessionCoordinator)
+        assertNotSame(container.accountSessionCoordinator, sessionCoordinator)
         assertNotSame(
             container.accountCloudSettingsCoordinator,
-            dependencies.account.cloudSettingsCoordinator
+            cloudSettingsCoordinator
         )
-        assertSame(container.database, dependencies.local.database)
-        assertSame(container.ledgerRepository, dependencies.local.ledgerRepository)
+        assertNotSame(container.ledgerSyncRuntime, syncRuntime)
+        assertSame(container.database, application.appContainer.database)
+        assertSame(container.ledgerRepository, application.appContainer.ledgerRepository)
     }
 
     @Test
@@ -75,8 +87,8 @@ class BksAppContainerTest {
             container.createBillSyncStateCoordinator(activity)
         )
         assertSame(
-            container.createAppDependencies(BksAppOverrides()).sync.coordinator,
-            container.createAppDependencies(BksAppOverrides()).sync.coordinator
+            container.ledgerSyncCoordinator,
+            application.appContainer.ledgerSyncCoordinator
         )
     }
 }

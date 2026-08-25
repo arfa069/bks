@@ -84,7 +84,7 @@ class CategorizationRulesScreenTest {
         composeRule.setContent {
             CategorizationRulesScreen(
                 rules = rules,
-                onRulesChange = { rules = it }
+                onRulesChange = { update -> rules = update(rules) }
             )
         }
 
@@ -115,17 +115,18 @@ class CategorizationRulesScreenTest {
 
     @Test
     fun userCanDeleteRule() {
+        val initialRules = listOf(
+            CategorizationRule(
+                id = "rule-delete",
+                merchantContains = "coffee",
+                category = "food"
+            )
+        )
         var updatedRules: List<CategorizationRule>? = null
         composeRule.setContent {
             CategorizationRulesScreen(
-                rules = listOf(
-                    CategorizationRule(
-                        id = "rule-delete",
-                        merchantContains = "coffee",
-                        category = "food"
-                    )
-                ),
-                onRulesChange = { updatedRules = it }
+                rules = initialRules,
+                onRulesChange = { update -> updatedRules = update(initialRules) }
             )
         }
 
@@ -133,6 +134,30 @@ class CategorizationRulesScreenTest {
         composeRule.onNodeWithTag("delete-rule-rule-delete").performClick()
 
         assertTrue(updatedRules?.isEmpty() == true)
+    }
+
+    @Test
+    fun newRuleIdDoesNotReuseAnExistingIdAfterDeletion() {
+        var rules by mutableStateOf(
+            listOf(
+                CategorizationRule(id = "rule-1", category = "餐饮"),
+                CategorizationRule(id = "rule-3", category = "交通")
+            )
+        )
+        composeRule.setContent {
+            CategorizationRulesScreen(
+                rules = rules,
+                onRulesChange = { update -> rules = update(rules) }
+            )
+        }
+
+        composeRule.onNodeWithTag("create-rule").performClick()
+        composeRule.onNodeWithText("分类").performTextInput("购物")
+        composeRule.onNodeWithText("保存规则").performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(listOf("rule-1", "rule-3", "rule-4"), rules.map { it.id })
+        }
     }
 
     @Test

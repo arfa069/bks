@@ -3,6 +3,7 @@ package com.bks.data.local
 import androidx.room.withTransaction
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
+import com.bks.feature.categorization.CategorizationRulesUpdate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -24,8 +25,9 @@ class LocalPreferencesRepository(
             settings?.toDomain() ?: LocalUserPreferences()
         }
 
-    suspend fun replaceCategorizationRules(rules: List<CategorizationRule>) = database.withTransaction {
+    suspend fun updateCategorizationRules(update: CategorizationRulesUpdate) = database.withTransaction {
         val previous = database.categorizationRuleDao().listRules()
+        val rules = update(previous.map { it.toDomain() })
         val recorder = LocalSyncMutationRecorder(database, System::currentTimeMillis)
         val entities = rules.map { it.toEntity() }
         database.categorizationRuleDao().deleteAll()
