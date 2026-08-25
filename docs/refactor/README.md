@@ -94,7 +94,7 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 6.1 | [Accessibility Characterization](./phase-6/step-6.1-accessibility-characterization.md) | Pending |
+| 6.1 | [Accessibility Characterization](./phase-6/step-6.1-accessibility-characterization.md) | Completed |
 | 6.2 | [Accessibility Refactor](./phase-6/step-6.2-accessibility-refactor.md) | Pending |
 
 ### Phase 7 — Legacy God Layer Removal / Final Validation
