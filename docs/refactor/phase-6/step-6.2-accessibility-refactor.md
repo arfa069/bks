@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked
+Completed
 
 ## Goal
 
@@ -157,15 +157,20 @@ Xiaomi/MIUI 不运行 `uiautomator dump`。
 - `:apps:android:assembleDebug` 通过，生成 `apps/android/build/outputs/apk/debug/android-debug.apk`（80,382,369 bytes）。
 - `git diff --check` 通过；新增未跟踪 Kotlin 文件另以 `git diff --no-index --check` 检查，无 whitespace error。
 - 修复三项审查问题后，`:apps:android:testDebugUnitTest` 最终整轮通过：545 tests，0 failures/errors/skipped。此前初版第一次全量运行仅 `AccountSessionCoordinatorTest.restoredSessionIsVerifiedAndRepeatedStartDoesNotRepeatWork` 因 Robolectric 主线程残留 runnable 失败；该非 billsync 测试单独重跑和后续完整 suite 均通过，未修改账号模块。
-- `adb devices -l` 返回空设备列表。未安装 APK、未修改系统授权、未清理日志、未运行 `uiautomator dump`，因此没有 `dumpsys accessibility` 或同一次 `event → capture → roots → collected → processed` 真机证据。
+- 首轮执行时 `adb devices -l` 返回空设备列表，因此当时没有真机证据；恢复执行后连接一台经用户授权的 Xiaomi Android 16 真机，记录逻辑分辨率 1080×2400，并始终按唯一指定 serial 操作。
+- 恢复执行时重新运行 `:apps:android:assembleDebug` 并以 `install -r` 覆盖安装 APK、保留应用数据；安装后通过系统设置界面恢复安装前已有的 BKS Accessibility 授权。最终只读检查确认 `BillSyncAccessibilityService` 同时处于 Enabled 与 Bound，未处于 Binding/Crashed。
+- 应用内自动记账 intent 的真实日志为 `enabled=true`。在设备默认浏览器打开本机临时、无真实支付的语义测试页后，同一次脱敏日志链为：`event package=mark.via window=11567` → `capture enabled=true` → `roots selected=mark.via/11567` → `collected lines=9 chars=96` → `processed recognized=true created=1`。
+- persistence in-flight 期间的重复事件命中 `capture_deferred`；成功后同窗重复事件 6 次命中 `already_captured_window`。整次复现仅 1 条 `recognized=true created=1`，`failed` 为 0，证明未重复写入 Review Queue。
+- 真机验证未运行 `uiautomator dump`；测试结束后已关闭 `BillSyncCapture` Debug 标签、停止本机临时服务器并回到 BKS。最终 secure 状态确认没有残留误授权，Service 仍为 Enabled 与 Bound，AndroidRuntime 未发现 BKS/Service/Coordinator 崩溃。
+- 恢复执行后的最终验证再次通过：billsync 9 suites / 36 tests、Android 全量 94 suites / 545 tests，均为 0 failures/errors/skipped；`:apps:android:detekt` 与 `:apps:android:assembleDebug` 通过。
 
 ### Remaining Risks
 
-- 当前没有连接且经用户授权的 Android 真机，无法复测卡顿改善、真实 Service 直接 callback、OEM Accessibility 重连、事件窗口可用性和最终 Review Queue 落库链路；这是本 Step Completion Criteria 与 Stop Condition 的唯一未满足门禁。
-- 恢复执行时必须先确认唯一目标设备，再按仓库指南检查 `wm size`、包状态和 `dumpsys accessibility`；经用户授权完成目标完成页复现并取得脱敏的同一次日志链。Xiaomi/MIUI 仍禁止使用 `uiautomator dump`。
-- JVM 测试已证明 enabled observer 幂等、capture session 随连接取消、in-flight 事件合并、trailing page check、失败可重试、陈旧 session 不写回且并发不重复持久化，但不能替代厂商系统对 Assists `AllWindows`、绑定/解绑顺序、真机性能和进程回收行为的证据。
-- 改动保留在未提交工作区；未 commit、push 或创建分支。Step 7.1 不得开始。
+- 真机使用安全的本机浏览器语义页验证，没有发起真实支付；因此已覆盖 OEM Service 绑定、真实 Accessibility callback、Assists `AllWindows`、事件窗口选择、节点读取、Parser 和 Review Queue persistence，但不代表覆盖所有支付应用版本的私有节点树差异。
+- 真机验证向 Debug 应用的 Review Queue 写入 1 条有明确测试标识的待确认记录；它没有被自动确认成账目。本 Step 不执行数据删除，测试记录留给用户审阅或清理。
+- JVM 测试继续承担 enabled observer 幂等、capture session 取消、failure/cancellation、trailing check 和并发时序的确定性证明；单次真机复现不能穷尽进程回收和所有 OEM 重连顺序。
+- 改动保留在未提交工作区；未 commit、push 或创建分支。本 Step 完成后停止，不执行 Step 7.1。
 
 ### Final Status
 
-Blocked — 代码、专项测试、Detekt、Debug APK、diff 检查和 Phase 6 Android JVM 全量测试均已完成；因无连接设备，强制真机 Accessibility 链路尚未验证。连接并授权目标真机后从本 Step 的真机门禁继续，不进入 Step 7.1。
+Completed — 代码、专项测试、Detekt、Debug APK、Phase 6 Android JVM 全量测试、diff 检查和经用户授权的 Xiaomi 真机 Accessibility 全链路均已通过；Debug 标签和临时服务器已关闭，未进入 Step 7.1。

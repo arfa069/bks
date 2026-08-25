@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending
+Blocked
 
 ## Goal
 
@@ -129,20 +129,29 @@ git status --short
 
 ### Actual Changes
 
-尚未执行
+- 完成执行前门禁核对：当前工作区无既有未提交改动，HEAD 为 Step 6.2 的实现结果；生产代码仍由 `BksApp` 消费 `BksAppRuntimeState`、`BksAppActions`、`BksAppPresentation` 与 `BksAppEffectsContext`，符合 Step 7.1 尚未开始清理的现状。
+- 复核 Step 6.2 的 Execution Record、实现与测试入口：Accessibility 拆分代码、Coordinator、Service adapter 和对应 JVM 测试均已落地，但 Step 6.2 仍因缺少授权真机链路证据而明确标记为 `Blocked`。
+- 通过本机 Android SDK 的 ADB 再次检查设备，设备列表为空；未安装 APK、未修改系统授权、未执行真机操作。
+- 命中本 Step Stop Conditions 后停止；未删除旧符号、未修改生产代码、测试、架构说明或其他 Step 实施方案。
 
 ### Deviations From Plan
 
-无
+- 未执行 Planned Changes。原因是前置 Step 6.2 尚未达到 Completion Criteria，并被标记为 `Blocked`；本 Step 明确禁止在此前提下删除桥接或进入最终验证。
+- 未运行 Android JVM tests、Detekt、`assembleDebug` 或完整 `build`。这些命令属于完成清理后的验证，当前在任何生产改动前已触发停止条件，运行它们不能替代 Step 6.2 缺失的授权真机证据。
 
 ### Test Results
 
-尚未执行
+- 前置结构搜索完成：`BksAppRuntimeState`、`BksAppActions`、`BksAppPresentation` 与 `BksAppEffectsContext` 仍存在生产定义及消费者；`BksRouteContext.kt` 已不存在。
+- Step 6.2 落地抽查完成：`BillSyncAccessibilityService` 仅保留 Android callback/lifecycle 委托，`BillSyncCaptureCoordinator` 及其测试存在，Container/Application 持有并启动 Coordinator；本轮未重新执行其测试。
+- ADB 设备检查完成：ADB 可用，但 `adb devices -l` 无连接设备，无法取得 `dumpsys accessibility` 和同一次 `event → capture → roots → collected → processed` 的授权真机证据。
+- 文档更新后 `git diff --check -- docs/` 通过，未完成标记检查无命中；diff scope 检查确认仅修改本 Step 与重构总览文档。
 
 ### Remaining Risks
 
-尚未执行
+- Step 6.2 的真机风险仍未关闭：OEM Accessibility 重连、真实事件窗口读取、卡顿改善与最终 Review Queue 落库链路尚无授权真机证据。
+- 旧 Application-level God Layer 及 dependency facade 仍在生产路径中；这是本 Step 被阻塞后有意保留的可回滚状态，不得在前置门禁解除前删除。
+- 恢复条件：另行完成并将 Step 6.2 更新为 `Completed`，包括经授权真机验证；随后重新开始 Step 7.1 的代码核对、清理和完整验证。
 
 ### Final Status
 
-Pending
+Blocked — Step 6.2 仍为 `Blocked`，且当前无连接设备可补齐其强制真机门禁；已按 Stop Conditions 在任何生产代码改动前停止，不进入后续 Step。

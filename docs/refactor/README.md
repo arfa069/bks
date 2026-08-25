@@ -95,13 +95,13 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 | Step | Title | Status |
 |---|---|---|
 | 6.1 | [Accessibility Characterization](./phase-6/step-6.1-accessibility-characterization.md) | Completed |
-| 6.2 | [Accessibility Refactor](./phase-6/step-6.2-accessibility-refactor.md) | Blocked |
+| 6.2 | [Accessibility Refactor](./phase-6/step-6.2-accessibility-refactor.md) | Completed |
 
 ### Phase 7 — Legacy God Layer Removal / Final Validation
 
 | Step | Title | Status |
 |---|---|---|
-| 7.1 | [Legacy Cleanup](./phase-7/step-7.1-legacy-cleanup.md) | Pending |
+| 7.1 | [Legacy Cleanup](./phase-7/step-7.1-legacy-cleanup.md) | Blocked |
 
 ## 执行规则
 
