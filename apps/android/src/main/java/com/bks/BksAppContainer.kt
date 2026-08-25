@@ -15,6 +15,8 @@ import com.bks.feature.account.LocalModeSessionStore
 import com.bks.feature.account.SecureAccountSessionStore
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.account.WechatAvatarCache
+import com.bks.feature.billsync.BillSyncCaptureCoordinator
+import com.bks.feature.billsync.BillSyncCaptureOperations
 import com.bks.feature.billsync.BillSyncCaptureProcessor
 import com.bks.feature.billsync.BillSyncPipeline
 import com.bks.feature.billsync.BillSyncStateCoordinator
@@ -34,10 +36,13 @@ import com.bks.feature.sync.LedgerSyncRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.map
 
 internal class BksAppContainer(context: Context) {
     private val applicationContext = context.applicationContext
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val billSyncCoordinatorScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val database: BksDatabase by lazy { BksDatabaseProvider.get(applicationContext) }
     val ledgerRepository: LocalLedgerRepository by lazy { LocalLedgerRepository(database) }
@@ -99,6 +104,20 @@ internal class BksAppContainer(context: Context) {
     }
     val ledgerSyncRuntime: LedgerSyncRuntime by lazy {
         createLedgerSyncRuntime(accountSessionCoordinator)
+    }
+    val billSyncCaptureCoordinator: BillSyncCaptureCoordinator by lazy {
+        val processor = createBillSyncCaptureProcessor()
+        BillSyncCaptureCoordinator(
+            context = applicationContext,
+            enabledIntent = preferencesRepository.userPreferences.map {
+                it.automaticBookkeepingEnabled
+            },
+            processor = BillSyncCaptureOperations(
+                recognize = processor::recognize,
+                persist = processor::persist
+            ),
+            applicationScope = billSyncCoordinatorScope
+        )
     }
 
     fun createAppDependencies(overrides: BksAppOverrides): BksAppDependencies {

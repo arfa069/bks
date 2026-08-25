@@ -21,6 +21,7 @@ class BksApplication : Application() {
         appContainer.accountCloudSettingsCoordinator.start()
         appContainer.ledgerSyncRuntime.start()
         AssistsCore.init(this)
+        appContainer.billSyncCaptureCoordinator.start()
         installDiagnosticCrashHandler()
     }
 

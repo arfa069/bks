@@ -4,8 +4,8 @@
 
 本目录负责基于 `assists-base` 的通用无障碍窗口读取、交易候选解析和待确认队列交接。
 
-- `BillSyncAccessibilityService` 只作为 Android 无障碍服务入口，直接继承 `AssistsService`；除非有明确的应用级生命周期副作用，不重复覆写基类已经实现的回调。
-- 应用级采集协调器通过 `AssistsService.listeners` 接收事件，负责开关状态、窗口读取、重复抑制、解析和调用 Processor。
+- `BillSyncAccessibilityService` 只作为 Android 无障碍服务入口，直接继承 `AssistsService`；系统 callback 先交给基类，再直接委托给应用级采集协调器，避免业务链路依赖全局 listener 列表的异常与并发迭代行为。
+- 应用级采集协调器负责开关状态、窗口读取、重复抑制、解析和调用 Processor；每次 Service 连接持有独立、可取消的 capture session。
 - Service 不创建 Room、Repository 或 Processor，不直接读写数据库，也不承担业务流程编排。
 - `BillPageParser` 只做纯文本识别；`BillSyncCaptureProcessor` 只负责把已识别结果交给 Review Queue 持久化。
 

@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import androidx.test.core.app.ApplicationProvider
+import com.ven.assists.service.AssistsService
+import com.ven.assists.service.AssistsServiceListener
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,5 +46,47 @@ class BillSyncAccessibilityServiceHealthTest {
 
         controller.destroy()
         assertFalse(BillSyncServiceHealth.isServiceConnected(context))
+    }
+
+    @Test
+    fun serviceDestroyEndsConnectionWithoutExplicitUnbind() {
+        BillSyncServiceHealth.markServiceConnected(context, false)
+        val controller = Robolectric.buildService(BillSyncAccessibilityService::class.java)
+            .create()
+
+        BillSyncAccessibilityService::class.java
+            .getDeclaredMethod("onServiceConnected")
+            .apply { isAccessible = true }
+            .invoke(controller.get())
+        assertTrue(BillSyncServiceHealth.isServiceConnected(context))
+
+        controller.destroy()
+
+        assertFalse(BillSyncServiceHealth.isServiceConnected(context))
+    }
+
+    @Test
+    fun directCoordinatorCallbackSurvivesThrowingAssistsListener() {
+        BillSyncServiceHealth.markServiceConnected(context, false)
+        val throwingListener = object : AssistsServiceListener {
+            override fun onServiceConnected(service: AssistsService) {
+                error("expected")
+            }
+        }
+        AssistsService.listeners.add(0, throwingListener)
+        val controller = Robolectric.buildService(BillSyncAccessibilityService::class.java)
+            .create()
+
+        try {
+            BillSyncAccessibilityService::class.java
+                .getDeclaredMethod("onServiceConnected")
+                .apply { isAccessible = true }
+                .invoke(controller.get())
+
+            assertTrue(BillSyncServiceHealth.isServiceConnected(context))
+        } finally {
+            AssistsService.listeners.remove(throwingListener)
+            controller.destroy()
+        }
     }
 }
