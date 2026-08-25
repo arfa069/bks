@@ -7,13 +7,12 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.bks.feature.categorization.AiCategorizationGateway
-import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
 import com.bks.feature.ledger.LedgerScreen
 import com.bks.feature.ledger.LedgerUiState
 import com.bks.feature.ledger.LedgerViewModel
 import com.bks.feature.ledger.ReportsScreen
+import com.bks.feature.ledger.defaultLedgerCategoryUiModels
 import com.bks.feature.review.ReviewQueueState
 import com.bks.feature.review.ReviewQueueScreen
 import com.bks.feature.review.ReviewQueueViewModel
@@ -26,9 +25,6 @@ internal fun BksReviewRoute(
     ledgerState: LedgerUiState,
     categorizationRules: List<CategorizationRule>,
     onCategorizationRulesChange: (List<CategorizationRule>) -> Unit,
-    accountToken: String?,
-    aiSettings: AiCategorizationSettings,
-    aiCategorizationGateway: AiCategorizationGateway,
     innerPadding: PaddingValues,
     onNavigateHome: () -> Unit
 ) {
@@ -37,6 +33,7 @@ internal fun BksReviewRoute(
         targetLedgerBookId = ledgerState.activeLedgerBookId,
         targetLedgerName = ledgerState.activeLedgerName,
         categories = ledgerState.categories,
+        fallbackCategories = defaultLedgerCategoryUiModels(),
         fundingAccounts = ledgerState.fundingAccounts,
         defaultFundingAccountSyncId = ledgerState.defaultFundingAccountSyncId,
         onCommand = reviewViewModel::execute,
@@ -45,12 +42,21 @@ internal fun BksReviewRoute(
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding),
-        onCategorizationRuleRequested = { rule ->
-            onCategorizationRulesChange(categorizationRules.upsert(rule))
+        onCategorizationRuleRequested = { request ->
+            onCategorizationRulesChange(
+                categorizationRules.upsert(
+                    CategorizationRule(
+                        id = request.id,
+                        merchantContains = request.merchantContains,
+                        sourceLabel = request.sourceLabel,
+                        transactionKind = request.transactionKind,
+                        category = request.category,
+                        updatedAtEpochMillis = request.updatedAtEpochMillis
+                    )
+                )
+            )
         },
-        accountToken = accountToken,
-        aiSettings = aiSettings,
-        aiCategorizationGateway = aiCategorizationGateway,
+        onAiSuggest = reviewViewModel::suggestCategory,
         onNavigateHome = onNavigateHome
     )
 }

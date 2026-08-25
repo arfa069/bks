@@ -87,8 +87,8 @@ Route 最终只负责 Navigation、ViewModel 获取、lifecycle-aware state coll
 
 | Step | Title | Status |
 |---|---|---|
-| 5.1 | [Route](./phase-5/step-5.1-route.md) | Blocked |
-| 5.2 | [Screen Boundaries](./phase-5/step-5.2-screen-boundaries.md) | Pending |
+| 5.1 | [Route](./phase-5/step-5.1-route.md) | Completed |
+| 5.2 | [Screen Boundaries](./phase-5/step-5.2-screen-boundaries.md) | Completed |
 
 ### Phase 6 — Accessibility Boundary Refactor
 

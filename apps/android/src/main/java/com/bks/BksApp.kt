@@ -27,6 +27,7 @@ import com.bks.feature.account.AccountSessionNotice
 import com.bks.feature.account.WechatAuthCallback
 import com.bks.feature.account.WechatAuthGateway
 import com.bks.feature.categorization.AiCategorizationGateway
+import com.bks.feature.categorization.AiCategorizationClient
 import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.home.HomeScreen
 import com.bks.feature.ledger.LedgerViewModel
@@ -165,9 +166,6 @@ fun BksApp(
                                     ledgerState = owners.ledgerUiState,
                                     categorizationRules = runtime.categorizationRules,
                                     onCategorizationRulesChange = actions::persistCategorizationRules,
-                                    accountToken = presentation.accountToken,
-                                    aiSettings = presentation.effectiveAiSettings,
-                                    aiCategorizationGateway = dependencies.aiCategorizationGateway,
                                     innerPadding = innerPadding,
                                     onNavigateHome = onNavigateHome
                                 )
@@ -343,7 +341,12 @@ private fun rememberBksFeatureOwners(
         factory = ledgerFactory(dependencies, cloudSettingsCoordinator)
     )
     val reviewQueueViewModel: ReviewQueueViewModel = viewModel(
-        factory = reviewQueueFactory(dependencies, ledgerViewModel)
+        factory = reviewQueueFactory(
+            dependencies = dependencies,
+            ledgerViewModel = ledgerViewModel,
+            accountSessionCoordinator = accountSessionCoordinator,
+            cloudSettingsCoordinator = cloudSettingsCoordinator
+        )
     )
     val dataAndBackupViewModel: DataAndBackupViewModel = viewModel(
         factory = dataAndBackupFactory(dependencies, ledgerViewModel, reviewQueueViewModel)
@@ -437,12 +440,17 @@ private fun ledgerFactory(
 
 private fun reviewQueueFactory(
     dependencies: BksAppDependencies,
-    ledgerViewModel: LedgerViewModel
+    ledgerViewModel: LedgerViewModel,
+    accountSessionCoordinator: AccountSessionCoordinator,
+    cloudSettingsCoordinator: AccountCloudSettingsCoordinator
 ) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = ReviewQueueViewModel(
         persistence = dependencies.local.reviewQueuePersistence,
-        localDataReplacementInFlight = ledgerViewModel.localDataReplacementInFlight
+        localDataReplacementInFlight = ledgerViewModel.localDataReplacementInFlight,
+        aiCategorizationClient = AiCategorizationClient(dependencies.aiCategorizationGateway),
+        accountSessionState = accountSessionCoordinator.state,
+        cloudSettingsState = cloudSettingsCoordinator.state
     ) as T
 }
 

@@ -1,5 +1,7 @@
 package com.bks.feature.billsync
 
+import com.bks.data.local.PaymentSource
+import com.bks.feature.toReviewSourceLabel
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -43,7 +45,7 @@ class BillPageParser {
                 transactionKindLabel = kind,
                 transactionTimeText = transactionTime,
                 parsedFields = listOf(
-                    "来源=$GENERIC_PAYMENT_SOURCE_LABEL",
+                    "来源=${PaymentSource.OTHER.toReviewSourceLabel()}",
                     "商户=$title",
                     "金额=${amountMinorToText(amount)}",
                     "类型=$kind"
@@ -108,8 +110,6 @@ internal fun String.normalizedLines(): List<String> = lineSequence()
     .filter(String::isNotBlank)
     .toList()
 
-internal const val GENERIC_PAYMENT_SOURCE_LABEL = "其他应用"
-internal const val ACCESSIBILITY_AUTO_CAPTURE_REASON_LABEL = "支付结果自动捕获"
 internal const val FALLBACK_MERCHANT_TITLE = "其他应用支付"
 
 private const val MAX_MERCHANT_LENGTH = 80

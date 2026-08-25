@@ -21,16 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
-import com.bks.data.local.DefaultCategories
-import com.bks.feature.categorization.AiCategorizationClient
-import com.bks.feature.categorization.AiCategorizationGateway
-import com.bks.feature.categorization.AiCategorizationResult
-import com.bks.feature.categorization.AiCategorizationSettings
-import com.bks.feature.categorization.AiCategorizationSkipReason
-import com.bks.feature.categorization.CategorizationRule
-import com.bks.feature.ledger.FundingAccountUiModel
-import com.bks.feature.ledger.LedgerCategoryUiModel
-import com.bks.feature.ledger.toLedgerCategoryUiModel
+import com.bks.ui.entry.FundingAccountUiModel
+import com.bks.ui.entry.LedgerCategoryUiModel
 
 @Composable
 @Suppress("LongParameterList")
@@ -40,12 +32,13 @@ internal fun ReviewQueueScreen(
     targetLedgerBookId: String? = DEFAULT_LEDGER_BOOK_ID,
     targetLedgerName: String = "默认账本",
     categories: List<LedgerCategoryUiModel> = emptyList(),
+    fallbackCategories: List<LedgerCategoryUiModel> = emptyList(),
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
-    onCategorizationRuleRequested: (CategorizationRule) -> Unit = {},
-    accountToken: String? = null,
-    aiSettings: AiCategorizationSettings = AiCategorizationSettings(),
-    aiCategorizationGateway: AiCategorizationGateway? = null,
+    onCategorizationRuleRequested: (ReviewCategoryRuleRequest) -> Unit = {},
+    onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
+        ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
+    },
     onCommand: (ReviewPersistenceCommand) -> Unit = {},
     onUndo: () -> Unit = {},
     onDismissUndo: () -> Unit = {},
@@ -56,13 +49,12 @@ internal fun ReviewQueueScreen(
         targetLedgerBookId = targetLedgerBookId,
         targetLedgerName = targetLedgerName,
         categories = categories,
+        fallbackCategories = fallbackCategories,
         fundingAccounts = fundingAccounts,
         defaultFundingAccountSyncId = defaultFundingAccountSyncId,
         modifier = modifier,
         onCategorizationRuleRequested = onCategorizationRuleRequested,
-        accountToken = accountToken,
-        aiSettings = aiSettings,
-        aiCategorizationGateway = aiCategorizationGateway,
+        onAiSuggest = onAiSuggest,
         onCommand = onCommand,
         onUndo = onUndo,
         onDismissUndo = onDismissUndo,
@@ -77,13 +69,14 @@ internal fun ReviewQueueScreen(
     targetLedgerBookId: String? = DEFAULT_LEDGER_BOOK_ID,
     targetLedgerName: String = "默认账本",
     categories: List<LedgerCategoryUiModel> = emptyList(),
+    fallbackCategories: List<LedgerCategoryUiModel> = emptyList(),
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
     modifier: Modifier = Modifier,
-    onCategorizationRuleRequested: (CategorizationRule) -> Unit = {},
-    accountToken: String? = null,
-    aiSettings: AiCategorizationSettings = AiCategorizationSettings(),
-    aiCategorizationGateway: AiCategorizationGateway? = null,
+    onCategorizationRuleRequested: (ReviewCategoryRuleRequest) -> Unit = {},
+    onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
+        ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
+    },
     onCommand: (ReviewPersistenceCommand) -> Unit = {},
     onUndo: () -> Unit = {},
     onDismissUndo: () -> Unit = {},
@@ -157,7 +150,7 @@ internal fun ReviewQueueScreen(
     } else {
         val availableCategories = remember(categories) {
             categories.ifEmpty {
-                DefaultCategories.systemDefaults(0).map { it.toLedgerCategoryUiModel() }
+                fallbackCategories
             }
         }
         ReviewPendingEntryEditor(
@@ -169,23 +162,7 @@ internal fun ReviewQueueScreen(
                 modifier = modifier,
                 snackbarHostState = snackbarHostState,
                 onExit = { editingEntryId = null },
-                onAiSuggest = { draft, categoryCandidates ->
-                    val gateway = aiCategorizationGateway
-                    if (gateway == null) {
-                        AiCategorizationResult(
-                            skipReason = AiCategorizationSkipReason.REQUIRES_SIGNED_IN_ACCOUNT
-                        )
-                    } else {
-                        AiCategorizationClient(gateway).suggestCategory(
-                            token = accountToken,
-                            payload = draft.toAiCategorizationPayload(
-                                categoryCandidates = categoryCandidates,
-                                enhancedContextGranted = aiSettings.enhancedContextGranted
-                            ),
-                            settings = aiSettings
-                        )
-                    }
-                },
+                onAiSuggest = onAiSuggest,
                 onConfirm = { edit ->
                     if (activeEdit.hasCategoryCorrection(edit.category)) {
                         pendingRuleSave = PendingCategoryRuleSave(activeEdit, edit)
@@ -207,7 +184,7 @@ internal fun ReviewQueueScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onCategorizationRuleRequested(pending.toCategorizationRule())
+                        onCategorizationRuleRequested(pending.toRuleRequest())
                         applyEdit(pending)
                     }
                 ) {

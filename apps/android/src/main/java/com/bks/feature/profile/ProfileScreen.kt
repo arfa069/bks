@@ -27,7 +27,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bks.R
-import com.bks.feature.account.AccountSession
 import com.bks.ui.visual.CachedResourceImage
 
 enum class ProfileDestination(
@@ -43,7 +42,7 @@ enum class ProfileDestination(
 
 @Composable
 fun ProfileOverviewScreen(
-    session: AccountSession,
+    accountSummary: ProfileAccountSummaryUiModel,
     onDestinationSelected: (ProfileDestination) -> Unit,
     onNavigateHome: () -> Unit = {},
     ledgerSyncEnabled: Boolean = false,
@@ -69,7 +68,7 @@ fun ProfileOverviewScreen(
             HomeReturnButton(onClick = onNavigateHome)
         }
         AccountStatusCard(
-            session = session,
+            accountSummary = accountSummary,
             onClick = { onDestinationSelected(ProfileDestination.AccountManagement) }
         )
         ProfileDestination.entries
@@ -77,7 +76,7 @@ fun ProfileOverviewScreen(
             .forEach { destination ->
                 ProfileEntry(
                     destination = destination,
-                    summary = destination.summary(session, ledgerSyncEnabled),
+                    summary = destination.summary(ledgerSyncEnabled),
                     onClick = { onDestinationSelected(destination) }
                 )
             }
@@ -86,12 +85,12 @@ fun ProfileOverviewScreen(
 
 @Composable
 private fun AccountStatusCard(
-    session: AccountSession,
+    accountSummary: ProfileAccountSummaryUiModel,
     onClick: () -> Unit
 ) {
     ProfileEntry(
         destination = ProfileDestination.AccountManagement,
-        summary = session.accountSummary(),
+        summary = accountSummary.text,
         testTag = "profile-account-status-card",
         onClick = onClick
     )
@@ -136,20 +135,12 @@ private fun ProfileEntry(
     }
 }
 
-private fun ProfileDestination.summary(session: AccountSession, ledgerSyncEnabled: Boolean): String = when (this) {
-    ProfileDestination.AccountManagement -> session.accountSummary()
+data class ProfileAccountSummaryUiModel(val text: String)
+
+private fun ProfileDestination.summary(ledgerSyncEnabled: Boolean): String = when (this) {
+    ProfileDestination.AccountManagement -> error("Account summary is rendered by AccountStatusCard")
     ProfileDestination.AutomaticBookkeeping -> "查看功能说明"
     ProfileDestination.CategorizationRules -> "管理本地分类规则"
     ProfileDestination.DataAndBackup -> if (ledgerSyncEnabled) "账户同步已启用 · 导入、导出与备份" else "导入、导出与备份"
     ProfileDestination.ComplianceAndPrivacy -> "查看隐私与权限说明"
 }
-
-private fun AccountSession.accountSummary(): String = when (this) {
-    AccountSession.LocalMode -> "本地模式 · 账本仅保存在本机"
-    is AccountSession.SignedIn -> phone
-        ?.let { "已登录 · ${it.maskPhone()}" }
-        ?: "已登录 · ${nickname ?: "微信账号"}"
-}
-
-private fun String.maskPhone(): String =
-    if (length == 11) replaceRange(3, 7, "****") else "已登录"

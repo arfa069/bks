@@ -1,6 +1,10 @@
 package com.bks.feature.billsync
 
+import com.bks.data.local.CaptureReason
 import com.bks.data.local.ConfidenceState
+import com.bks.data.local.PaymentSource
+import com.bks.feature.toReviewCaptureReasonLabel
+import com.bks.feature.toReviewSourceLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,8 +20,11 @@ class BillSyncPipelineTest {
         val entry = result.createdEntries.single()
 
         assertTrue(result.recognized)
-        assertEquals(GENERIC_PAYMENT_SOURCE_LABEL, entry.sourceLabel)
-        assertEquals(ACCESSIBILITY_AUTO_CAPTURE_REASON_LABEL, entry.captureReasonLabel)
+        assertEquals(PaymentSource.OTHER.toReviewSourceLabel(), entry.sourceLabel)
+        assertEquals(
+            CaptureReason.ACCESSIBILITY_AUTO.toReviewCaptureReasonLabel(),
+            entry.captureReasonLabel
+        )
         assertEquals(ConfidenceState.NEEDS_REVIEW, entry.confidence)
         assertEquals("", entry.fundingAccountLabel)
         assertNull(entry.fundingAccountId)

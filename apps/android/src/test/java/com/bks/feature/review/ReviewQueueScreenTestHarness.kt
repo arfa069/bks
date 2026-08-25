@@ -7,7 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
-import com.bks.feature.ledger.LedgerCategoryUiModel
+import com.bks.data.local.DefaultCategories
+import com.bks.ui.entry.LedgerCategoryUiModel
 import java.time.ZoneId
 
 @Composable
@@ -22,6 +23,7 @@ internal fun TestReviewQueueScreen(
         state = state,
         targetLedgerBookId = DEFAULT_LEDGER_BOOK_ID,
         categories = categories,
+        fallbackCategories = testDefaultCategories(),
         onCommand = { command ->
             state.applyForScreenTest(command)?.let { change ->
                 state = change.state
@@ -47,6 +49,15 @@ internal fun TestReviewQueueScreen(
         }
     )
 }
+
+private fun testDefaultCategories(): List<LedgerCategoryUiModel> =
+    DefaultCategories.systemDefaults(0).map { category ->
+        LedgerCategoryUiModel(
+            id = category.id,
+            name = category.name,
+            kind = category.kind
+        )
+    }
 
 private data class TestStateChange(
     val state: ReviewQueueState,

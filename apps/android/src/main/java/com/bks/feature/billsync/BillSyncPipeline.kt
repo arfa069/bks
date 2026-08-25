@@ -1,6 +1,10 @@
 package com.bks.feature.billsync
 
+import com.bks.data.local.CaptureReason
 import com.bks.data.local.ConfidenceState
+import com.bks.data.local.PaymentSource
+import com.bks.feature.toReviewCaptureReasonLabel
+import com.bks.feature.toReviewSourceLabel
 import com.bks.feature.review.ReviewQueueEntry
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,9 +42,9 @@ class BillSyncPipeline(
             transactionTimeText = transactionTimeText,
             category = "",
             fundingAccountLabel = "",
-            sourceLabel = GENERIC_PAYMENT_SOURCE_LABEL,
+            sourceLabel = PaymentSource.OTHER.toReviewSourceLabel(),
             kindLabel = transactionKindLabel,
-            captureReasonLabel = ACCESSIBILITY_AUTO_CAPTURE_REASON_LABEL,
+            captureReasonLabel = CaptureReason.ACCESSIBILITY_AUTO.toReviewCaptureReasonLabel(),
             confidence = ConfidenceState.NEEDS_REVIEW,
             capturedAtEpochMillis = capturedAtEpochMillis,
             captureTimeText = captureTimeFormatter(capturedAtEpochMillis),

@@ -8,8 +8,10 @@ import com.bks.data.local.IgnoredEntryEntity
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.PendingEntryEntity
 import com.bks.data.local.TransactionKind
-import com.bks.feature.billsync.ACCESSIBILITY_AUTO_CAPTURE_REASON_LABEL
-import com.bks.feature.billsync.GENERIC_PAYMENT_SOURCE_LABEL
+import com.bks.feature.toReviewCaptureReason
+import com.bks.feature.toReviewCaptureReasonLabel
+import com.bks.feature.toReviewPaymentSource
+import com.bks.feature.toReviewSourceLabel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -25,9 +27,9 @@ internal fun PendingEntryEntity.toReviewEntry(zoneId: ZoneId): ReviewQueueEntry 
         ?: suggestedCategoryId.orEmpty(),
     fundingAccountId = fundingAccountId,
     fundingAccountLabel = fundingAccountLabel ?: fundingAccountId?.let { "账户 $it" }.orEmpty(),
-    sourceLabel = source.toLabel(),
+    sourceLabel = source.toReviewSourceLabel(),
     kindLabel = transactionKind.toLabel(),
-    captureReasonLabel = captureReason.toLabel(),
+    captureReasonLabel = captureReason.toReviewCaptureReasonLabel(),
     confidence = confidence,
     capturedAtEpochMillis = capturedAtEpochMillis,
     captureTimeText = formatReviewDateTime(capturedAtEpochMillis, zoneId),
@@ -49,8 +51,8 @@ internal fun ReviewQueueEntry.toEntity(zoneId: ZoneId): PendingEntryEntity {
     val transactionKind = kindLabel.toTransactionKind()
     return PendingEntryEntity(
         id = id,
-        source = sourceLabel.toPaymentSource(),
-        captureReason = captureReasonLabel.toCaptureReason(),
+        source = sourceLabel.toReviewPaymentSource(),
+        captureReason = captureReasonLabel.toReviewCaptureReason(),
         confidence = confidence,
         transactionKind = transactionKind,
         amountMinor = amountMinor,
@@ -119,19 +121,6 @@ private fun IgnoredEntryEntity.toPendingEntryEntity(): PendingEntryEntity = Pend
     suggestedCategoryLabel = suggestedCategoryLabel
 )
 
-private fun PaymentSource.toLabel(): String = when (this) {
-    PaymentSource.WECHAT -> "微信"
-    PaymentSource.ALIPAY -> "支付宝"
-    PaymentSource.OTHER -> GENERIC_PAYMENT_SOURCE_LABEL
-}
-
-private fun String.toPaymentSource(): PaymentSource = when (trim()) {
-    GENERIC_PAYMENT_SOURCE_LABEL -> PaymentSource.OTHER
-    "支付宝" -> PaymentSource.ALIPAY
-    "微信" -> PaymentSource.WECHAT
-    else -> PaymentSource.OTHER
-}
-
 private fun TransactionKind.toLabel(): String = when (this) {
     TransactionKind.EXPENSE -> "支出"
     TransactionKind.INCOME -> "收入"
@@ -154,22 +143,6 @@ internal fun String.toTransactionKind(): TransactionKind = when (trim()) {
     "手续费" -> TransactionKind.FEE
     "其他" -> TransactionKind.OTHER
     else -> TransactionKind.EXPENSE
-}
-
-private fun CaptureReason.toLabel(): String = when (this) {
-    CaptureReason.NOTIFICATION -> "通知捕获"
-    CaptureReason.ACCESSIBILITY_AUTO -> ACCESSIBILITY_AUTO_CAPTURE_REASON_LABEL
-    CaptureReason.BILL_SYNC -> "补录账单"
-    CaptureReason.DUPLICATE_MERGE -> "重复合并"
-    CaptureReason.MANUAL_SAMPLE -> "手动样例"
-}
-
-private fun String.toCaptureReason(): CaptureReason = when (trim()) {
-    "历史采集", ACCESSIBILITY_AUTO_CAPTURE_REASON_LABEL -> CaptureReason.ACCESSIBILITY_AUTO
-    "补录账单", "账单同步", "本机 OCR 补录" -> CaptureReason.BILL_SYNC
-    "重复合并" -> CaptureReason.DUPLICATE_MERGE
-    "手动样例" -> CaptureReason.MANUAL_SAMPLE
-    else -> CaptureReason.NOTIFICATION
 }
 
 internal fun formatReviewDateTime(epochMillis: Long, zoneId: ZoneId): String =

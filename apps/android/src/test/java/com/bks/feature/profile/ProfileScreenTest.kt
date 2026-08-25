@@ -42,7 +42,7 @@ class ProfileScreenTest {
     fun overviewShowsAccountCardAndFeatureEntries() {
         composeRule.setContent {
             ProfileOverviewScreen(
-                session = AccountSession.LocalMode,
+                accountSummary = ProfileAccountSummaryUiModel("本地模式 · 账本仅保存在本机"),
                 onDestinationSelected = {}
             )
         }
@@ -62,7 +62,7 @@ class ProfileScreenTest {
         var destination: ProfileDestination? = null
         composeRule.setContent {
             ProfileOverviewScreen(
-                session = AccountSession.SignedIn(phone = "13800138000"),
+                accountSummary = ProfileAccountSummaryUiModel("已登录 · 138****8000"),
                 onDestinationSelected = { destination = it }
             )
         }
@@ -78,7 +78,7 @@ class ProfileScreenTest {
     fun enabledLedgerSyncIsSummarizedOnlyOnDataAndBackupEntry() {
         composeRule.setContent {
             ProfileOverviewScreen(
-                session = AccountSession.SignedIn(phone = "13800138000"),
+                accountSummary = ProfileAccountSummaryUiModel("已登录 · 138****8000"),
                 ledgerSyncEnabled = true,
                 onDestinationSelected = {}
             )
@@ -98,7 +98,7 @@ class ProfileScreenTest {
                     DeviceConfigurationOverride.FontScale(fontScale)
             ) {
                 ProfileOverviewScreen(
-                    session = AccountSession.LocalMode,
+                    accountSummary = ProfileAccountSummaryUiModel("本地模式 · 账本仅保存在本机"),
                     onDestinationSelected = {}
                 )
             }

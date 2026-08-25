@@ -68,12 +68,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.bks.R
-import com.bks.data.local.EntryOrigin
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.LedgerEntryInput
-import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource
-import com.bks.data.local.TransactionKind
+import com.bks.ui.entry.FundingAccountUiModel
+import com.bks.ui.entry.LedgerCategoryUiModel
+import com.bks.ui.entry.LedgerEntryFormConfig
+import com.bks.ui.entry.LedgerEntryFormSubmission
 import com.bks.ui.visual.CategoryArtwork
 import java.math.BigDecimal
 import java.time.Instant
@@ -93,7 +93,7 @@ fun LedgerScreen(
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     ledgerBooks: List<LedgerBookUiModel> = emptyList(),
     activeLedgerName: String = "本地账本",
-    onUpdateEntry: suspend (String, LedgerEntryInput) -> Unit = { _, _ -> },
+    onUpdateEntry: suspend (String, LedgerEntryFormSubmission) -> Unit = { _, _ -> },
     onDeleteEntry: suspend (String) -> Unit = {},
     onRestoreEntry: suspend (String) -> Unit = {},
     onPermanentlyDeleteEntry: suspend (String) -> Unit = {},
@@ -173,7 +173,7 @@ fun LedgerScreen(
                 )
 
                 LedgerView.EDIT -> targetEntry?.let { entry ->
-                    val initialFormState = remember(entry) { LedgerEntryFormState.from(entry) }
+                    val initialFormState = remember(entry) { entry.toLedgerEntryFormState() }
                     LedgerEntryForm(
                         title = "编辑账目",
                         initial = initialFormState,

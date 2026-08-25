@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.bks.feature.ledger.LedgerUiEntry
 import com.bks.ui.components.Button
 import com.bks.ui.components.OutlinedButton
 import com.bks.ui.components.OutlinedTextField
@@ -74,7 +73,7 @@ private class BackupDialogEnvironment(
 
 @Composable
 internal fun LocalBackupSection(
-    ledgerEntries: List<LedgerUiEntry>,
+    ledgerEntries: List<BackupLedgerEntryUiModel>,
     currentLedgerName: String,
     actions: LocalBackupSectionActions,
     operationState: DataAndBackupUiState,
@@ -195,7 +194,7 @@ private fun rememberDataAndBackupUiSession(actions: LocalBackupSectionActions): 
 
 @Composable
 private fun CsvExportButton(
-    ledgerEntries: List<LedgerUiEntry>,
+    ledgerEntries: List<BackupLedgerEntryUiModel>,
     currentLedgerName: String,
     context: Context,
     coroutineScope: CoroutineScope,

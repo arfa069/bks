@@ -15,20 +15,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.LedgerEntryInput
-import com.bks.feature.categorization.AiCategorizationResult
-import com.bks.feature.categorization.CategorizationRule
-import com.bks.feature.ledger.FundingAccountUiModel
-import com.bks.feature.ledger.LedgerCategoryUiModel
-import com.bks.feature.ledger.LedgerEntryFormState
-import com.bks.feature.ledger.LedgerEntryFormConfig
-import com.bks.feature.ledger.SharedLedgerEntryForm
+import com.bks.ui.entry.FundingAccountUiModel
+import com.bks.ui.entry.LedgerCategoryUiModel
+import com.bks.ui.entry.LedgerEntryFormConfig
+import com.bks.ui.entry.LedgerEntryFormState
+import com.bks.ui.entry.LedgerEntryFormSubmission
+import com.bks.ui.entry.SharedLedgerEntryForm
 
 internal data class PendingCategoryRuleSave(
     val entry: ReviewQueueEntry,
     val edit: PendingReviewEdit
 ) {
-    fun toCategorizationRule(): CategorizationRule = CategorizationRule(
+    fun toRuleRequest(): ReviewCategoryRuleRequest = ReviewCategoryRuleRequest(
         id = "rule-${entry.id}-${entry.capturedAtEpochMillis}",
         merchantContains = edit.title.trim(),
         sourceLabel = entry.sourceLabel,
@@ -37,6 +35,20 @@ internal data class PendingCategoryRuleSave(
         updatedAtEpochMillis = entry.capturedAtEpochMillis
     )
 }
+
+internal data class ReviewCategoryRuleRequest(
+    val id: String,
+    val merchantContains: String,
+    val sourceLabel: String,
+    val transactionKind: String,
+    val category: String,
+    val updatedAtEpochMillis: Long
+)
+
+internal data class ReviewAiSuggestionResult(
+    val category: String? = null,
+    val message: String
+)
 
 internal data class PendingReviewEdit(
     val title: String,
@@ -67,7 +79,7 @@ internal data class PendingReviewEdit(
 
     companion object {
         fun from(
-            input: LedgerEntryInput,
+            input: LedgerEntryFormSubmission,
             categories: List<LedgerCategoryUiModel>,
             fundingAccounts: List<FundingAccountUiModel>
         ): PendingReviewEdit = PendingReviewEdit(
@@ -94,13 +106,13 @@ internal data class ReviewPendingEntryEditorConfig(
     val modifier: Modifier,
     val snackbarHostState: SnackbarHostState,
     val onExit: () -> Unit,
-    val onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> AiCategorizationResult,
+    val onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult,
     val onConfirm: (PendingReviewEdit) -> Unit
 )
 
 internal data class ReviewEditorToolActions(
     val onDraftChange: (LedgerEntryFormState) -> Unit,
-    val onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> AiCategorizationResult
+    val onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult
 )
 
 internal fun ReviewQueueEntry.hasCategoryCorrection(category: String): Boolean {

@@ -29,20 +29,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.bks.feature.ledger.LedgerUiEntry
-import com.bks.feature.sync.LedgerSyncUiState
 
 @Composable
 @Suppress("LongParameterList")
 internal fun DataAndBackupScreen(
-    ledgerEntries: List<LedgerUiEntry>,
+    ledgerEntries: List<BackupLedgerEntryUiModel>,
     currentLedgerName: String = "默认账本",
     dataAndBackupState: DataAndBackupUiState,
     dataAndBackupActions: DataAndBackupActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = SnackbarHostState(),
-    ledgerSyncState: LedgerSyncUiState = LedgerSyncUiState(),
+    ledgerSyncState: LedgerSyncSettingsUiState = LedgerSyncSettingsUiState(),
     ledgerSyncActions: LedgerSyncSectionActions = LedgerSyncSectionActions()
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }

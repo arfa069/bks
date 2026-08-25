@@ -30,25 +30,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.LedgerEntryInput
-import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.TransactionKind
 import com.bks.data.local.defaultFlowDirection
-import com.bks.feature.categorization.AiCategorizationFailureReason
-import com.bks.feature.categorization.AiCategorizationResult
-import com.bks.feature.categorization.AiCategorizationSkipReason
-import com.bks.feature.ledger.FundingAccountUiModel
-import com.bks.feature.ledger.LedgerCategoryUiModel
-import com.bks.feature.ledger.LedgerEntryFormState
-import com.bks.feature.ledger.ledgerCategoryOptions
+import com.bks.ui.entry.FundingAccountUiModel
+import com.bks.ui.entry.LedgerCategoryUiModel
+import com.bks.ui.entry.LedgerEntryFormState
+import com.bks.ui.entry.LedgerEntryFormSubmission
+import com.bks.ui.entry.UNCATEGORIZED_ENTRY_CATEGORY_ID
+import com.bks.ui.entry.ledgerCategoryOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private data class AiSuggestionRequest(
     val entry: ReviewQueueEntry,
     val draft: LedgerEntryFormState,
-    val input: LedgerEntryInput,
+    val input: LedgerEntryFormSubmission,
     val categories: List<LedgerCategoryUiModel>,
     val fundingAccounts: List<FundingAccountUiModel>,
     val categoryCandidates: List<String>,
@@ -77,7 +74,7 @@ internal fun ReviewEditorTools(
             flowDirection = draft.flowDirection,
             transactionKind = draft.transactionKind
         ).asSequence()
-            .filterNot { it.id == LocalLedgerRepository.DEFAULT_CATEGORY_ID }
+            .filterNot { it.id == UNCATEGORIZED_ENTRY_CATEGORY_ID }
             .map(LedgerCategoryUiModel::reviewDisplayName)
             .distinct()
             .toList()
@@ -100,7 +97,7 @@ internal fun ReviewEditorTools(
                 OutlinedButton(
                     onClick = {
                         if (aiRequestInFlight) return@OutlinedButton
-                        val input = runCatching { draft.toInput(System.currentTimeMillis()) }
+                        val input = runCatching { draft.toSubmission(System.currentTimeMillis()) }
                             .getOrElse {
                                 aiMessage = it.message ?: "当前内容无法获取分类建议"
                                 return@OutlinedButton
@@ -180,52 +177,20 @@ private suspend fun requestAiSuggestion(request: AiSuggestionRequest): String {
         ),
         request.categoryCandidates
     )
-    return result.suggestion?.let { suggestion ->
+    return result.category?.let { category ->
         val categoryId = request.categories.firstOrNull {
-            it.reviewDisplayName() == suggestion.category
+            it.reviewDisplayName() == category
         }?.id ?: DefaultCategories.idForName(
-            suggestion.category,
+            category,
             input.transactionKind
         )
         if (categoryId == null) {
-            "AI 建议“${suggestion.category}”不在现有分类中"
+            "AI 建议“$category”不在现有分类中"
         } else {
             request.actions.onDraftChange(request.draft.copy(categoryId = categoryId))
-            "AI 建议：${suggestion.category}"
+            "AI 建议：$category"
         }
-    } ?: result.toUserMessage()
-}
-
-
-
-
-
-internal fun AiCategorizationResult.toUserMessage(): String = when {
-    skipReason == AiCategorizationSkipReason.REQUIRES_SIGNED_IN_ACCOUNT ->
-        "登录后才能使用云端 AI 分类"
-    skipReason == AiCategorizationSkipReason.REQUIRES_AI_CONSENT ->
-        "开启云端 AI 后才能获取分类建议"
-    failureReason == AiCategorizationFailureReason.BACKEND_NOT_CONFIGURED ->
-        "云端 AI 后端地址尚未配置"
-    failureReason == AiCategorizationFailureReason.INVALID_SESSION ->
-        "登录状态已失效，请重新登录"
-    failureReason == AiCategorizationFailureReason.ACCOUNT_DELETION_PENDING ->
-        "账号注销冷静期内，云端 AI 已暂停"
-    failureReason == AiCategorizationFailureReason.AI_CONSENT_REQUIRED ->
-        "请先开启云端 AI 分类"
-    failureReason == AiCategorizationFailureReason.ENHANCED_CONTEXT_NOT_AUTHORIZED ->
-        "增强上下文授权已失效，请重新确认设置"
-    failureReason == AiCategorizationFailureReason.CATEGORY_CANDIDATES_REQUIRED ->
-        "暂无可用分类，请先创建或启用分类"
-    failureReason == AiCategorizationFailureReason.RATE_LIMITED ->
-        "AI 请求过于频繁，请稍后重试"
-    failureReason == AiCategorizationFailureReason.SERVICE_UNAVAILABLE ->
-        "云端 AI 暂时不可用，请稍后重试"
-    failureReason == AiCategorizationFailureReason.NETWORK_FAILURE ->
-        "网络连接失败，请检查网络后重试"
-    failureReason == AiCategorizationFailureReason.INVALID_RESPONSE ->
-        "AI 响应无法解析，请稍后重试"
-    else -> "暂时没有 AI 分类建议"
+    } ?: result.message
 }
 
 internal fun ReviewQueueEntry.toLedgerEntryFormState(
@@ -236,7 +201,7 @@ internal fun ReviewQueueEntry.toLedgerEntryFormState(
     val selectedCategoryId = categoryId
         ?: categories.firstOrNull { it.reviewDisplayName() == category }?.id
         ?: DefaultCategories.idForName(category, transactionKind)
-        ?: LocalLedgerRepository.DEFAULT_CATEGORY_ID
+        ?: UNCATEGORIZED_ENTRY_CATEGORY_ID
     val selectedFundingAccountId = fundingAccountId
         ?: fundingAccounts.firstOrNull { it.label == fundingAccountLabel }?.id
     return LedgerEntryFormState(

@@ -9,6 +9,7 @@ import com.bks.feature.account.AccountCloudSettingsOperationResult
 import com.bks.feature.account.AccountCloudSettingsState
 import com.bks.feature.account.AccountSession
 import com.bks.feature.account.AccountSessionCoordinatorState
+import com.bks.feature.account.effectiveAiCategorizationSettings
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CategorizationRule
 import com.bks.ui.BksAppState
@@ -81,12 +82,10 @@ internal fun bksAppPresentation(
     return BksAppPresentation(
         accountToken = signedIn?.token,
         signedIn = signedIn != null,
-        effectiveAiSettings = signedIn
-            ?.takeIf { session ->
-                session.token == cloudSettingsState.loadedToken && cloudWritesAllowed
-            }
-            ?.let { cloudSettingsState.aiSettings }
-            ?: AiCategorizationSettings(),
+        effectiveAiSettings = effectiveAiCategorizationSettings(
+            accountState = accountState,
+            cloudSettingsState = cloudSettingsState
+        ),
         cloudWritesPaused = !cloudWritesAllowed,
         settingsSyncInFlight = signedIn != null &&
             cloudWritesAllowed &&

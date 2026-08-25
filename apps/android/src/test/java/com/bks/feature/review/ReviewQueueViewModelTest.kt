@@ -16,8 +16,21 @@ import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.PendingEntryEntity
 import com.bks.data.local.TransactionKind
+import com.bks.feature.account.AccountCloudSettingsState
+import com.bks.feature.account.AccountRuntimeState
+import com.bks.feature.account.AccountRuntimeStatus
+import com.bks.feature.account.AccountSession
+import com.bks.feature.account.AccountSessionCoordinatorState
+import com.bks.feature.categorization.AiCategorizationClient
+import com.bks.feature.categorization.AiCategorizationFailureReason
+import com.bks.feature.categorization.AiCategorizationGateway
+import com.bks.feature.categorization.AiCategorizationGatewayResult
+import com.bks.feature.categorization.AiCategorizationPayload
+import com.bks.feature.categorization.AiCategorizationResponse
+import com.bks.feature.categorization.AiCategorizationSettings
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -315,9 +328,168 @@ class ReviewQueueViewModelTest {
         }
     }
 
+    @Test
+    fun aiSuggestionUsesCurrentVerifiedAccountAndCloudSettings() = runBlocking {
+        val gateway = CapturingAiGateway()
+        val accountState = MutableStateFlow(
+            AccountSessionCoordinatorState(
+                session = AccountSession.SignedIn(token = "token-1"),
+                isRestoring = false,
+                runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified)
+            )
+        )
+        val cloudState = MutableStateFlow(
+            AccountCloudSettingsState(
+                aiSettings = AiCategorizationSettings(
+                    aiConsentGranted = true,
+                    enhancedContextGranted = true
+                ),
+                loadedToken = "token-1"
+            )
+        )
+
+        withViewModel(
+            aiDependencies = ReviewAiTestDependencies(
+                client = AiCategorizationClient(gateway),
+                accountSessionState = accountState,
+                cloudSettingsState = cloudState
+            )
+        ) { viewModel ->
+            val result = viewModel.suggestCategory(
+                samplePending().toReviewEntry(ZoneId.of("UTC")),
+                listOf("餐饮", "交通")
+            )
+
+            assertEquals("交通", result.category)
+            assertEquals("token-1", gateway.token.get())
+            assertEquals(listOf("餐饮", "交通"), gateway.payload.get()?.categoryCandidates)
+            assertTrue(gateway.payload.get()?.rawEvidenceText?.isNotBlank() == true)
+        }
+    }
+
+    @Test
+    fun aiSuggestionRejectsCloudSettingsLoadedForAnotherSession() = runBlocking {
+        val gateway = CapturingAiGateway()
+        val accountState = MutableStateFlow(
+            AccountSessionCoordinatorState(
+                session = AccountSession.SignedIn(token = "token-1"),
+                isRestoring = false,
+                runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified)
+            )
+        )
+        val cloudState = MutableStateFlow(
+            AccountCloudSettingsState(
+                aiSettings = AiCategorizationSettings(
+                    aiConsentGranted = true,
+                    enhancedContextGranted = true
+                ),
+                loadedToken = "token-old"
+            )
+        )
+
+        withViewModel(
+            aiDependencies = ReviewAiTestDependencies(
+                client = AiCategorizationClient(gateway),
+                accountSessionState = accountState,
+                cloudSettingsState = cloudState
+            )
+        ) { viewModel ->
+            val result = viewModel.suggestCategory(
+                samplePending().toReviewEntry(ZoneId.of("UTC")),
+                listOf("餐饮")
+            )
+
+            assertEquals(null, result.category)
+            assertEquals("开启云端 AI 后才能获取分类建议", result.message)
+            assertEquals(null, gateway.token.get())
+            assertEquals(null, gateway.payload.get())
+        }
+    }
+
+    @Test
+    fun aiSuggestionRejectsCloudSettingsWhileCloudWritesAreBlocked() = runBlocking {
+        val gateway = CapturingAiGateway()
+        val accountState = MutableStateFlow(
+            AccountSessionCoordinatorState(
+                session = AccountSession.SignedIn(token = "token-1"),
+                isRestoring = false,
+                runtimeState = AccountRuntimeState(AccountRuntimeStatus.OfflineUnverified)
+            )
+        )
+        val cloudState = MutableStateFlow(
+            AccountCloudSettingsState(
+                aiSettings = AiCategorizationSettings(
+                    aiConsentGranted = true,
+                    enhancedContextGranted = true
+                ),
+                loadedToken = "token-1"
+            )
+        )
+
+        withViewModel(
+            aiDependencies = ReviewAiTestDependencies(
+                client = AiCategorizationClient(gateway),
+                accountSessionState = accountState,
+                cloudSettingsState = cloudState
+            )
+        ) { viewModel ->
+            val result = viewModel.suggestCategory(
+                samplePending().toReviewEntry(ZoneId.of("UTC")),
+                listOf("餐饮")
+            )
+
+            assertEquals(null, result.category)
+            assertEquals("开启云端 AI 后才能获取分类建议", result.message)
+            assertEquals(null, gateway.token.get())
+            assertEquals(null, gateway.payload.get())
+        }
+    }
+
+    @Test
+    fun aiSuggestionMapsGatewayFailureToStableReviewMessage() = runBlocking {
+        val accountState = MutableStateFlow(
+            AccountSessionCoordinatorState(
+                session = AccountSession.SignedIn(token = "token-1"),
+                isRestoring = false,
+                runtimeState = AccountRuntimeState(AccountRuntimeStatus.Verified)
+            )
+        )
+        val cloudState = MutableStateFlow(
+            AccountCloudSettingsState(
+                aiSettings = AiCategorizationSettings(aiConsentGranted = true),
+                loadedToken = "token-1"
+            )
+        )
+        val gateway = object : AiCategorizationGateway {
+            override suspend fun suggestCategory(
+                token: String,
+                payload: AiCategorizationPayload
+            ): AiCategorizationGatewayResult = AiCategorizationGatewayResult.Failure(
+                AiCategorizationFailureReason.RATE_LIMITED
+            )
+        }
+
+        withViewModel(
+            aiDependencies = ReviewAiTestDependencies(
+                client = AiCategorizationClient(gateway),
+                accountSessionState = accountState,
+                cloudSettingsState = cloudState
+            )
+        ) { viewModel ->
+            val result = viewModel.suggestCategory(
+                samplePending().toReviewEntry(ZoneId.of("UTC")),
+                listOf("餐饮")
+            )
+
+            assertEquals(null, result.category)
+            assertEquals("AI 请求过于频繁，请稍后重试", result.message)
+        }
+    }
+
     private suspend fun withViewModel(
         activePersistence: ReviewQueuePersistence = persistence,
         stateLoader: suspend () -> ReviewQueueState = activePersistence::loadState,
+        aiDependencies: ReviewAiTestDependencies? = null,
         block: suspend (ReviewQueueViewModel) -> Unit
     ) {
         val store = ViewModelStore()
@@ -328,6 +500,9 @@ class ReviewQueueViewModelTest {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T = ReviewQueueViewModel(
                     persistence = activePersistence,
                     localDataReplacementInFlight = replacementInFlight,
+                    aiCategorizationClient = aiDependencies?.client,
+                    accountSessionState = aiDependencies?.accountSessionState,
+                    cloudSettingsState = aiDependencies?.cloudSettingsState,
                     stateLoader = stateLoader
                 ) as T
             }
@@ -360,6 +535,32 @@ class ReviewQueueViewModelTest {
         note = note,
         evidenceSummary = "evidence",
         parsedFieldsText = "商户=午餐"
+    )
+
+    private class CapturingAiGateway : AiCategorizationGateway {
+        val token = AtomicReference<String?>()
+        val payload = AtomicReference<AiCategorizationPayload?>()
+
+        override suspend fun suggestCategory(
+            token: String,
+            payload: AiCategorizationPayload
+        ): AiCategorizationGatewayResult {
+            this.token.set(token)
+            this.payload.set(payload)
+            return AiCategorizationGatewayResult.Success(
+                AiCategorizationResponse(
+                    category = "交通",
+                    confidenceLabel = "高",
+                    explanation = "测试建议"
+                )
+            )
+        }
+    }
+
+    private data class ReviewAiTestDependencies(
+        val client: AiCategorizationClient,
+        val accountSessionState: kotlinx.coroutines.flow.StateFlow<AccountSessionCoordinatorState>,
+        val cloudSettingsState: kotlinx.coroutines.flow.StateFlow<AccountCloudSettingsState>
     )
 
     private companion object {

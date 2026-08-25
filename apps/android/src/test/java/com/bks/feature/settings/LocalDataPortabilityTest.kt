@@ -1,7 +1,5 @@
 package com.bks.feature.settings
 
-import com.bks.feature.ledger.LedgerFlowType
-import com.bks.feature.ledger.LedgerUiEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,16 +10,15 @@ class LocalDataPortabilityTest {
     fun csvExportUsesStableSpreadsheetSchema() {
         val csv = exportLedgerCsv(
             listOf(
-                LedgerUiEntry(
+                BackupLedgerEntryUiModel(
                     id = "ledger-1",
                     title = "Lunch",
                     amountMinor = 3590,
-                    monthKey = "2026-07",
                     transactionTimeText = "2026-07-08 12:20",
                     category = "Food",
                     sourceLabel = "WeChat",
                     kindLabel = "Expense",
-                    flowType = LedgerFlowType.EXPENSE,
+                    flowType = "EXPENSE",
                     note = "Client meeting"
                 )
             )

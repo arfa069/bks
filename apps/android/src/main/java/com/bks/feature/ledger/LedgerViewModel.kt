@@ -5,12 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_NAME
 import com.bks.data.local.FundingAccountDeleteResult as DataFundingAccountDeleteResult
 import com.bks.data.local.LedgerBookDeleteResult as DataLedgerBookDeleteResult
-import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LedgerRepositoryState
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.PaymentSource
 import com.bks.feature.account.AccountCloudSettingsCoordinator
 import com.bks.feature.account.AccountCloudSettingsOperationResult
+import com.bks.ui.entry.LedgerEntryFormSubmission
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -56,16 +56,16 @@ internal class LedgerViewModel(
         }
     }
 
-    suspend fun createManualEntry(input: LedgerEntryInput) {
+    suspend fun createManualEntry(submission: LedgerEntryFormSubmission) {
         checkLocalDataAvailable()
         val activeLedgerBookId = uiState.value.activeLedgerBookId
             ?: error("当前账本尚未加载")
-        repository.createManualEntry(activeLedgerBookId, input)
+        repository.createManualEntry(activeLedgerBookId, submission.toLedgerEntryInput())
     }
 
-    suspend fun updateEntry(id: String, input: LedgerEntryInput) {
+    suspend fun updateEntry(id: String, submission: LedgerEntryFormSubmission) {
         checkLocalDataAvailable()
-        repository.updateLedgerEntry(id, input)
+        repository.updateLedgerEntry(id, submission.toLedgerEntryInput())
     }
 
     suspend fun deleteEntry(id: String) {

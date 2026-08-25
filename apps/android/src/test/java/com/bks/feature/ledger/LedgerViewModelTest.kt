@@ -10,7 +10,6 @@ import com.bks.data.local.BksDatabase
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_ID
 import com.bks.data.local.DEFAULT_LEDGER_BOOK_NAME
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
 import com.bks.data.local.PaymentSource
@@ -21,6 +20,7 @@ import com.bks.feature.account.AccountRuntimeStatus
 import com.bks.feature.account.AccountSession
 import com.bks.feature.account.AccountSessionCoordinatorState
 import com.bks.feature.categorization.AiCategorizationFailureReason
+import com.bks.ui.entry.LedgerEntryFormSubmission
 import com.bks.feature.categorization.AiCategorizationSettings
 import com.bks.feature.categorization.CloudAiSettingsGateway
 import com.bks.feature.categorization.CloudAiSettingsGatewayResult
@@ -328,7 +328,7 @@ class LedgerViewModelTest {
         title: String,
         amountMinor: Long = 3_590,
         fundingAccountId: Long? = null
-    ) = LedgerEntryInput(
+    ) = LedgerEntryFormSubmission(
         flowDirection = FlowDirection.OUTFLOW,
         transactionKind = TransactionKind.EXPENSE,
         amountMinor = amountMinor,

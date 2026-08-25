@@ -14,13 +14,7 @@ import com.bks.data.local.ConfidenceState
 import com.bks.data.local.DefaultCategories
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.TransactionKind
-import com.bks.feature.categorization.AiCategorizationFailureReason
-import com.bks.feature.categorization.AiCategorizationGateway
-import com.bks.feature.categorization.AiCategorizationGatewayResult
-import com.bks.feature.categorization.AiCategorizationPayload
-import com.bks.feature.categorization.AiCategorizationResponse
-import com.bks.feature.categorization.AiCategorizationSettings
-import com.bks.feature.ledger.LedgerCategoryUiModel
+import com.bks.ui.entry.LedgerCategoryUiModel
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
@@ -47,9 +41,9 @@ class ReviewQueueAiSuggestionTest {
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("transport", "交通", TransactionKind.EXPENSE)
                 ),
-                accountToken = "token-1",
-                aiSettings = AiCategorizationSettings(aiConsentGranted = true),
-                aiCategorizationGateway = FixedAiCategorizationGateway("交通")
+                onAiSuggest = { _, _ ->
+                    ReviewAiSuggestionResult(category = "交通", message = "AI 建议：交通")
+                }
             )
         }
         composeRule.waitForIdle()
@@ -67,16 +61,17 @@ class ReviewQueueAiSuggestionTest {
 
     @Test
     fun emptyCategoryListUsesDisplayedSystemDefaultsForAiRequest() {
-        val gateway = CapturingAiCategorizationGateway()
+        val action = CapturingAiSuggestionAction()
         composeRule.setContent {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(
                     pendingEntries = listOf(sampleEntry().copy(category = ""))
                 ),
                 categories = emptyList(),
-                accountToken = "token-1",
-                aiSettings = AiCategorizationSettings(aiConsentGranted = true),
-                aiCategorizationGateway = gateway
+                fallbackCategories = DefaultCategories.systemDefaults(0).map { category ->
+                    LedgerCategoryUiModel(category.id, category.name, category.kind)
+                },
+                onAiSuggest = action::invoke
             )
         }
         composeRule.waitForIdle()
@@ -85,7 +80,7 @@ class ReviewQueueAiSuggestionTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("ai-suggest-button").performClick()
-        composeRule.waitUntil { gateway.payload.get() != null }
+        composeRule.waitUntil { action.categoryCandidates.get() != null }
 
         val expected = DefaultCategories.systemDefaults(0)
             .filter { category ->
@@ -94,14 +89,14 @@ class ReviewQueueAiSuggestionTest {
             }
             .map { category -> DefaultCategories.nameForId(category.id) ?: category.name }
             .distinct()
-        val actual = requireNotNull(gateway.payload.get()).categoryCandidates
+        val actual = requireNotNull(action.categoryCandidates.get())
         assertTrue(actual.isNotEmpty())
         assertEquals(expected, actual)
     }
 
     @Test
     fun expenseDraftSendsOnlySelectableBusinessCategoriesToAi() {
-        val gateway = CapturingAiCategorizationGateway()
+        val action = CapturingAiSuggestionAction()
         composeRule.setContent {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(
@@ -116,9 +111,7 @@ class ReviewQueueAiSuggestionTest {
                         kind = null
                     )
                 ),
-                accountToken = "token-1",
-                aiSettings = AiCategorizationSettings(aiConsentGranted = true),
-                aiCategorizationGateway = gateway
+                onAiSuggest = action::invoke
             )
         }
         composeRule.waitForIdle()
@@ -127,18 +120,18 @@ class ReviewQueueAiSuggestionTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("ai-suggest-button").performClick()
-        composeRule.waitUntil { gateway.payload.get() != null }
+        composeRule.waitUntil { action.categoryCandidates.get() != null }
 
         assertEquals(
             listOf("餐饮"),
-            requireNotNull(gateway.payload.get()).categoryCandidates
+            requireNotNull(action.categoryCandidates.get())
         )
     }
 
     @Test
     fun aiRequestShowsLoadingAndDisablesDuplicateSubmissionUntilSuccess() {
-        val deferred = CompletableDeferred<AiCategorizationGatewayResult>()
-        val gateway = DeferredAiCategorizationGateway(deferred)
+        val deferred = CompletableDeferred<ReviewAiSuggestionResult>()
+        val action = DeferredAiSuggestionAction(deferred)
         composeRule.setContent {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
@@ -146,9 +139,7 @@ class ReviewQueueAiSuggestionTest {
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("transport", "交通", TransactionKind.EXPENSE)
                 ),
-                accountToken = "token-1",
-                aiSettings = AiCategorizationSettings(aiConsentGranted = true),
-                aiCategorizationGateway = gateway
+                onAiSuggest = action::invoke
             )
         }
         composeRule.waitForIdle()
@@ -157,16 +148,14 @@ class ReviewQueueAiSuggestionTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("ai-suggest-button").performClick()
-        composeRule.waitUntil { gateway.calls.get() == 1 }
+        composeRule.waitUntil { action.calls.get() == 1 }
 
         composeRule.onNodeWithTag("ai-suggest-loading").assertIsDisplayed()
         composeRule.onNodeWithTag("ai-suggest-button").assertIsNotEnabled()
-        assertEquals(1, gateway.calls.get())
+        assertEquals(1, action.calls.get())
 
         deferred.complete(
-            AiCategorizationGatewayResult.Success(
-                AiCategorizationResponse("交通", "高", "测试建议")
-            )
+            ReviewAiSuggestionResult(category = "交通", message = "AI 建议：交通")
         )
         composeRule.waitUntil {
             composeRule.onAllNodesWithText("AI 建议：交通").fetchSemanticsNodes().isNotEmpty()
@@ -180,11 +169,9 @@ class ReviewQueueAiSuggestionTest {
             ReviewQueueScreen(
                 initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(category("food", "餐饮", TransactionKind.EXPENSE)),
-                accountToken = "token-1",
-                aiSettings = AiCategorizationSettings(aiConsentGranted = true),
-                aiCategorizationGateway = FixedAiCategorizationGateway(
-                    AiCategorizationGatewayResult.Failure(AiCategorizationFailureReason.RATE_LIMITED)
-                )
+                onAiSuggest = { _, _ ->
+                    ReviewAiSuggestionResult(message = "AI 请求过于频繁，请稍后重试")
+                }
             )
         }
         composeRule.waitForIdle()
@@ -240,52 +227,33 @@ class ReviewQueueAiSuggestionTest {
         const val NOW = 1_783_468_800_000L
     }
 
-    private class FixedAiCategorizationGateway(
-        private val result: AiCategorizationGatewayResult
-    ) : AiCategorizationGateway {
-        constructor(category: String) : this(
-            AiCategorizationGatewayResult.Success(
-                AiCategorizationResponse(
-                    category = category,
-                    confidenceLabel = "中",
-                    explanation = "测试建议"
-                )
-            )
-        )
+    private class CapturingAiSuggestionAction {
+        val categoryCandidates = AtomicReference<List<String>?>()
 
-        override suspend fun suggestCategory(
-            token: String,
-            payload: AiCategorizationPayload
-        ): AiCategorizationGatewayResult = result
-    }
-
-    private class CapturingAiCategorizationGateway : AiCategorizationGateway {
-        val payload = AtomicReference<AiCategorizationPayload?>()
-
-        override suspend fun suggestCategory(
-            token: String,
-            payload: AiCategorizationPayload
-        ): AiCategorizationGatewayResult {
-            this.payload.set(payload)
-            return AiCategorizationGatewayResult.Success(
-                AiCategorizationResponse(
-                    category = payload.categoryCandidates.first(),
-                    confidenceLabel = "中",
-                    explanation = "测试建议"
-                )
+        suspend fun invoke(
+            entry: ReviewQueueEntry,
+            categoryCandidates: List<String>
+        ): ReviewAiSuggestionResult {
+            check(entry.id.isNotBlank())
+            this.categoryCandidates.set(categoryCandidates)
+            return ReviewAiSuggestionResult(
+                category = categoryCandidates.first(),
+                message = "AI 建议：${categoryCandidates.first()}"
             )
         }
     }
 
-    private class DeferredAiCategorizationGateway(
-        private val deferred: CompletableDeferred<AiCategorizationGatewayResult>
-    ) : AiCategorizationGateway {
+    private class DeferredAiSuggestionAction(
+        private val deferred: CompletableDeferred<ReviewAiSuggestionResult>
+    ) {
         val calls = AtomicInteger(0)
 
-        override suspend fun suggestCategory(
-            token: String,
-            payload: AiCategorizationPayload
-        ): AiCategorizationGatewayResult {
+        suspend fun invoke(
+            entry: ReviewQueueEntry,
+            categoryCandidates: List<String>
+        ): ReviewAiSuggestionResult {
+            check(entry.id.isNotBlank())
+            check(categoryCandidates.isNotEmpty())
             calls.incrementAndGet()
             return deferred.await()
         }

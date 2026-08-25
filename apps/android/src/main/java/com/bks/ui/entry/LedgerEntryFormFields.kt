@@ -1,4 +1,4 @@
-package com.bks.feature.ledger
+package com.bks.ui.entry
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background

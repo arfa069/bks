@@ -37,10 +37,13 @@ import com.bks.feature.monitoring.AutomaticBookkeepingViewModel
 import com.bks.feature.profile.ProfileDestination
 import com.bks.feature.profile.ProfileOverviewScreen
 import com.bks.feature.settings.DataAndBackupActions
+import com.bks.feature.settings.BackupLedgerEntryUiModel
 import com.bks.feature.settings.DataAndBackupScreen
 import com.bks.feature.settings.DataAndBackupUiState
 import com.bks.feature.settings.DataAndBackupViewModel
 import com.bks.feature.settings.LedgerSyncSectionActions
+import com.bks.feature.settings.LedgerSyncSettingsConflictChoice
+import com.bks.feature.settings.LedgerSyncSettingsInitialMode
 import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.feature.sync.LedgerSyncViewModel
 
@@ -79,7 +82,7 @@ internal fun BksProfileOverviewRoute(
     onNavigateHome: () -> Unit
 ) {
     ProfileOverviewScreen(
-        session = session,
+        accountSummary = session.toProfileAccountSummaryUiModel(),
         onDestinationSelected = onDestinationSelected,
         onNavigateHome = onNavigateHome,
         ledgerSyncEnabled = ledgerSyncEnabled,
@@ -196,8 +199,23 @@ internal fun BksDataAndBackupRoute(
     onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
+    val backupLedgerEntries = remember(ledgerState.entries) {
+        ledgerState.entries.map { entry ->
+            BackupLedgerEntryUiModel(
+                id = entry.id,
+                transactionTimeText = entry.transactionTimeText,
+                title = entry.title,
+                amountMinor = entry.amountMinor,
+                flowType = entry.flowType.name,
+                category = entry.category,
+                sourceLabel = entry.sourceLabel,
+                kindLabel = entry.kindLabel,
+                note = entry.note
+            )
+        }
+    }
     DataAndBackupScreen(
-        ledgerEntries = ledgerState.entries,
+        ledgerEntries = backupLedgerEntries,
         currentLedgerName = ledgerState.activeLedgerName,
         dataAndBackupState = dataAndBackupState,
         dataAndBackupActions = DataAndBackupActions(
@@ -214,14 +232,40 @@ internal fun BksDataAndBackupRoute(
         ),
         onBack = onBack,
         snackbarHostState = snackbarHostState,
-        ledgerSyncState = ledgerSyncState,
+        ledgerSyncState = ledgerSyncState.toSettingsUiState(),
         ledgerSyncActions = LedgerSyncSectionActions(
-            onPreview = ledgerSyncViewModel::preview,
+            onPreview = {
+                ledgerSyncViewModel.preview().toSettingsActionResult { preview ->
+                    preview.toSettingsPreview()
+                }
+            },
             onDismissPreview = ledgerSyncViewModel::dismissPreview,
-            onEnable = ledgerSyncViewModel::enable,
-            onSyncNow = ledgerSyncViewModel::synchronize,
+            onEnable = { mode ->
+                ledgerSyncViewModel.enable(
+                    when (mode) {
+                        LedgerSyncSettingsInitialMode.MERGE ->
+                            com.bks.feature.sync.LedgerSyncInitialMode.MERGE
+                        LedgerSyncSettingsInitialMode.REPLACE_LOCAL ->
+                            com.bks.feature.sync.LedgerSyncInitialMode.REPLACE_LOCAL
+                    }
+                ).toSettingsActionResult { Unit }
+            },
+            onSyncNow = {
+                ledgerSyncViewModel.synchronize().toSettingsActionResult { Unit }
+            },
             onDisable = ledgerSyncViewModel::disable,
-            onResolveConflict = ledgerSyncViewModel::resolveConflict
+            onResolveConflict = { conflictId, canonicalVersion, choice ->
+                ledgerSyncViewModel.resolveConflict(
+                    conflictId = conflictId,
+                    expectedVersion = canonicalVersion,
+                    choice = when (choice) {
+                        LedgerSyncSettingsConflictChoice.CANONICAL ->
+                            com.bks.api.LedgerSyncConflictChoiceContract.CANONICAL
+                        LedgerSyncSettingsConflictChoice.CANDIDATE ->
+                            com.bks.api.LedgerSyncConflictChoiceContract.CANDIDATE
+                    }
+                ).toSettingsActionResult { Unit }
+            }
         ),
         modifier = Modifier
             .padding(innerPadding)

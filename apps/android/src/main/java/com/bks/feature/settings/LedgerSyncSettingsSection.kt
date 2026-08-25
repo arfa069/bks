@@ -17,12 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.bks.api.LedgerSyncConflictChoiceContract
-import com.bks.feature.sync.LedgerSyncConflictUiModel
-import com.bks.feature.sync.LedgerSyncInitialMode
-import com.bks.feature.sync.LedgerSyncOperationResult
-import com.bks.feature.sync.LedgerSyncPreview
-import com.bks.feature.sync.LedgerSyncUiState
 import com.bks.ui.components.Button
 import com.bks.ui.components.OutlinedButton
 import com.bks.ui.components.TextButton
@@ -37,7 +31,7 @@ private fun formatSyncTime(epochMillis: Long): String =
 
 @Composable
 internal fun LedgerSyncSettingsSection(
-    ledgerSyncState: LedgerSyncUiState,
+    ledgerSyncState: LedgerSyncSettingsUiState,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState
 ) {
@@ -84,8 +78,9 @@ private fun EnableSyncContent(
         onClick = {
             coroutineScope.launch {
                 when (val result = actions.onPreview()) {
-                    is LedgerSyncOperationResult.Success -> Unit
-                    is LedgerSyncOperationResult.Failure -> snackbarHostState.showSnackbar(result.message)
+                    is LedgerSyncSettingsActionResult.Success -> Unit
+                    is LedgerSyncSettingsActionResult.Failure ->
+                        snackbarHostState.showSnackbar(result.message)
                 }
             }
         },
@@ -96,7 +91,7 @@ private fun EnableSyncContent(
 
 @Composable
 private fun EnabledSyncContent(
-    ledgerSyncState: LedgerSyncUiState,
+    ledgerSyncState: LedgerSyncSettingsUiState,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState
@@ -122,8 +117,8 @@ private fun EnabledSyncContent(
                     val result = actions.onSyncNow()
                     snackbarHostState.showSnackbar(
                         when (result) {
-                            is LedgerSyncOperationResult.Success -> "同步完成"
-                            is LedgerSyncOperationResult.Failure -> result.message
+                            is LedgerSyncSettingsActionResult.Success -> "同步完成"
+                            is LedgerSyncSettingsActionResult.Failure -> result.message
                         }
                     )
                 }
@@ -147,7 +142,7 @@ private fun EnabledSyncContent(
 
 @Composable
 private fun SyncConflictCard(
-    conflict: LedgerSyncConflictUiModel,
+    conflict: LedgerSyncSettingsConflictUiModel,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions
 ) {
@@ -168,7 +163,7 @@ private fun SyncConflictCard(
                         actions.onResolveConflict(
                             conflict.conflictId,
                             conflict.canonicalVersion,
-                            LedgerSyncConflictChoiceContract.CANONICAL
+                            LedgerSyncSettingsConflictChoice.CANONICAL
                         )
                     }
                 }, enabled = !conflict.resolving) { Text("保留云端") }
@@ -177,7 +172,7 @@ private fun SyncConflictCard(
                         actions.onResolveConflict(
                             conflict.conflictId,
                             conflict.canonicalVersion,
-                            LedgerSyncConflictChoiceContract.CANDIDATE
+                            LedgerSyncSettingsConflictChoice.CANDIDATE
                         )
                     }
                 }, enabled = !conflict.resolving) { Text("保留本机") }
@@ -188,7 +183,7 @@ private fun SyncConflictCard(
 
 @Composable
 private fun FirstSyncConfirmationDialog(
-    ledgerSyncState: LedgerSyncUiState,
+    ledgerSyncState: LedgerSyncSettingsUiState,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState,
@@ -214,16 +209,16 @@ private fun FirstSyncConfirmationDialog(
                 onClick = {
                     coroutineScope.launch {
                         val mode = if (preview.localRecordCount == 0 && preview.cloudRecordCount > 0) {
-                            LedgerSyncInitialMode.REPLACE_LOCAL
+                            LedgerSyncSettingsInitialMode.REPLACE_LOCAL
                         } else {
-                            LedgerSyncInitialMode.MERGE
+                            LedgerSyncSettingsInitialMode.MERGE
                         }
                         val result = actions.onEnable(mode)
-                        if (result is LedgerSyncOperationResult.Success) onDismiss()
+                        if (result is LedgerSyncSettingsActionResult.Success) onDismiss()
                         snackbarHostState.showSnackbar(
                             when (result) {
-                                is LedgerSyncOperationResult.Success -> "账户同步已启用"
-                                is LedgerSyncOperationResult.Failure -> result.message
+                                is LedgerSyncSettingsActionResult.Success -> "账户同步已启用"
+                                is LedgerSyncSettingsActionResult.Failure -> result.message
                             }
                         )
                     }
@@ -236,21 +231,3 @@ private fun FirstSyncConfirmationDialog(
         }
     )
 }
-
-class LedgerSyncSectionActions(
-    val onPreview: suspend () -> LedgerSyncOperationResult<LedgerSyncPreview> = {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    },
-    val onDismissPreview: () -> Unit = {},
-    val onEnable: suspend (LedgerSyncInitialMode) -> LedgerSyncOperationResult<Unit> = {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    },
-    val onSyncNow: suspend () -> LedgerSyncOperationResult<Unit> = {
-        LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-    },
-    val onDisable: suspend () -> Unit = {},
-    val onResolveConflict: suspend (String, Long, LedgerSyncConflictChoiceContract) ->
-        LedgerSyncOperationResult<Unit> = { _, _, _ ->
-            LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-        }
-)

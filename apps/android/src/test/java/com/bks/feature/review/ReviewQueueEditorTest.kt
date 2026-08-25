@@ -17,8 +17,8 @@ import androidx.compose.ui.test.performTextInput
 import com.bks.data.local.ConfidenceState
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.TransactionKind
-import com.bks.feature.ledger.FundingAccountUiModel
-import com.bks.feature.ledger.LedgerCategoryUiModel
+import com.bks.ui.entry.FundingAccountUiModel
+import com.bks.ui.entry.LedgerCategoryUiModel
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Rule

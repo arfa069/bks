@@ -2,7 +2,7 @@
 
 ## Status
 
-Blocked
+Completed
 
 ## Goal
 
@@ -121,10 +121,11 @@ git diff --check
 - `BksLedgerSyncAccountSwitchDialog` 不再接收 Context，也不再自行启动 coroutine 或访问 Repository；它只接收稳定同步状态和显式操作 callback。原有切换、提示、远端退出和本地模式切换时序仍由 `BksApp` 现有 Composition Root 装配。
 - 账户 Session、删除状态、云端 AI 设置和同步中状态由 `AccountSessionCoordinatorState` 与 `AccountCloudSettingsState` 直接派生为同一 `BksAppPresentation`；不再先经 `LaunchedEffect` 镜像到 legacy runtime，避免账户切换时出现跨快照 UI 状态。
 - `BksProfileRoutes` 的账号管理退出导航继续由 `AccountSessionCoordinatorState` 的稳定 Session state 驱动；Screen 可达性、返回目标、列表状态、Snackbar 和 Activity/platform callback 仍沿用原有状态源。
+- 后续 Step 5.2 已将 Review AI 的 token、云设置和 `AiCategorizationGateway` 边界移入既有 `ReviewQueueViewModel` owner；`BksReviewRoute` 不再接收 Gateway，只负责把 `reviewViewModel::suggestCategory` action 装配给 `ReviewQueueScreen`，因此本 Step 当时唯一的 Route gateway 阻塞点已经消除。
 
 ### Deviations From Plan
 
-- 本 Step 未完成全部 Completion Criteria：`ReviewQueueScreen` 的当前生产 API 仍直接要求 `AiCategorizationGateway`，因此 `BksReviewRoute` 必须保留一个显式 gateway 参数。把该边界改成 client/action/owner 需要修改 Screen 的业务装配契约，属于 Step 5.2；按本 Step 的“Route 仍需要 Gateway”与“需要扩大 Step 范围”Stop Conditions 停止，不提前执行 Step 5.2，也不为 Plan 强制创建微型 ViewModel/Coordinator。
+- 本 Step 初次执行时按 Stop Conditions 保留了 `BksReviewRoute → ReviewQueueScreen → AiCategorizationGateway` 边界，并如实标记为 `Blocked`，没有越界提前修改 Screen contract。该历史阻塞随后已由 Step 5.2 按计划消除，因此现将本 Step 状态协调为 `Completed`；没有为关闭状态强制创建微型 ViewModel、Coordinator 或 wrapper。
 - `AppNavigationModels.kt` 与 `BksAppState.kt` 无需修改：当前 `AppRoute`、saveable navigation state 和 Account Entry return target 已满足稳定 State 导航要求。
 - 显式展开 Route 装配后，`BksApp` 暂时超过 Detekt 的方法长度/复杂度阈值；本 Step 对该 Composition Root 添加局部 `LongMethod`/`CyclomaticComplexMethod` suppression，而没有重新引入聚合 locator。Application God Layer 的最终拆除仍属于 Step 7.1。
 - 复审后新增 `BksAppRuntimeTest` 与 `BksDialogsTest`，直接锁定账户/云设置快照派生以及账号切换/取消退出回调；没有为测试引入新的 ViewModel、Coordinator 或聚合 Context。
@@ -133,18 +134,18 @@ git diff --check
 
 - 最终专项组合命令通过：`MainActivityTest` 19、`BksAppStateTest` 1、`ProfileScreenTest` 5，以及 Account Session/Cloud Settings/Account Entry/Account Management/Ledger/Review/Automatic Bookkeeping/Data and Backup/Ledger Sync 9 个 owner suites 82，共 12 suites / 107 tests，0 skipped/failures/errors。
 - 复审修复后，新增 `BksAppRuntimeTest` 4 与 `BksDialogsTest` 4；连同 `MainActivityTest` 19、`BksAppStateTest` 1、`ProfileScreenTest` 5 重新运行，共 5 suites / 33 tests，0 skipped/failures/errors。
-- 复审修复完成后运行 `:apps:android:testDebugUnitTest` 全量 Android JVM/Robolectric：91 suites / 525 tests，0 skipped/failures/errors。
+- Step 5.2 完成并消除 Review Gateway 阻塞后，再次运行 `:apps:android:testDebugUnitTest` 全量 Android JVM/Robolectric：91 suites / 529 tests，0 skipped/failures/errors。
 - `:apps:android:detekt` 最终通过。首次运行准确发现 `BksApp` 显式装配长度/复杂度、文件函数数与账号入口参数数 4 项问题；将两个账号 factory 移入 `BksRouteFactories.kt`，并仅对不可聚合而不形成 locator 的显式根装配/Route 长签名添加局部 suppression 后重跑通过。
-- `git diff --check` 通过；`rg` 确认生产/测试代码中 `BksRouteContext`、`BksRouteContentContext` 消费为 0，Route 文件中没有 `BksAppDependencies`、`BksAppContainer`、Repository、Scheduler、`CoroutineScope` 或 `launch`。唯一保留的直接业务边界是上述 Review `AiCategorizationGateway` 阻塞点。
-- 未运行 Android Phase 全量、`assembleDebug`、Instrumentation 或真机测试：Phase 5 尚未完成，且本次未修改 Manifest、Resources、Gradle dependency、BuildConfig、Room/API/sync/backup/platform 配置。
+- `git diff --check` 通过；`rg` 确认生产/测试代码中 `BksRouteContext`、`BksRouteContentContext` 消费为 0，Route 文件中没有 `BksAppDependencies`、`BksAppContainer`、Repository、Gateway、Scheduler、`CoroutineScope` 或 `launch`。Step 5.2 结构搜索同时确认目标 `*Screen.kt` 的 Entity/Repository/Gateway 禁止依赖为 0 命中。
+- 未运行 `assembleDebug`、Instrumentation 或真机测试：Phase 5 的相关 Android JVM/Robolectric、Detekt 与结构验证已经通过，且未修改 Manifest、Resources、Gradle dependency、BuildConfig、Room/API/sync/backup/platform 配置。
 
 ### Remaining Risks
 
-- Step 5.1 保持 Blocked，直到 Step 5.2 或用户另行授权的边界方案先让 `ReviewQueueScreen` 不再要求 Gateway；在此之前不能宣称所有 Route 都满足 gateway-free invariant。
+- 原 `ReviewQueueScreen` Gateway 阻塞已经由 Step 5.2 消除；当前 `BksReviewRoute` 与其他 Route 均满足 gateway-free invariant。Gateway 仍可存在于 Composition Root 并用于创建 owner 依赖，但不再暴露给 Route 或 Screen contract。
 - `BksApp` 仍负责 legacy runtime/presentation/actions/effects 和同步切换业务 callback 的 Composition Root 装配；本 Step 已移除 Route locator，但没有越界执行 Step 7.1 的 God Layer 最终清理。
 - 现有 JVM/Robolectric 测试覆盖 Root gate、导航/返回、Profile 可达性与 owner 行为；Activity/process recreation、真实文件 picker/微信 callback、真机系统返回和完整 APK 装配尚未做设备端验收。
 - 当前改动保留在未提交工作区；未 commit、push 或创建分支。
 
 ### Final Status
 
-Blocked
+Completed

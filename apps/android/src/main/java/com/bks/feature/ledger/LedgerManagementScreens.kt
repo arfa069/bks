@@ -1,5 +1,7 @@
 package com.bks.feature.ledger
 
+import com.bks.ui.entry.FundingAccountUiModel
+
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import com.bks.data.local.PaymentSource

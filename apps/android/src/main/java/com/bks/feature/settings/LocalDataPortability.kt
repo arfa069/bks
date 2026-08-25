@@ -1,7 +1,5 @@
 package com.bks.feature.settings
 
-import com.bks.feature.ledger.LedgerUiEntry
-
 data class LocalDataDeletionState(
     val backupReminderAccepted: Boolean = false,
     val confirmationText: String = ""
@@ -27,7 +25,7 @@ fun reduceLocalDataDeletionState(
     )
 }
 
-fun exportLedgerCsv(entries: List<LedgerUiEntry>): String {
+fun exportLedgerCsv(entries: List<BackupLedgerEntryUiModel>): String {
     val header = listOf(
         "id",
         "transaction_time",
@@ -45,7 +43,7 @@ fun exportLedgerCsv(entries: List<LedgerUiEntry>): String {
             entry.transactionTimeText,
             entry.title,
             minorToText(entry.amountMinor),
-            entry.flowType.name,
+            entry.flowType,
             entry.category,
             entry.sourceLabel,
             entry.kindLabel,

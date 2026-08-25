@@ -10,6 +10,8 @@ import com.bks.data.local.ConfidenceState
 import com.bks.data.local.LocalLedgerRepository
 import com.bks.data.local.LocalPreferencesRepository
 import com.bks.data.local.PaymentSource
+import com.bks.feature.toReviewCaptureReasonLabel
+import com.bks.feature.toReviewSourceLabel
 import com.bks.feature.review.ReviewQueuePersistence
 import com.bks.feature.review.ReviewPersistenceCommand
 import java.time.ZoneId
@@ -68,6 +70,12 @@ class BillSyncCaptureProcessorTest {
         assertNull(pending.fundingAccountLabel)
         assertNull(pending.evidenceSummary)
         assertTrue(database.ledgerEntryDao().listLedgerEntries().isEmpty())
+        val reviewEntry = persistence.loadState().pendingEntries.single()
+        assertEquals(PaymentSource.OTHER.toReviewSourceLabel(), reviewEntry.sourceLabel)
+        assertEquals(
+            CaptureReason.ACCESSIBILITY_AUTO.toReviewCaptureReasonLabel(),
+            reviewEntry.captureReasonLabel
+        )
 
         persistence.execute(
             ReviewPersistenceCommand.Confirm(

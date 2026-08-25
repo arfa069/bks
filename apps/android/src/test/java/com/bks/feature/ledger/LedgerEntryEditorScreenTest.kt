@@ -18,9 +18,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
 import com.bks.data.local.EntryOrigin
 import com.bks.data.local.FlowDirection
-import com.bks.data.local.LedgerEntryInput
 import com.bks.data.local.PaymentSource
 import com.bks.data.local.TransactionKind
+import com.bks.ui.entry.LedgerEntryFormSubmission
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -40,7 +40,7 @@ class LedgerEntryEditorScreenTest {
 
     @Test
     fun manualEntryFormSavesValidatedInput() {
-        val savedInput = AtomicReference<LedgerEntryInput?>()
+        val savedInput = AtomicReference<LedgerEntryFormSubmission?>()
         composeRule.setContent {
             ManualLedgerEntryScreen(
                 categories = emptyList(),
@@ -73,7 +73,7 @@ class LedgerEntryEditorScreenTest {
 
     @Test
     fun invalidAmountDoesNotSave() {
-        val savedInput = AtomicReference<LedgerEntryInput?>()
+        val savedInput = AtomicReference<LedgerEntryFormSubmission?>()
         composeRule.setContent {
             ManualLedgerEntryScreen(
                 categories = emptyList(),
@@ -179,7 +179,7 @@ class LedgerEntryEditorScreenTest {
 
     @Test
     fun capturedEntryOpensEditorAndCanBeUpdated() {
-        val updatedInput = AtomicReference<LedgerEntryInput?>()
+        val updatedInput = AtomicReference<LedgerEntryFormSubmission?>()
         val captured = sampleEntries().first().copy(
             paymentSource = PaymentSource.WECHAT,
             originalCaptureSource = PaymentSource.WECHAT,
@@ -219,7 +219,7 @@ class LedgerEntryEditorScreenTest {
 
     @Test
     fun longMerchantTitleCanBeEditedFromTheBeginning() {
-        val updatedInput = AtomicReference<LedgerEntryInput?>()
+        val updatedInput = AtomicReference<LedgerEntryFormSubmission?>()
         composeRule.setContent {
             LedgerScreen(
                 entries = listOf(sampleEntries().first()),

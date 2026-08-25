@@ -2,6 +2,15 @@ package com.bks.feature.review
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bks.feature.account.AccountCloudSettingsState
+import com.bks.feature.account.AccountSession
+import com.bks.feature.account.AccountSessionCoordinatorState
+import com.bks.feature.account.effectiveAiCategorizationSettings
+import com.bks.feature.categorization.AiCategorizationClient
+import com.bks.feature.categorization.AiCategorizationFailureReason
+import com.bks.feature.categorization.AiCategorizationResult
+import com.bks.feature.categorization.AiCategorizationSettings
+import com.bks.feature.categorization.AiCategorizationSkipReason
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -18,6 +27,9 @@ import kotlinx.coroutines.sync.withLock
 internal class ReviewQueueViewModel(
     private val persistence: ReviewQueuePersistence,
     private val localDataReplacementInFlight: StateFlow<Boolean>,
+    private val aiCategorizationClient: AiCategorizationClient? = null,
+    private val accountSessionState: StateFlow<AccountSessionCoordinatorState>? = null,
+    private val cloudSettingsState: StateFlow<AccountCloudSettingsState>? = null,
     private val stateLoader: suspend () -> ReviewQueueState = persistence::loadState
 ) : ViewModel() {
     private val persistedState = MutableStateFlow(ReviewQueueState())
@@ -97,6 +109,30 @@ internal class ReviewQueueViewModel(
     fun dismissUndo() {
         undoMetadata = null
         presentationState.value = presentationState.value.copy(undoEvent = null)
+    }
+
+    suspend fun suggestCategory(
+        entry: ReviewQueueEntry,
+        categoryCandidates: List<String>
+    ): ReviewAiSuggestionResult {
+        val client = aiCategorizationClient
+            ?: return ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
+        val accountState = accountSessionState?.value
+        val signedIn = accountState?.session as? AccountSession.SignedIn
+        val cloudState = cloudSettingsState?.value
+        val settings = if (accountState != null && cloudState != null) {
+            effectiveAiCategorizationSettings(accountState, cloudState)
+        } else {
+            AiCategorizationSettings()
+        }
+        return client.suggestCategory(
+            token = signedIn?.token,
+            payload = entry.toAiCategorizationPayload(
+                categoryCandidates = categoryCandidates,
+                enhancedContextGranted = settings.enhancedContextGranted
+            ),
+            settings = settings
+        ).toReviewAiSuggestionResult()
     }
 
     private fun resetTransientState() {
@@ -199,6 +235,39 @@ internal class ReviewQueueViewModel(
         presentationState.value = ReviewQueuePresentationState()
         noticeChannel.send(message)
     }
+}
+
+private fun AiCategorizationResult.toReviewAiSuggestionResult(): ReviewAiSuggestionResult {
+    val category = suggestion?.category
+    return ReviewAiSuggestionResult(
+        category = category,
+        message = category?.let { "AI 建议：$it" }
+            ?: skipReason?.toReviewMessage()
+            ?: failureReason?.toReviewMessage()
+            ?: "暂时没有 AI 分类建议"
+    )
+}
+
+private fun AiCategorizationSkipReason.toReviewMessage(): String = when (this) {
+    AiCategorizationSkipReason.REQUIRES_SIGNED_IN_ACCOUNT ->
+        "登录后才能使用云端 AI 分类"
+    AiCategorizationSkipReason.REQUIRES_AI_CONSENT ->
+        "开启云端 AI 后才能获取分类建议"
+}
+
+private fun AiCategorizationFailureReason.toReviewMessage(): String = when (this) {
+    AiCategorizationFailureReason.BACKEND_NOT_CONFIGURED -> "云端 AI 后端地址尚未配置"
+    AiCategorizationFailureReason.INVALID_SESSION -> "登录状态已失效，请重新登录"
+    AiCategorizationFailureReason.ACCOUNT_DELETION_PENDING -> "账号注销冷静期内，云端 AI 已暂停"
+    AiCategorizationFailureReason.AI_CONSENT_REQUIRED -> "请先开启云端 AI 分类"
+    AiCategorizationFailureReason.ENHANCED_CONTEXT_NOT_AUTHORIZED ->
+        "增强上下文授权已失效，请重新确认设置"
+    AiCategorizationFailureReason.CATEGORY_CANDIDATES_REQUIRED ->
+        "暂无可用分类，请先创建或启用分类"
+    AiCategorizationFailureReason.RATE_LIMITED -> "AI 请求过于频繁，请稍后重试"
+    AiCategorizationFailureReason.SERVICE_UNAVAILABLE -> "云端 AI 暂时不可用，请稍后重试"
+    AiCategorizationFailureReason.NETWORK_FAILURE -> "网络连接失败，请检查网络后重试"
+    AiCategorizationFailureReason.INVALID_RESPONSE -> "AI 响应无法解析，请稍后重试"
 }
 
 private data class ReviewQueuePresentationState(
