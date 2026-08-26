@@ -99,7 +99,7 @@ fun ComplianceAndPrivacyScreen(
                 }
                 EntryCard(
                     title = "诊断日志",
-                    summary = "本机加密的应用故障记录、筛选、导出与清空",
+                    summary = "本机明文的应用故障和自动记账诊断、筛选、导出与清空",
                     tag = "diagnostic-logs-entry",
                     onClick = { showDiagnosticLogs = true }
                 )

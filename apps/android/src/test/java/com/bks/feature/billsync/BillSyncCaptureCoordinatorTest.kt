@@ -5,6 +5,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.core.app.ApplicationProvider
+import com.bks.feature.diagnostics.DiagnosticSensitiveField
+import com.bks.feature.diagnostics.InMemoryDiagnosticRecorder
 import com.ven.assists.AssistsCore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -52,18 +55,21 @@ class BillSyncCaptureCoordinatorTest {
     }
 
     @Test
-    fun disabledCaptureIsIgnoredAndConcurrentEnabledHandoffPersistsOnce() = runTest {
+    fun disabledCaptureIsIgnoredAndSameWindowBurstRunsOnceAfterSettle() = runTest {
         val enabled = MutableStateFlow(false)
         val processor = FakeCaptureProcessor()
+        val diagnostics = InMemoryDiagnosticRecorder()
+        var pageText = "处理中"
         var allWindowsLookups = 0
         val coordinator = coordinator(
             processor = processor,
             enabled = enabled,
+            diagnosticRecorder = diagnostics,
             rootsProvider = { scope ->
                 when (scope) {
                     AssistsCore.NodeLookupScope.AllWindows -> {
                         allWindowsLookups += 1
-                        listOf(root())
+                        listOf(root(pageText))
                     }
                     AssistsCore.NodeLookupScope.ActiveWindow -> emptyList()
                 }
@@ -75,16 +81,81 @@ class BillSyncCaptureCoordinatorTest {
             runCurrent()
 
             coordinator.onAccessibilityEvent(event())
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS)
+            runCurrent()
             assertTrue(processor.recognizedPageTexts.isEmpty())
+            assertEquals(0, allWindowsLookups)
 
             enabled.value = true
             runCurrent()
-            repeat(10) { coordinator.onAccessibilityEvent(event()) }
-            assertEquals(1, allWindowsLookups)
+            coordinator.onAccessibilityEvent(event())
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS - 100)
+            pageText = PAGE_TEXT
+            repeat(9) { coordinator.onAccessibilityEvent(event()) }
+            runCurrent()
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS - 1)
+            runCurrent()
+            assertEquals(0, allWindowsLookups)
+
+            advanceTimeBy(1)
             runCurrent()
 
-            assertEquals(listOf(PAGE_TEXT, PAGE_TEXT), processor.recognizedPageTexts)
+            assertEquals(listOf(PAGE_TEXT), processor.recognizedPageTexts)
             assertEquals(1, processor.persistedResults.size)
+            assertEquals(1, allWindowsLookups)
+            val diagnostic = diagnostics.events.single()
+            assertEquals("WINDOW_CONTENT_CHANGED×10", diagnostic.metadata.triggeredEvents)
+            assertEquals(1, diagnostic.metadata.nodeCount)
+            assertEquals(1, diagnostic.metadata.insertedCount)
+            assertEquals(
+                PAGE_TEXT,
+                diagnostic.sensitivePayload.fields[DiagnosticSensitiveField.PageText]
+            )
+        } finally {
+            coordinator.stop()
+        }
+    }
+
+    @Test
+    fun differentWindowsKeepIndependentPendingCaptures() = runTest {
+        val processor = FakeCaptureProcessor()
+        var allWindowsLookups = 0
+        val coordinator = coordinator(
+            processor = processor,
+            enabled = MutableStateFlow(true),
+            rootsProvider = { scope ->
+                when (scope) {
+                    AssistsCore.NodeLookupScope.AllWindows -> {
+                        allWindowsLookups += 1
+                        listOf(
+                            root(pageText = PAGE_TEXT, windowId = WINDOW_ID),
+                            root(pageText = SECOND_PAGE_TEXT, windowId = SECOND_WINDOW_ID)
+                        )
+                    }
+                    AssistsCore.NodeLookupScope.ActiveWindow -> emptyList()
+                }
+            }
+        )
+        try {
+            coordinator.start()
+            coordinator.onServiceConnected()
+            runCurrent()
+
+            coordinator.onAccessibilityEvent(event(WINDOW_ID))
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS / 2)
+            runCurrent()
+            coordinator.onAccessibilityEvent(event(SECOND_WINDOW_ID))
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS / 2)
+            runCurrent()
+
+            assertEquals(listOf(PAGE_TEXT), processor.recognizedPageTexts)
+            assertEquals(1, allWindowsLookups)
+
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS / 2)
+            runCurrent()
+
+            assertEquals(listOf(PAGE_TEXT, SECOND_PAGE_TEXT), processor.recognizedPageTexts)
+            assertEquals(2, processor.persistedResults.size)
             assertEquals(2, allWindowsLookups)
         } finally {
             coordinator.stop()
@@ -101,10 +172,10 @@ class BillSyncCaptureCoordinatorTest {
             runCurrent()
 
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
             processor.persistFailure = null
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
 
             assertEquals(2, processor.persistAttempts)
             assertEquals(1, processor.persistedResults.size)
@@ -129,7 +200,7 @@ class BillSyncCaptureCoordinatorTest {
             runCurrent()
 
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
             assertTrue(persistenceStarted.isCompleted)
 
             coordinator.onServiceDestroyed()
@@ -139,9 +210,74 @@ class BillSyncCaptureCoordinatorTest {
             processor.persistBlock = null
             coordinator.onServiceConnected()
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
 
             assertEquals(1, processor.persistedResults.size)
+        } finally {
+            coordinator.stop()
+        }
+    }
+
+    @Test
+    fun serviceDestroyCancelsPendingCaptureBeforeWindowLookup() = runTest {
+        val processor = FakeCaptureProcessor()
+        val diagnostics = InMemoryDiagnosticRecorder()
+        var allWindowsLookups = 0
+        val coordinator = coordinator(
+            processor = processor,
+            enabled = MutableStateFlow(true),
+            diagnosticRecorder = diagnostics,
+            rootsProvider = { scope ->
+                when (scope) {
+                    AssistsCore.NodeLookupScope.AllWindows -> {
+                        allWindowsLookups += 1
+                        listOf(root())
+                    }
+                    AssistsCore.NodeLookupScope.ActiveWindow -> emptyList()
+                }
+            }
+        )
+        try {
+            coordinator.start()
+            coordinator.onServiceConnected()
+            runCurrent()
+
+            coordinator.onAccessibilityEvent(event())
+            advanceTimeBy(CAPTURE_SETTLE_MILLIS - 1)
+            runCurrent()
+            coordinator.onServiceDestroyed()
+            advanceTimeBy(1)
+            runCurrent()
+
+            assertEquals(0, allWindowsLookups)
+            assertTrue(processor.recognizedPageTexts.isEmpty())
+            assertTrue(diagnostics.events.isEmpty())
+        } finally {
+            coordinator.stop()
+        }
+    }
+
+    @Test
+    fun missingRootProducesOneConciseFailureBatch() = runTest {
+        val diagnostics = InMemoryDiagnosticRecorder()
+        val coordinator = coordinator(
+            processor = FakeCaptureProcessor(),
+            enabled = MutableStateFlow(true),
+            diagnosticRecorder = diagnostics,
+            rootsProvider = { emptyList() }
+        )
+        try {
+            coordinator.start()
+            coordinator.onServiceConnected()
+            runCurrent()
+
+            coordinator.onAccessibilityEvent(event(eventType = AccessibilityEvent.TYPE_WINDOWS_CHANGED))
+            runSettledCapture()
+
+            val diagnostic = diagnostics.events.single()
+            assertEquals("WINDOWS_CHANGED×1", diagnostic.metadata.triggeredEvents)
+            assertEquals("root_missing", diagnostic.metadata.reason)
+            assertEquals(null, diagnostic.metadata.nodeCount)
         } finally {
             coordinator.stop()
         }
@@ -175,9 +311,10 @@ class BillSyncCaptureCoordinatorTest {
             runCurrent()
 
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
             pageText = "处理中"
             repeat(10) { coordinator.onAccessibilityEvent(event()) }
+            runSettledCapture()
             assertEquals(1, allWindowsLookups)
 
             releasePersistence.complete(Unit)
@@ -188,7 +325,7 @@ class BillSyncCaptureCoordinatorTest {
             processor.persistBlock = null
             pageText = PAGE_TEXT
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
 
             assertEquals(2, processor.persistedResults.size)
         } finally {
@@ -220,12 +357,13 @@ class BillSyncCaptureCoordinatorTest {
             runCurrent()
 
             coordinator.onAccessibilityEvent(event())
+            runSettledCapture()
             assertTrue(processor.recognizedPageTexts.isEmpty())
 
             destroyDuringLookup = false
             coordinator.onServiceConnected()
             coordinator.onAccessibilityEvent(event())
-            runCurrent()
+            runSettledCapture()
 
             assertEquals(1, processor.persistedResults.size)
         } finally {
@@ -236,6 +374,7 @@ class BillSyncCaptureCoordinatorTest {
     private fun kotlinx.coroutines.test.TestScope.coordinator(
         processor: FakeCaptureProcessor,
         enabled: Flow<Boolean>,
+        diagnosticRecorder: InMemoryDiagnosticRecorder = InMemoryDiagnosticRecorder(),
         rootsProvider: (AssistsCore.NodeLookupScope) -> List<AccessibilityNodeInfo> = { scope ->
             when (scope) {
                 AssistsCore.NodeLookupScope.AllWindows -> listOf(root())
@@ -250,24 +389,38 @@ class BillSyncCaptureCoordinatorTest {
             persist = processor::persist
         ),
         applicationScope = backgroundScope,
+        diagnosticRecorder = diagnosticRecorder,
+        clock = { CAPTURE_TIME },
         ioDispatcher = StandardTestDispatcher(testScheduler),
         rootsProvider = rootsProvider
     )
 
-    @Suppress("DEPRECATION")
-    private fun event(): AccessibilityEvent = AccessibilityEvent.obtain().apply {
-        packageName = PAYMENT_PACKAGE
-        shadowOf(this).setWindowId(WINDOW_ID)
+    private fun kotlinx.coroutines.test.TestScope.runSettledCapture() {
+        advanceTimeBy(CAPTURE_SETTLE_MILLIS)
+        runCurrent()
     }
 
     @Suppress("DEPRECATION")
-    private fun root(pageText: String = PAGE_TEXT): AccessibilityNodeInfo =
+    private fun event(
+        windowId: Int = WINDOW_ID,
+        eventType: Int = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+    ): AccessibilityEvent = AccessibilityEvent.obtain().apply {
+        packageName = PAYMENT_PACKAGE
+        this.eventType = eventType
+        shadowOf(this).setWindowId(windowId)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun root(
+        pageText: String = PAGE_TEXT,
+        windowId: Int = WINDOW_ID
+    ): AccessibilityNodeInfo =
         AccessibilityNodeInfo.obtain().apply {
             isVisibleToUser = true
             packageName = PAYMENT_PACKAGE
             text = pageText
             val window = AccessibilityWindowInfo.obtain()
-            shadowOf(window).setId(WINDOW_ID)
+            shadowOf(window).setId(windowId)
             shadowOf(this).setAccessibilityWindowInfo(window)
         }
 
@@ -295,14 +448,18 @@ class BillSyncCaptureCoordinatorTest {
                 throw error
             }
             persistFailure?.let { throw it }
-            persistedResults += result
-            return result
+            val persisted = result.copy(insertedCount = 1)
+            persistedResults += persisted
+            return persisted
         }
     }
 
     private companion object {
-        const val PAYMENT_PACKAGE = "com.example.pay"
+        const val PAYMENT_PACKAGE = ALIPAY_PACKAGE_NAME
         const val WINDOW_ID = 7
+        const val SECOND_WINDOW_ID = 8
         const val PAGE_TEXT = "支付成功\n￥4.99\n订单 1"
+        const val SECOND_PAGE_TEXT = "支付成功\n￥8.88\n订单 2"
+        const val CAPTURE_TIME = 1_787_704_343_000L
     }
 }

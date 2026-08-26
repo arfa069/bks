@@ -109,17 +109,23 @@ class BillSyncAccessibilityAdapterTest {
         shadowOf(root).addChild(hiddenContainer)
         shadowOf(root).addChild(node("text"))
 
+        val capture = root.collectReadablePageCapture()
         assertEquals(
             "root\ntext\ndescription\nhint\npane\ntooltip\nstate\nvisible descendant",
-            root.collectReadableText()
+            capture.pageText
         )
+        assertEquals(7, capture.visitedNodeCount)
+        assertFalse(capture.nodeLimitReached)
     }
 
     @Test
     fun readableTextUsesBreadthFirstTraversalWithinNodeDepthAndTextLimits() {
         val wideRoot = node("root")
         repeat(MAX_CAPTURE_NODES) { shadowOf(wideRoot).addChild(node("child-$it")) }
-        assertEquals(MAX_CAPTURE_NODES, wideRoot.collectReadableText().lineSequence().count())
+        val wideCapture = wideRoot.collectReadablePageCapture()
+        assertEquals(MAX_CAPTURE_NODES, wideCapture.pageText.lineSequence().count())
+        assertEquals(MAX_CAPTURE_NODES, wideCapture.visitedNodeCount)
+        assertTrue(wideCapture.nodeLimitReached)
 
         val deepRoot = node("depth-0")
         var parent = deepRoot

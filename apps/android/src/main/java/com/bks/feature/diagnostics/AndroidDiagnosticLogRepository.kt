@@ -3,9 +3,7 @@ package com.bks.feature.diagnostics
 import android.content.Context
 import android.util.Log
 import com.bks.BuildConfig
-import com.bks.data.crypto.PassphraseAesGcm
 import java.io.File
-import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineDispatcher
@@ -22,11 +20,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+@Suppress("LongParameterList")
 class AndroidDiagnosticLogRepository internal constructor(
     context: Context,
-    private val store: DiagnosticEncryptedStore = DiagnosticEncryptedStore(
-        directory = File(context.noBackupFilesDir, DIAGNOSTICS_DIRECTORY),
-        cipher = AndroidKeystoreDiagnosticCipher()
+    private val store: DiagnosticPlainTextStore = DiagnosticPlainTextStore(
+        directory = File(context.noBackupFilesDir, DIAGNOSTICS_DIRECTORY)
     ),
     private val isDebugBuild: Boolean = BuildConfig.DEBUG,
     private val buildDefaultEnabled: Boolean = isDebugBuild,
@@ -73,6 +71,10 @@ class AndroidDiagnosticLogRepository internal constructor(
         val sanitized = sanitizeDiagnosticEvent(event)
         mutex.withLock {
             if (!_enabled.value || expectedGeneration != clearGeneration.get()) return@withLock
+            if (sanitized.metadata.event == BILL_SYNC_CAPTURE_BATCH_EVENT) {
+                appendLocked(sanitized)
+                return@withLock
+            }
             val key = CoalesceKey(
                 sanitized.metadata.component,
                 sanitized.metadata.source,
@@ -126,19 +128,14 @@ class AndroidDiagnosticLogRepository internal constructor(
         }
     }
 
-    override suspend fun exportEncrypted(passphrase: CharArray): String {
-        require(passphrase.size >= MIN_EXPORT_PASSPHRASE_LENGTH) {
-            "Diagnostic export passphrase must contain at least 8 characters"
-        }
+    override suspend fun exportPlainText(): String {
         return withContext(exportDispatcher) {
             mutex.withLock {
                 flushSuppressedLocked()
-                val jsonLines = store.readAll().joinToString(separator = "\n", postfix = "\n") {
-                    DiagnosticEventCodec.encode(it)
+                val lines = store.readAll().map { event ->
+                    formatDiagnosticLogLine(sanitizeDiagnosticEvent(event))
                 }
-                DIAGNOSTICS_EXPORT_PREFIX + Base64.getEncoder().encodeToString(
-                    PassphraseAesGcm.encrypt(jsonLines.toByteArray(Charsets.UTF_8), passphrase)
-                )
+                if (lines.isEmpty()) "" else lines.joinToString(separator = "\n", postfix = "\n")
             }
         }
     }
@@ -185,7 +182,7 @@ class AndroidDiagnosticLogRepository internal constructor(
         _events.value = (listOf(event) + _events.value).take(1_000)
         _stats.value = DiagnosticLogStats(
             eventCount = _stats.value.eventCount + 1,
-            encryptedBytes = store.encryptedBytes(),
+            storedBytes = store.storedBytes(),
             segmentCount = store.segmentCount()
         )
     }
@@ -195,7 +192,7 @@ class AndroidDiagnosticLogRepository internal constructor(
         _events.value = latest.asReversed()
         _stats.value = DiagnosticLogStats(
             eventCount = store.eventCount(),
-            encryptedBytes = store.encryptedBytes(),
+            storedBytes = store.storedBytes(),
             segmentCount = store.segmentCount()
         )
     }
@@ -245,16 +242,8 @@ object DiagnosticLogs {
     }
 }
 
-internal fun decryptDiagnosticExport(exportText: String, passphrase: CharArray): String {
-    require(exportText.startsWith(DIAGNOSTICS_EXPORT_PREFIX)) { "Unsupported diagnostic export" }
-    val encrypted = Base64.getDecoder().decode(exportText.removePrefix(DIAGNOSTICS_EXPORT_PREFIX))
-    return PassphraseAesGcm.decrypt(encrypted, passphrase).toString(Charsets.UTF_8)
-}
-
 private fun logFixedFailure(code: String) {
     Log.e("BksDiag", code)
 }
 
-const val DIAGNOSTICS_EXPORT_PREFIX = "AUTO_ACCOUNTING_DIAGNOSTICS_V1:"
-const val DIAGNOSTICS_EXPORT_EXTENSION = "aadiag"
-const val MIN_EXPORT_PASSPHRASE_LENGTH = 8
+const val DIAGNOSTICS_EXPORT_EXTENSION = "log"

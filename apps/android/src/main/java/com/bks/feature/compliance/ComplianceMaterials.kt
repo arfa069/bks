@@ -59,11 +59,11 @@ val BKS_COMPLIANCE = ComplianceMaterials(
         ),
         ComplianceSection(
             title = "数据保存与删除",
-            body = "本地账本保留在设备内；用户主动开启的诊断日志以设备密钥加密并最多保留 10 MB。删除本机数据会同时清除日志、密钥和 Release 开启偏好，但 Downloads 中已导出的文件需用户自行删除；账号注销会在 7 天冷静期后删除云端账号、注册设备、云端配置和 AI 分类日志。"
+            body = "本地账本保留在设备内；用户主动开启的诊断日志以明文保存在 noBackup 应用目录并最多保留 10 MB。删除本机数据会清除新旧诊断分段和 Release 开启偏好，但 Downloads 中已导出的明文 .log 需用户自行删除；账号注销会在 7 天冷静期后删除云端账号、注册设备、云端配置和 AI 分类日志。"
         ),
         ComplianceSection(
             title = "用户控制",
-            body = "用户可查看收集清单、导出 CSV、导出/导入加密备份、启停/查看/口令加密导出/清空诊断日志、关闭云端 AI、注销账号或单独删除本机数据。"
+            body = "用户可查看收集清单、导出 CSV、导出/导入加密备份、启停/明文查看/直接导出 .log/清空诊断日志、关闭云端 AI、注销账号或单独删除本机数据。"
         )
     ),
     personalInformationItems = listOf(
@@ -92,13 +92,13 @@ val BKS_COMPLIANCE = ComplianceMaterials(
             name = "其他应用当前活动窗口的可见文字",
             purpose = "在用户开启自动记账后识别已完成交易并生成待确认条目",
             requiredState = "自动记账可选，默认关闭；需要用户授予无障碍服务权限",
-            processingMethod = "仅在设备内短暂读取可见、非密码、非输入框文字；不截图、不操作其他应用，未命中内容和原始页面文字不保存、不写入诊断日志、不上传"
+            processingMethod = "仅在设备内读取可见、非密码、非输入框文字；不截图、不操作其他应用、不上传。诊断日志关闭时原始文字不保存；用户开启诊断后，仅支付宝实际采集批次正文以明文写入本机诊断目录，其他应用只记录元数据"
         ),
         PersonalInformationItem(
-            name = "应用故障诊断日志",
-            purpose = "排查应用异常和本地持久化故障",
+            name = "应用故障与自动记账诊断日志",
+            purpose = "排查应用异常、本地持久化故障及自动记账首次识别失败",
             requiredState = "Debug 默认开启；Release 默认关闭，需用户阅读说明并主动开启",
-            processingMethod = "仅设备内 Keystore 加密分段，最多 10 MB，不上传；可关闭、清空或使用至少 8 位口令加密导出。自动记账页面文字不进入诊断日志，认证秘密写入前强制脱敏"
+            processingMethod = "仅设备内 UTF-8 明文 .log 分段，最多 10 MB，不上传；App 直接明文显示，可关闭、清空或直接导出明文 .log。每个支付宝实际采集批次记录时间、触发事件、节点数、页面正文及结果；认证秘密写入前强制清除"
         ),
         PersonalInformationItem(
             name = "账本和待确认账目",
@@ -153,7 +153,7 @@ val BKS_COMPLIANCE = ComplianceMaterials(
             name = "Assists 开源无障碍组件",
             purpose = "接入 Android 无障碍服务并读取当前活动窗口节点",
             personalInformationCategory = "其他应用当前活动窗口中可见、非密码、非输入框的文字",
-            processingMethod = "仅在应用进程内使用 assists-base；不使用截图、OCR、自动点击、滚动或应用启动能力，原始页面文字不保存、不上传",
+            processingMethod = "仅在应用进程内使用 assists-base；不使用截图、OCR、自动点击、滚动或应用启动能力，不上传原始页面文字；只有用户开启诊断日志时，支付宝实际采集批次正文会明文保存在本机诊断目录",
             declarationTokens = setOf("assists-base")
         )
     ),
@@ -162,7 +162,7 @@ val BKS_COMPLIANCE = ComplianceMaterials(
             id = PermissionExplanationId.AccessibilityBillSync,
             title = "自动记账无障碍服务",
             purpose = "用于用户开启自动记账后，在设备本地识别其他应用当前活动窗口中的已完成交易。",
-            boundary = "只读取可见、非密码、非输入框文字；不截图、不点击、不滚动、不启动其他应用，不保存或上传原始页面文字。识别结果只进入待确认。"
+            boundary = "只读取可见、非密码、非输入框文字；不截图、不点击、不滚动、不启动其他应用、不上传。诊断关闭时不保存原始文字；诊断开启时仅保存支付宝实际采集批次正文，识别结果仍只进入待确认。"
         ),
         PermissionExplanation(
             id = PermissionExplanationId.CloudAi,
@@ -174,11 +174,11 @@ val BKS_COMPLIANCE = ComplianceMaterials(
     storeReviewNotes = listOf(
         StoreReviewNote(
             title = "无障碍审核说明",
-            body = "无障碍服务仅在用户主动开启自动记账后运行，读取其他应用当前活动窗口中可见、非密码、非输入框的文字，并只为明确完成的交易生成待确认项；不截图、不操作其他应用、不保存或上传原始页面文字。"
+            body = "无障碍服务仅在用户主动开启自动记账后运行，读取其他应用当前活动窗口中可见、非密码、非输入框的文字，并只为明确完成的交易生成待确认项；不截图、不操作其他应用、不上传。诊断日志关闭时不保存原始文字，开启时仅保存支付宝实际采集批次正文。"
         ),
         StoreReviewNote(
             title = "诊断日志审核说明",
-            body = "Release 的诊断日志默认关闭，用户需在合规与隐私页面阅读字段、用途、10 MB 上限、长期保留和导出风险后主动开启。日志不上传，使用 Android Keystore 加密；自动记账页面文字不记录，密码、验证码、Token、Cookie、Authorization、API Key、备份口令和私钥写入前强制脱敏。"
+            body = "Release 的诊断日志默认关闭，用户需在合规与隐私页面阅读字段、用途、10 MB 上限、长期保留和明文导出风险后主动开启。日志不上传，以明文保存在 noBackup 应用目录；每个支付宝实际采集批次记录时间、事件、节点数、页面正文和结果，其他应用不记录正文。密码、验证码、Token、Cookie、Authorization、API Key、备份口令和私钥写入前强制清除，诊断页面全程启用 FLAG_SECURE。"
         )
     )
 )

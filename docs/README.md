@@ -24,6 +24,5 @@
 - [通用交易识别规则](./PAYMENT-RECOGNITION-RULES.md)
 - [自动记账流程研究（2026-07-13 至 2026-07-17 历史快照）](./research/auto-bookkeeping-flow.md)
 - [架构决策记录 (ADR)](./adr/)
-- [ADR 0063：使用 Assists 通用识别取代平台专用采集](./adr/0063-replace-platform-capture-with-assists-generic-recognition.md)
 
 ADR 记录了文档对齐研讨过程中的关键技术与产品决策路径。PRD 及相关支撑文档描述了当前产品的基线；Phase 2 基线审计、切片规划、Issue 规划、研究和性能审计作为历史快照保留，当前实现以代码和现行 PRD/架构/UI/合规文档为准，跨 Issue 的外部阻断项汇总在根目录 `todos.md`。

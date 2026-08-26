@@ -12,7 +12,9 @@ import java.util.Locale
 
 data class BillSyncResult(
     val recognized: Boolean,
-    val createdEntries: List<ReviewQueueEntry>
+    val createdEntries: List<ReviewQueueEntry>,
+    val failureReason: BillSyncFailureReason? = null,
+    val insertedCount: Int = 0
 )
 
 class BillSyncPipeline(
@@ -23,14 +25,21 @@ class BillSyncPipeline(
         pageText: String,
         capturedAtEpochMillis: Long
     ): BillSyncResult {
-        val parsedEntries = parser.parse(pageText, captureTimeFormatter(capturedAtEpochMillis))
-        if (parsedEntries.isEmpty()) {
-            return BillSyncResult(recognized = false, createdEntries = emptyList())
+        val parseResult = parser.parseWithDiagnostics(
+            pageText,
+            captureTimeFormatter(capturedAtEpochMillis)
+        )
+        if (parseResult.entries.isEmpty()) {
+            return BillSyncResult(
+                recognized = false,
+                createdEntries = emptyList(),
+                failureReason = requireNotNull(parseResult.failureReason)
+            )
         }
 
         return BillSyncResult(
             recognized = true,
-            createdEntries = parsedEntries.map { it.toPendingEntry(capturedAtEpochMillis) }
+            createdEntries = parseResult.entries.map { it.toPendingEntry(capturedAtEpochMillis) }
         )
     }
 

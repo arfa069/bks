@@ -17,7 +17,7 @@ The first delivery target is a feature-complete internal beta, not a small MVP. 
 ## 3. Core Decisions
 
 - Generic automatic bookkeeping is opt-in and defaults off. It uses `assists-base` to passively read visible, non-password, non-editable text from the current third-party active window; it never screenshots or operates another app.
-- Raw page text is transient memory only: misses, unrelated pages, and accepted raw text are not persisted, logged, backed up, synchronized, or uploaded.
+- Raw page text never enters Room, ledger backups, synchronization, or uploads. The only diagnostic-retention exception is an enabled on-device diagnostic log: each actual Alipay capture batch retains its complete collected text, while non-Alipay batches retain metadata only.
 - All imported transactions first become pending entries.
 - Ledger books are local-first in Room and can be explicitly bound to the signed-in account for automatic multi-device synchronization.
 - One persisted current ledger book receives manual entries and confirmed pending entries. Categories and funding accounts remain shared across all local ledger books.
@@ -27,7 +27,7 @@ The first delivery target is a feature-complete internal beta, not a small MVP. 
 - AI categorization uploads minimal fields by default; users may opt into enhanced context.
 - AI categorization logs are retained during internal beta and must be revisited before public store submission.
 - Transaction, bill, merchant, amount, category, and funding-account data are treated as sensitive personal information.
-- Diagnostic logs are a separate user-controlled, on-device troubleshooting capability: Debug defaults on, Release defaults off with informed opt-in, automatic-bookkeeping page text is excluded, authentication secrets are always redacted, and no diagnostic data is uploaded.
+- Diagnostic logs are a separate user-controlled, on-device troubleshooting capability: Debug defaults on, Release defaults off with informed opt-in, on-device segments and exports are UTF-8 plaintext `.log` files, Alipay capture batches retain complete collected text, authentication secrets are always redacted, and no diagnostic data is uploaded.
 
 ## 4. Users And Jobs
 
@@ -43,7 +43,7 @@ Core jobs:
 - Build categorization rules from repeated corrections.
 - Create and switch local ledger books, manage shared funding accounts, and view the current ledger book and reports.
 - Export CSV and create encrypted backups.
-- Control, inspect, clear, and passphrase-export sensitive diagnostic logs when troubleshooting is needed.
+- Control, inspect, clear, and directly export sensitive diagnostic logs as plaintext `.log` files when troubleshooting is needed.
 - Manage permissions, account, AI consent, and privacy controls.
 
 ## 5. Functional Scope
@@ -265,13 +265,13 @@ Backend limits:
 
 ### 5.9 Sensitive Diagnostic Logs
 
-- “合规与隐私”在 Debug 和 Release 都提供独立的“诊断日志”入口。Debug 默认开启；Release 默认关闭，并在首次开启前说明记录字段、排障用途、10 MB 上限、长期保留、设备内加密、关闭/清空方式和导出风险。
-- 自动记账读取的页面文字、未命中内容和无关页面信息不得写入诊断日志。当前生产事件仅记录应用故障和完整异常。
+- “合规与隐私”在 Debug 和 Release 都提供独立的“诊断日志”入口。Debug 默认开启；Release 默认关闭，并在首次开启前说明支付宝正文留存、排障用途、10 MiB 上限、长期保留、设备内明文、关闭/清空方式和明文导出风险。
+- 每个自动记账实际采集批次只记录一条事件，包含秒级时间、触发的无障碍事件及各自次数、实际遍历节点数和最终结果/原因。支付宝批次额外保存现有采集上限内的完整正文；非支付宝批次只保存元数据。应用异常仍可记录完整异常信息。
 - 密码、验证码、Token、Cookie、Authorization、API Key、备份口令、签名私钥、微信 code/票据、OpenID 和 UnionID 等认证秘密或身份标识始终在写入前脱敏；账号流程不写入昵称、头像 URL 或 Provider 正文。
-- 日志仅在设备内加密保存，不上传、不进入账本备份或系统备份。每条事件最多 256 KB，每段最多 1 MB，总密文最多 10 MB；超过上限才轮转最旧分段。
-- 列表默认只显示元数据并加载最新 1000 条；敏感内容经二次确认后仅在本次页面会话显示，离页或进入后台立即重新遮罩，显示期间窗口启用 `FLAG_SECURE`。
-- 关闭只停止新记录并保留历史。清空需二次确认并删除密文和设备密钥；本机数据删除还清除 Release 开启偏好，但已导出到 Downloads 的文件由用户自行管理。
-- 导出使用至少 8 位且二次确认的临时口令，生成 `.aadiag` 加密文件。口令不得持久化。
+- 日志以 UTF-8 明文 JSON 行写入应用私有 `noBackupFilesDir` 下的 `.log` 分段，不上传、不进入账本备份或系统备份。每条事件最多 256 KiB，每段最多 1 MiB，现行分段总量最多 10 MiB；超过上限才轮转最旧分段。
+- 列表默认加载最新 1000 条并直接显示明文单行内容，包括支付宝完整正文。诊断页从进入到离开全程启用 `FLAG_SECURE`，不再使用敏感内容遮罩或二次显示确认。
+- 关闭只停止新记录并保留历史。清空需二次确认并删除现行 `.log`、遗留 `.aadlog` 和遗留诊断密钥；旧 `.aadlog` 不读取、不迁移。本机数据删除还清除 Release 开启偏好，但不会删除已导出到 Downloads 的文件；后者由用户自行管理。
+- 导出无需口令，直接在 Downloads 生成 UTF-8 明文 `.log`。诊断日志的明文策略不改变账本备份；所有账本备份仍使用口令加密。
 
 ## 6. UI Scope
 
@@ -307,7 +307,7 @@ Profile entries:
 - Account flow back hierarchy: Recovery returns to Login; Login, Registration, Local Mode Explanation, and Compliance Materials return to the account landing page; an account landing page opened from Account Management returns to Account Management. System back and visible back actions must be equivalent.
 - Categorization Rules: local rule management plus the separately explained cloud-AI consent and enhanced-context settings.
 - Data and Backup: normal actions for current-ledger CSV export and all-ledger encrypted-backup export/import, followed by a visually isolated destructive Local Data Deletion area that retains its backup reminder and typed confirmation.
-- Compliance and Privacy: entry points for the privacy policy, personal-information collection list, third-party-service list, permission explanations, and the separate Diagnostic Logs control. Each document opens separately and is available in local mode; Diagnostic Logs is visible in both builds and follows section 5.10.
+- Compliance and Privacy: entry points for the privacy policy, personal-information collection list, third-party-service list, permission explanations, and the separate Diagnostic Logs control. Each document opens separately and is available in local mode; Diagnostic Logs is visible in both builds and follows section 5.9.
 - Internal-beta readiness, device matrices, retention checks, and quality metrics are not user settings. They appear only in Debug-build Developer Tools and are absent from release builds and the Profile overview. They must not be conflated with the user-controlled Diagnostic Logs entry.
 
 ## 7. Visual And Copy Direction

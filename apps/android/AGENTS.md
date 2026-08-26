@@ -15,7 +15,7 @@
 - 保持 `MainActivity` 只保留系统生命周期、外部 Intent 转换与 `setContent` 装配；依赖创建与根组合由 `BksApp` 承载，业务逻辑放入对应 feature 或 repository。
 - UI 状态与持久化状态必须明确区分。涉及账目、待确认队列、设置或账号状态时，验证进程重启后的恢复行为。
 - 修改 Room 表或字段等 schema 时，递增 `SCHEMA_VERSION`，补充连续 Migration，在 `BksDatabaseProvider` 注册，并提交新的 `schemas/.../<version>.json`。DAO 或 Converter 行为变化应补充对应持久化测试。禁止使用破坏性迁移掩盖缺失 Migration。
-- 修改自动记账无障碍 Service 时，保持 `exported=false`，不截图、不操作其他应用、不持久化原始页面文字，并覆盖开关/授权分离、拒绝、空输入、重复事件及采集上限。
+- 修改自动记账无障碍 Service 时，保持 `exported=false`，不截图、不操作其他应用；页面文字不得进入账本、备份、同步或上传，仅可在用户开启诊断日志时按 `feature/diagnostics` 规则保存支付宝实际采集批次，并覆盖开关/授权分离、拒绝、空输入、重复事件及采集上限。
 - Compose 界面沿用现有 Material 3 和 feature 内组件风格；可见行为变化需同步更新相关 UI 测试。
 
 ## 验证

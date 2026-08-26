@@ -60,8 +60,11 @@ class BillSyncCaptureProcessorTest {
 
     @Test
     fun acceptedCapturePersistsReviewOnlyAndConfirmationMovesItToLedger() = runBlocking {
-        processor.process("支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12")
+        val result = processor.process(
+            "支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12"
+        )
 
+        assertEquals(1, result.insertedCount)
         val pending = database.pendingEntryDao().listPendingEntries().single()
         assertEquals(PaymentSource.OTHER, pending.source)
         assertEquals(CaptureReason.ACCESSIBILITY_AUTO, pending.captureReason)
@@ -118,6 +121,19 @@ class BillSyncCaptureProcessorTest {
 
         processor.persist(recognized)
 
+        assertEquals(1, database.pendingEntryDao().listPendingEntries().size)
+    }
+
+    @Test
+    fun persistenceReportsDatabaseInsertCountInsteadOfParsedEntryCount() = runBlocking {
+        val recognized = processor.recognize("支付成功\n¥5.99\n交易方式\n花呗")
+
+        val first = processor.persist(recognized)
+        val duplicate = processor.persist(recognized)
+
+        assertEquals(1, first.insertedCount)
+        assertEquals(0, duplicate.insertedCount)
+        assertEquals(1, duplicate.createdEntries.size)
         assertEquals(1, database.pendingEntryDao().listPendingEntries().size)
     }
 

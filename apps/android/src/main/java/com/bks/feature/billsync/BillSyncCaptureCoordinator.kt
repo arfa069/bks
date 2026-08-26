@@ -4,25 +4,32 @@ import android.content.Context
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.bks.feature.diagnostics.DiagnosticRecorder
+import com.bks.feature.diagnostics.NoOpDiagnosticRecorder
 import com.ven.assists.AssistsCore
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@Suppress("LongParameterList")
 internal class BillSyncCaptureCoordinator(
     context: Context,
     private val enabledIntent: Flow<Boolean>,
     private val processor: BillSyncCaptureOperations,
     private val applicationScope: CoroutineScope,
+    private val diagnosticRecorder: DiagnosticRecorder = NoOpDiagnosticRecorder,
+    private val clock: () -> Long = System::currentTimeMillis,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val rootsProvider: (AssistsCore.NodeLookupScope) -> List<AccessibilityNodeInfo> =
         AssistsCore::getAccessibilityRootNodes
@@ -30,6 +37,7 @@ internal class BillSyncCaptureCoordinator(
     private val applicationContext = context.applicationContext
     private val ownPackageName = context.packageName
     private val acceptedWindows = AcceptedWindowMemory()
+    private val pendingCaptures = mutableMapOf<CaptureTrigger, PendingCapture>()
     private var enabledObserver: Job? = null
     private var captureSession: CoroutineScope? = null
     @Volatile
@@ -61,11 +69,13 @@ internal class BillSyncCaptureCoordinator(
     fun onAccessibilityEvent(event: AccessibilityEvent) {
         try {
             BillSyncCaptureLog.event(event)
-            captureCurrentWindow(
-                CaptureTrigger(
+            scheduleCapture(
+                trigger = CaptureTrigger(
                     packageName = event.packageName?.toString()?.takeIf(String::isNotBlank),
                     windowId = event.windowId
-                )
+                ),
+                eventType = event.eventType,
+                timestampEpochMillis = clock()
             )
         } catch (error: Throwable) {
             BillSyncCaptureLog.failed(event.packageName?.toString(), event.windowId, error)
@@ -82,12 +92,61 @@ internal class BillSyncCaptureCoordinator(
         endCaptureSession()
     }
 
-    private fun captureCurrentWindow(trigger: CaptureTrigger) {
+    private fun scheduleCapture(
+        trigger: CaptureTrigger,
+        eventType: Int,
+        timestampEpochMillis: Long
+    ) {
         val captureEnabled = automaticBookkeepingEnabled
         BillSyncCaptureLog.capture(trigger.packageName, trigger.windowId, captureEnabled)
         if (!shouldCapturePackage(captureEnabled, trigger.packageName, ownPackageName)) return
+
+        val pendingCapture = synchronized(this) {
+            val session = captureSession ?: return
+            val previous = pendingCaptures.remove(trigger)
+            previous?.job?.cancel()
+            val eventTypeCounts = previous?.eventTypeCounts?.toMutableMap() ?: mutableMapOf()
+            eventTypeCounts[eventType] = eventTypeCounts.getOrDefault(eventType, 0) + 1
+            val pending = PendingCapture(
+                timestampEpochMillis = previous?.timestampEpochMillis ?: timestampEpochMillis,
+                eventTypeCounts = eventTypeCounts
+            )
+            lateinit var scheduledCapture: Job
+            scheduledCapture = session.launch(start = CoroutineStart.LAZY) {
+                try {
+                    delay(CAPTURE_SETTLE_MILLIS)
+                    captureCurrentWindow(pending.toBatch(trigger))
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    diagnosticRecorder.recordBillSyncCaptureBatch(
+                        batch = pending.toBatch(trigger),
+                        capturedPackageName = trigger.packageName,
+                        readableCapture = null,
+                        outcome = BillSyncCaptureOutcome.Failed("capture_failed")
+                    )
+                    BillSyncCaptureLog.failed(trigger.packageName, trigger.windowId, error)
+                } finally {
+                    synchronized(this@BillSyncCaptureCoordinator) {
+                        if (pendingCaptures[trigger] === pending) {
+                            pendingCaptures.remove(trigger)
+                        }
+                    }
+                }
+            }
+            pending.job = scheduledCapture
+            pendingCaptures[trigger] = pending
+            pending
+        }
+        pendingCapture.job.start()
+    }
+
+    private fun captureCurrentWindow(batch: BillSyncCaptureBatch) {
+        val trigger = batch.trigger
+        val captureEnabled = automaticBookkeepingEnabled
+        if (!shouldCapturePackage(captureEnabled, trigger.packageName, ownPackageName)) return
         val session = synchronized(this) { captureSession } ?: return
-        if (acceptedWindows.deferIfPersistenceInFlight(trigger)) {
+        if (acceptedWindows.deferIfPersistenceInFlight(batch)) {
             BillSyncCaptureLog.ignored(
                 "capture_deferred",
                 "package=${trigger.packageName} window=${trigger.windowId}"
@@ -109,20 +168,32 @@ internal class BillSyncCaptureCoordinator(
         )
         if (root == null) {
             BillSyncCaptureLog.ignored("root_missing")
+            diagnosticRecorder.recordBillSyncCaptureBatch(
+                batch,
+                capturedPackageName = trigger.packageName,
+                readableCapture = null,
+                outcome = BillSyncCaptureOutcome.Failed("root_missing")
+            )
             return
         }
         val activePackage = root.packageName?.toString().orEmpty()
         if (!shouldCapturePackage(captureEnabled = true, activePackage, ownPackageName)) {
             BillSyncCaptureLog.ignored("own_package", "package=$activePackage")
+            diagnosticRecorder.recordBillSyncCaptureBatch(
+                batch,
+                capturedPackageName = activePackage,
+                readableCapture = null,
+                outcome = BillSyncCaptureOutcome.Failed("own_package")
+            )
             return
         }
 
-        val pageText = root.collectReadableText()
-        BillSyncCaptureLog.collected(activePackage, root.windowId, pageText)
-        synchronized(this) {
-            if (captureSession !== session) return
+        val readableCapture = root.collectReadablePageCapture()
+        BillSyncCaptureLog.collected(activePackage, root.windowId, readableCapture.pageText)
+        val handedOff = synchronized(this) {
+            if (captureSession !== session) return@synchronized false
             handoffSanitizedCapture(
-                capture = SanitizedBillSyncCapture(activePackage, root.windowId, pageText),
+                capture = SanitizedBillSyncCapture(activePackage, root.windowId, readableCapture.pageText),
                 acceptedWindows = acceptedWindows,
                 recognize = processor.recognize,
                 persist = { result -> withContext(ioDispatcher) { processor.persist(result) } },
@@ -133,7 +204,24 @@ internal class BillSyncCaptureCoordinator(
                             .takeDeferredCapture(activePackage, root.windowId)
                             ?.let(::captureCurrentWindow)
                     }
+                },
+                onOutcome = { outcome ->
+                    diagnosticRecorder.recordBillSyncCaptureBatch(
+                        batch = batch,
+                        capturedPackageName = activePackage,
+                        readableCapture = readableCapture,
+                        outcome = outcome
+                    )
                 }
+            )
+            true
+        }
+        if (!handedOff) {
+            diagnosticRecorder.recordBillSyncCaptureBatch(
+                batch,
+                capturedPackageName = activePackage,
+                readableCapture = readableCapture,
+                outcome = BillSyncCaptureOutcome.Failed("session_ended")
             )
         }
     }
@@ -142,6 +230,7 @@ internal class BillSyncCaptureCoordinator(
     private fun endCaptureSession() {
         captureSession?.cancel()
         captureSession = null
+        pendingCaptures.clear()
         acceptedWindows.clear()
     }
 }
@@ -150,6 +239,19 @@ internal data class CaptureTrigger(
     val packageName: String?,
     val windowId: Int
 )
+
+private class PendingCapture(
+    val timestampEpochMillis: Long,
+    val eventTypeCounts: MutableMap<Int, Int>
+) {
+    lateinit var job: Job
+
+    fun toBatch(trigger: CaptureTrigger): BillSyncCaptureBatch = BillSyncCaptureBatch(
+        trigger = trigger,
+        timestampEpochMillis = timestampEpochMillis,
+        eventTypeCounts = eventTypeCounts.toMap()
+    )
+}
 
 internal class BillSyncCaptureOperations(
     val recognize: (String) -> BillSyncResult,
@@ -175,17 +277,25 @@ internal fun shouldCapturePackage(
     ownPackage: String
 ): Boolean = captureEnabled && candidatePackage != ownPackage
 
+@Suppress("LongParameterList")
 internal fun handoffSanitizedCapture(
     capture: SanitizedBillSyncCapture,
     acceptedWindows: AcceptedWindowMemory,
     recognize: (String) -> BillSyncResult,
     persist: suspend (BillSyncResult) -> BillSyncResult,
-    launch: (suspend () -> Unit) -> Unit
+    launch: (suspend () -> Unit) -> Unit,
+    onOutcome: (BillSyncCaptureOutcome) -> Unit = {}
 ) {
     val recognized = recognize(capture.pageText)
     if (!recognized.recognized) {
         acceptedWindows.release(capture.packageName, capture.windowId)
-        BillSyncCaptureLog.processed(recognized = false, createdEntries = 0)
+        BillSyncCaptureLog.processed(recognized = false, insertedCount = 0)
+        notifyCaptureOutcome(
+            onOutcome,
+            BillSyncCaptureOutcome.Failed(
+                recognized.failureReason?.code ?: "page_not_recognized"
+            )
+        )
         return
     }
     if (!acceptedWindows.acceptIfNew(capture.packageName, capture.windowId)) {
@@ -193,21 +303,42 @@ internal fun handoffSanitizedCapture(
             "already_captured_window",
             "package=${capture.packageName} window=${capture.windowId}"
         )
+        notifyCaptureOutcome(
+            onOutcome,
+            BillSyncCaptureOutcome.NotInserted("already_captured_window")
+        )
         return
     }
     launch {
         try {
             val result = persist(recognized)
             acceptedWindows.persistenceSucceeded(capture.packageName, capture.windowId)
-            BillSyncCaptureLog.processed(recognized = true, createdEntries = result.createdEntries.size)
+            BillSyncCaptureLog.processed(recognized = true, insertedCount = result.insertedCount)
+            notifyCaptureOutcome(
+                onOutcome,
+                if (result.insertedCount > 0) {
+                    BillSyncCaptureOutcome.Inserted(result.insertedCount)
+                } else {
+                    BillSyncCaptureOutcome.NotInserted("duplicate_not_inserted")
+                }
+            )
         } catch (error: CancellationException) {
             acceptedWindows.persistenceCancelled(capture.packageName, capture.windowId)
+            notifyCaptureOutcome(onOutcome, BillSyncCaptureOutcome.Failed("session_ended"))
             throw error
         } catch (error: Throwable) {
             acceptedWindows.persistenceFailed(capture.packageName, capture.windowId)
             BillSyncCaptureLog.failed(capture.packageName, capture.windowId, error)
+            notifyCaptureOutcome(onOutcome, BillSyncCaptureOutcome.Failed("persistence_failed"))
         }
     }
+}
+
+private fun notifyCaptureOutcome(
+    onOutcome: (BillSyncCaptureOutcome) -> Unit,
+    outcome: BillSyncCaptureOutcome
+) {
+    runCatching { onOutcome(outcome) }
 }
 
 internal data class CaptureRootSelection(
@@ -241,7 +372,7 @@ internal fun selectEventRoot(
 
 internal class AcceptedWindowMemory {
     private val accepted = mutableMapOf<Pair<String, Int>, AcceptedWindow>()
-    private val deferredCaptures = mutableMapOf<Pair<String, Int>, CaptureTrigger>()
+    private val deferredCaptures = mutableMapOf<Pair<String, Int>, BillSyncCaptureBatch>()
 
     @Synchronized
     fun acceptIfNew(packageName: String, windowId: Int): Boolean {
@@ -256,17 +387,18 @@ internal class AcceptedWindowMemory {
     }
 
     @Synchronized
-    fun deferIfPersistenceInFlight(trigger: CaptureTrigger): Boolean {
+    fun deferIfPersistenceInFlight(batch: BillSyncCaptureBatch): Boolean {
+        val trigger = batch.trigger
         val packageName = trigger.packageName ?: return false
         if (trigger.windowId < 0) return false
         val key = packageName to trigger.windowId
         if (accepted[key]?.persistenceInFlight != true) return false
-        deferredCaptures[key] = trigger
+        deferredCaptures[key] = deferredCaptures[key]?.merge(batch) ?: batch
         return true
     }
 
     @Synchronized
-    fun takeDeferredCapture(packageName: String, windowId: Int): CaptureTrigger? =
+    fun takeDeferredCapture(packageName: String, windowId: Int): BillSyncCaptureBatch? =
         deferredCaptures.remove(packageName to windowId)
 
     @Synchronized
@@ -315,11 +447,20 @@ internal class AcceptedWindowMemory {
     )
 }
 
+internal data class ReadablePageCapture(
+    val pageText: String,
+    val visitedNodeCount: Int,
+    val nodeLimitReached: Boolean
+)
+
+internal fun AccessibilityNodeInfo.collectReadableText(): String = collectReadablePageCapture().pageText
+
 @Suppress("CyclomaticComplexMethod")
-internal fun AccessibilityNodeInfo.collectReadableText(): String {
+internal fun AccessibilityNodeInfo.collectReadablePageCapture(): ReadablePageCapture {
     val lines = linkedSetOf<String>()
     var visitedNodes = 0
     var collectedCharacters = 0
+    var nodeLimitReached = false
 
     fun add(value: CharSequence?) {
         val line = value?.toString()?.trim()?.takeIf(String::isNotBlank) ?: return
@@ -346,14 +487,22 @@ internal fun AccessibilityNodeInfo.collectReadableText(): String {
         }
         if (depth == MAX_CAPTURE_DEPTH || collectedCharacters >= MAX_CAPTURE_CHARACTERS) continue
         for (index in 0 until node.childCount) {
-            if (visitedNodes + pendingNodes.size >= MAX_CAPTURE_NODES) break
+            if (visitedNodes + pendingNodes.size >= MAX_CAPTURE_NODES) {
+                nodeLimitReached = true
+                break
+            }
             node.getChild(index)?.let { pendingNodes.add(it to depth + 1) }
         }
     }
 
-    return lines.joinToString("\n")
+    return ReadablePageCapture(
+        pageText = lines.joinToString("\n"),
+        visitedNodeCount = visitedNodes,
+        nodeLimitReached = nodeLimitReached || pendingNodes.isNotEmpty()
+    )
 }
 
 internal const val MAX_CAPTURE_NODES = 512
 internal const val MAX_CAPTURE_DEPTH = 24
 internal const val MAX_CAPTURE_CHARACTERS = 16 * 1024
+internal const val CAPTURE_SETTLE_MILLIS = 500L

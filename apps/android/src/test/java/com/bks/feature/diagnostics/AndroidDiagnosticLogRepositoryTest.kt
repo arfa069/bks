@@ -3,13 +3,7 @@ package com.bks.feature.diagnostics
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import java.nio.file.Files
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -35,7 +29,7 @@ class AndroidDiagnosticLogRepositoryTest {
 
     @Test
     fun releaseDefaultsOffAndRequiresExplicitConfirmation() {
-        val repository = repository(isDebugBuild = false)
+        val repository = fixture(isDebugBuild = false).repository
 
         assertFalse(repository.enabled.value)
         assertFalse(repository.setEnabled(true, userConfirmed = false))
@@ -45,36 +39,10 @@ class AndroidDiagnosticLogRepositoryTest {
     }
 
     @Test
-    fun releaseDefaultsOffSkipsInitialHistoryDecrypt() {
-        val cipher = CountingDiagnosticEventCipher()
-        val store = DiagnosticEncryptedStore(
-            directory = Files.createTempDirectory("diagnostic-disabled-initial-load").toFile(),
-            cipher = cipher
-        )
+    fun historyLoadsOnlyOnExplicitRefresh() = runBlocking {
+        val directory = Files.createTempDirectory("diagnostic-load").toFile()
+        val store = DiagnosticPlainTextStore(directory, clearLegacyKey = {})
         store.append(event("existing"))
-        cipher.decryptCalls.set(0)
-
-        val repository = AndroidDiagnosticLogRepository(
-            context = context,
-            store = store,
-            isDebugBuild = false,
-            buildDefaultEnabled = false
-        )
-
-        assertFalse(repository.enabled.value)
-        assertEquals(0, cipher.decryptCalls.get())
-    }
-
-    @Test
-    fun diagnosticsHistoryLoadsOnlyOnExplicitRefresh() = runBlocking {
-        val cipher = CountingDiagnosticEventCipher()
-        val store = DiagnosticEncryptedStore(
-            directory = Files.createTempDirectory("diagnostic-enabled-load").toFile(),
-            cipher = cipher
-        )
-        store.append(event("existing"))
-        cipher.decryptCalls.set(0)
-
         val repository = AndroidDiagnosticLogRepository(
             context = context,
             store = store,
@@ -82,18 +50,17 @@ class AndroidDiagnosticLogRepositoryTest {
             buildDefaultEnabled = true
         )
 
-        assertTrue(repository.enabled.value)
-        assertEquals(0, cipher.decryptCalls.get())
+        assertTrue(repository.events.value.isEmpty())
 
         repository.refresh(limit = 1)
 
         assertEquals(1, repository.events.value.size)
-        assertEquals(1, cipher.decryptCalls.get())
+        assertEquals("existing", repository.events.value.single().metadata.reason)
     }
 
     @Test
     fun disablingKeepsHistoryAndClearCanResetReleasePreference() = runBlocking {
-        val repository = repository(isDebugBuild = false)
+        val repository = fixture(isDebugBuild = false).repository
         repository.setEnabled(true, userConfirmed = true)
         repository.recordNow(event("first"))
         repository.setEnabled(false)
@@ -112,20 +79,21 @@ class AndroidDiagnosticLogRepositoryTest {
     }
 
     @Test
-    fun repeatedReasonIsCoalescedWithSuppressedCountAndNoSensitivePayload() = runBlocking {
-        val repository = repository(isDebugBuild = true)
+    fun repeatedNonCaptureReasonKeepsExistingFiveSecondSummary() = runBlocking {
+        val repository = fixture(isDebugBuild = true).repository
         repository.recordNow(event("repeat"))
         repository.recordNow(event("repeat"))
         repository.refresh()
 
         val summary = repository.events.value.first { it.metadata.suppressedCount == 1 }
         assertTrue(summary.sensitivePayload.fields.isEmpty())
+        assertEquals(2, repository.stats.value.eventCount)
     }
 
     @Test
-    fun expiredCoalesceWindowFlushesSuppressedSummaryBeforeStartingNextWindow() = runBlocking {
+    fun expiredCoalesceWindowFlushesSummaryBeforeNextWindow() = runBlocking {
         var now = 1_000L
-        val repository = repository(isDebugBuild = true, clock = { now })
+        val repository = fixture(isDebugBuild = true, clock = { now }).repository
         repository.recordNow(event("repeat"))
         repository.recordNow(event("repeat"))
 
@@ -138,71 +106,67 @@ class AndroidDiagnosticLogRepositoryTest {
     }
 
     @Test
-    fun appendingDoesNotDecryptAllHistoricalEvents() = runBlocking {
-        val cipher = CountingDiagnosticEventCipher()
-        val store = DiagnosticEncryptedStore(
-            directory = Files.createTempDirectory("diagnostic-incremental-append").toFile(),
-            cipher = cipher
-        )
-        store.append(event("existing"))
-        val repository = AndroidDiagnosticLogRepository(
-            context = context,
-            store = store,
-            isDebugBuild = true,
-            buildDefaultEnabled = true,
-            clock = { 1_000L }
-        )
+    fun captureBatchesBypassCoalescingAndKeepEveryPlaintextPayload() = runBlocking {
+        val repository = fixture(isDebugBuild = true).repository
+
+        repository.recordNow(captureBatch("支付成功\n￥10.90\n订单 1"))
+        repository.recordNow(captureBatch("支付成功\n￥20.00\n订单 2"))
         repository.refresh()
-        cipher.decryptCalls.set(0)
 
-        repository.recordNow(event("new"))
-
-        assertEquals(0, cipher.decryptCalls.get())
-        assertEquals(2, repository.stats.value.eventCount)
+        assertEquals(2, repository.events.value.size)
+        assertTrue(repository.events.value.all { it.metadata.suppressedCount == 0 })
+        assertEquals(
+            listOf("支付成功\n￥20.00\n订单 2", "支付成功\n￥10.90\n订单 1"),
+            repository.events.value.map {
+                it.sensitivePayload.fields[DiagnosticSensitiveField.PageText]
+            }
+        )
     }
 
     @Test
-    fun refreshDecryptsOnStorageDispatcherInsteadOfCallerThread() = runBlocking {
-        val cipher = CountingDiagnosticEventCipher()
-        val store = DiagnosticEncryptedStore(
-            directory = Files.createTempDirectory("diagnostic-refresh-dispatcher").toFile(),
-            cipher = cipher
-        )
-        store.append(event("existing"))
-        Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "diagnostic-storage-test")
-        }.asCoroutineDispatcher().use { storageDispatcher ->
-            val repository = AndroidDiagnosticLogRepository(
-                context = context,
-                store = store,
-                isDebugBuild = true,
-                buildDefaultEnabled = true,
-                clock = { 1_000L },
-                storageDispatcher = storageDispatcher
+    fun plaintextExportIsUtf8OneLinePerEventAndRedactsAuthenticationSecrets() = runBlocking {
+        val fixture = fixture(isDebugBuild = true)
+        fixture.repository.recordNow(
+            captureBatch(
+                "支付成功\n￥10.90\n商户：测试店\nAuthorization: Bearer top-secret"
             )
-            cipher.decryptThreadNames.clear()
+        )
 
-            repository.refresh()
+        val exported = fixture.repository.exportPlainText()
+        val lines = exported.trimEnd('\n').lines()
+        val diskText = fixture.directory.listFiles().orEmpty().single().readText(Charsets.UTF_8)
 
-            assertEquals(1, cipher.decryptThreadNames.size)
-            assertTrue(cipher.decryptThreadNames.single().startsWith("diagnostic-storage-test"))
-        }
+        assertEquals(1, lines.size)
+        assertTrue(lines.single().startsWith(formatDiagnosticTimestamp(CAPTURE_TIME)))
+        assertTrue(lines.single().contains("event=WINDOW_CONTENT_CHANGED×3"))
+        assertTrue(lines.single().contains("nodes=84"))
+        assertTrue(lines.single().contains("支付成功\\n￥10.90\\n商户：测试店"))
+        assertTrue(lines.single().contains("result=失败:context_missing"))
+        assertFalse(exported.contains("top-secret"))
+        assertTrue(exported.contains("[REDACTED]"))
+        assertTrue(diskText.contains("支付成功"))
+        assertFalse(diskText.contains("top-secret"))
     }
 
-    private fun repository(
+    @Test
+    fun emptyPlaintextExportIsEmpty() = runBlocking {
+        assertEquals("", fixture(isDebugBuild = true).repository.exportPlainText())
+    }
+
+    private fun fixture(
         isDebugBuild: Boolean,
         clock: () -> Long = { 1_000L }
-    ): AndroidDiagnosticLogRepository =
-        AndroidDiagnosticLogRepository(
+    ): RepositoryFixture {
+        val directory = Files.createTempDirectory("diagnostic-repository").toFile()
+        val repository = AndroidDiagnosticLogRepository(
             context = context,
-            store = DiagnosticEncryptedStore(
-                directory = Files.createTempDirectory("diagnostic-repository").toFile(),
-                cipher = JvmDiagnosticEventCipher()
-            ),
+            store = DiagnosticPlainTextStore(directory, clearLegacyKey = {}),
             isDebugBuild = isDebugBuild,
             buildDefaultEnabled = isDebugBuild,
             clock = clock
         )
+        return RepositoryFixture(repository, directory)
+    }
 
     private fun event(reason: String) = DiagnosticEvent(
         metadata = DiagnosticEventMetadata(
@@ -218,20 +182,31 @@ class AndroidDiagnosticLogRepositoryTest {
             mapOf(DiagnosticSensitiveField.ExceptionDetails to "application context")
         )
     )
-}
 
-private class CountingDiagnosticEventCipher : DiagnosticEventCipher {
-    private val delegate = JvmDiagnosticEventCipher()
-    val decryptCalls = AtomicInteger(0)
-    val decryptThreadNames = CopyOnWriteArrayList<String>()
+    private fun captureBatch(pageText: String) = DiagnosticEvent(
+        metadata = DiagnosticEventMetadata(
+            timestampEpochMillis = CAPTURE_TIME,
+            level = DiagnosticLevel.Warning,
+            component = DiagnosticComponent.AutomaticBookkeeping,
+            event = BILL_SYNC_CAPTURE_BATCH_EVENT,
+            traceId = "capture-${pageText.hashCode()}",
+            source = DiagnosticSource.Accessibility,
+            outcome = "failed",
+            reason = "context_missing",
+            triggeredEvents = "WINDOW_CONTENT_CHANGED×3",
+            nodeCount = 84
+        ),
+        sensitivePayload = DiagnosticSensitivePayload(
+            mapOf(DiagnosticSensitiveField.PageText to pageText)
+        )
+    )
 
-    override fun encrypt(plainText: ByteArray): ByteArray = delegate.encrypt(plainText)
+    private data class RepositoryFixture(
+        val repository: AndroidDiagnosticLogRepository,
+        val directory: java.io.File
+    )
 
-    override fun decrypt(payload: ByteArray): ByteArray {
-        decryptCalls.incrementAndGet()
-        decryptThreadNames += Thread.currentThread().name
-        return delegate.decrypt(payload)
+    private companion object {
+        const val CAPTURE_TIME = 1_777_777_777_000L
     }
-
-    override fun deleteKey() = delegate.deleteKey()
 }

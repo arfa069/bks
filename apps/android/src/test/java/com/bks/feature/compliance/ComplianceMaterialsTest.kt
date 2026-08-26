@@ -26,7 +26,7 @@ class ComplianceMaterialsTest {
             accessibilityCopy.purpose
         )
         assertEquals(
-            "只读取可见、非密码、非输入框文字；不截图、不点击、不滚动、不启动其他应用，不保存或上传原始页面文字。识别结果只进入待确认。",
+            "只读取可见、非密码、非输入框文字；不截图、不点击、不滚动、不启动其他应用、不上传。诊断关闭时不保存原始文字；诊断开启时仅保存支付宝实际采集批次正文，识别结果仍只进入待确认。",
             accessibilityCopy.boundary
         )
         assertEquals(
@@ -36,14 +36,16 @@ class ComplianceMaterialsTest {
 
         val storeNotes = BKS_COMPLIANCE.storeReviewNotes.associateBy { it.title }
         assertEquals(
-            "无障碍服务仅在用户主动开启自动记账后运行，读取其他应用当前活动窗口中可见、非密码、非输入框的文字，并只为明确完成的交易生成待确认项；不截图、不操作其他应用、不保存或上传原始页面文字。",
+            "无障碍服务仅在用户主动开启自动记账后运行，读取其他应用当前活动窗口中可见、非密码、非输入框的文字，并只为明确完成的交易生成待确认项；不截图、不操作其他应用、不上传。诊断日志关闭时不保存原始文字，开启时仅保存支付宝实际采集批次正文。",
             storeNotes.getValue("无障碍审核说明").body
         )
         assertTrue(storeNotes.containsKey("诊断日志审核说明"))
         assertTrue(
             BKS_COMPLIANCE.thirdPartyServices.any { service ->
                 service.name.contains("Assists") &&
-                    service.processingMethod.contains("不保存、不上传") &&
+                    service.processingMethod.contains(
+                        "只有用户开启诊断日志时，支付宝实际采集批次正文会明文保存在本机诊断目录"
+                    ) &&
                     "assists-base" in service.declarationTokens
             }
         )

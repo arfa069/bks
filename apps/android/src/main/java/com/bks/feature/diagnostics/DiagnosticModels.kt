@@ -7,13 +7,15 @@ enum class DiagnosticLevel { Debug, Info, Warning, Error }
 
 enum class DiagnosticComponent {
     Persistence,
-    Application
+    Application,
+    AutomaticBookkeeping
 }
 
-enum class DiagnosticSource { System, Unknown }
+enum class DiagnosticSource { System, Accessibility, Unknown }
 
 enum class DiagnosticSensitiveField {
-    ExceptionDetails
+    ExceptionDetails,
+    PageText
 }
 
 data class DiagnosticEventMetadata(
@@ -28,7 +30,11 @@ data class DiagnosticEventMetadata(
     val reason: String? = null,
     val suppressedCount: Int = 0,
     val count: Int? = null,
-    val durationMillis: Long? = null
+    val durationMillis: Long? = null,
+    val triggeredEvents: String? = null,
+    val nodeCount: Int? = null,
+    val nodeLimitReached: Boolean = false,
+    val insertedCount: Int? = null
 )
 
 data class DiagnosticSensitivePayload(
@@ -43,7 +49,7 @@ data class DiagnosticEvent(
 
 data class DiagnosticLogStats(
     val eventCount: Int = 0,
-    val encryptedBytes: Long = 0,
+    val storedBytes: Long = 0,
     val segmentCount: Int = 0
 )
 
@@ -59,7 +65,7 @@ interface DiagnosticLogRepository : DiagnosticRecorder {
     fun setEnabled(enabled: Boolean, userConfirmed: Boolean = false): Boolean
     suspend fun refresh(limit: Int = 1_000)
     suspend fun clear(keepEnabledPreference: Boolean = true)
-    suspend fun exportEncrypted(passphrase: CharArray): String
+    suspend fun exportPlainText(): String
 }
 
 object NoOpDiagnosticRecorder : DiagnosticRecorder {
@@ -80,3 +86,5 @@ class InMemoryDiagnosticRecorder(
 fun newDiagnosticTraceId(): String = UUID.randomUUID().toString()
 
 fun Throwable.toDiagnosticExceptionDetails(): String = stackTraceToString()
+
+internal const val BILL_SYNC_CAPTURE_BATCH_EVENT = "bill_sync_capture_batch"

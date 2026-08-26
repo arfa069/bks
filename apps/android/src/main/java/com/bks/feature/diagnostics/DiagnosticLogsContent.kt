@@ -29,13 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bks.ui.components.OutlinedButton
 import com.bks.ui.components.TextButton
-import java.text.DateFormat
-import java.util.Date
 
 internal data class DiagnosticLogsContentState(
     val enabled: Boolean,
     val stats: DiagnosticLogStats,
-    val showSensitive: Boolean,
+    val exporting: Boolean,
     val statusMessage: String?
 )
 
@@ -44,8 +42,7 @@ internal class DiagnosticLogsContentActions(
     val onEnabledChange: (Boolean) -> Unit,
     val onRefresh: () -> Unit,
     val onExportClick: () -> Unit,
-    val onClearClick: () -> Unit,
-    val onToggleSensitive: () -> Unit
+    val onClearClick: () -> Unit
 )
 
 @Composable
@@ -72,7 +69,7 @@ internal fun DiagnosticLogsContent(
         item {
             Text("诊断日志", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         }
-        item { Text("日志仅保存在本机加密目录；关闭后保留历史，清空会同时删除密文和设备密钥。") }
+        item { Text("日志以明文保存在本机应用目录；关闭后保留历史，清空会删除全部新旧诊断分段。") }
         item {
             DiagnosticLogsStatusRow(
                 enabled = state.enabled,
@@ -82,11 +79,10 @@ internal fun DiagnosticLogsContent(
         }
         item {
             DiagnosticLogsActionRow(
-                showSensitive = state.showSensitive,
+                exporting = state.exporting,
                 onRefresh = actions.onRefresh,
                 onExportClick = actions.onExportClick,
-                onClearClick = actions.onClearClick,
-                onToggleSensitive = actions.onToggleSensitive
+                onClearClick = actions.onClearClick
             )
         }
         state.statusMessage?.let { message ->
@@ -111,7 +107,7 @@ internal fun DiagnosticLogsContent(
             )
         }
         items(filtered, key = { "${it.metadata.timestampEpochMillis}-${it.metadata.traceId}-${it.metadata.event}" }) {
-            DiagnosticEventCard(it, state.showSensitive)
+            DiagnosticEventCard(it)
         }
     }
 }
@@ -125,7 +121,7 @@ private fun DiagnosticLogsStatusRow(
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Column {
             Text(if (enabled) "记录已开启" else "记录已关闭", fontWeight = FontWeight.SemiBold)
-            Text("${stats.eventCount} 条 · ${stats.segmentCount} 段 · ${formatBytes(stats.encryptedBytes)}")
+            Text("${stats.eventCount} 条 · ${stats.segmentCount} 段 · ${formatBytes(stats.storedBytes)}")
         }
         Switch(
             checked = enabled,
@@ -137,20 +133,22 @@ private fun DiagnosticLogsStatusRow(
 
 @Composable
 private fun DiagnosticLogsActionRow(
-    showSensitive: Boolean,
+    exporting: Boolean,
     onRefresh: () -> Unit,
     onExportClick: () -> Unit,
-    onClearClick: () -> Unit,
-    onToggleSensitive: () -> Unit
+    onClearClick: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         OutlinedButton(onClick = onRefresh) { Text("刷新") }
-        OutlinedButton(onClick = onExportClick) { Text("加密导出") }
+        OutlinedButton(
+            onClick = onExportClick,
+            enabled = !exporting,
+            modifier = Modifier.testTag("diagnostic-export")
+        ) { Text(if (exporting) "正在导出…" else "明文导出 .log") }
         OutlinedButton(onClick = onClearClick) { Text("清空") }
-        OutlinedButton(onClick = onToggleSensitive) { Text(if (showSensitive) "遮罩内容" else "显示敏感内容") }
     }
 }
 
@@ -206,34 +204,19 @@ private fun DiagnosticLogsComponentChips(
 }
 
 @Composable
-private fun DiagnosticEventCard(event: DiagnosticEvent, showSensitive: Boolean) {
+private fun DiagnosticEventCard(event: DiagnosticEvent) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("${event.metadata.level.name} · ${event.metadata.component.name} · ${event.metadata.event}", fontWeight = FontWeight.SemiBold)
-            Text(DateFormat.getDateTimeInstance().format(Date(event.metadata.timestampEpochMillis)))
-            Text("reason=${event.metadata.reason.orEmpty()} outcome=${event.metadata.outcome.orEmpty()}")
-            if (event.metadata.count != null || event.metadata.durationMillis != null) {
-                Text(
-                    "count=${event.metadata.count ?: 0} durationMs=${event.metadata.durationMillis ?: 0}"
-                )
-            }
-            Text("traceId=${event.metadata.traceId}")
-            event.metadata.sessionId?.let { Text("sessionId=$it") }
-            if (event.metadata.suppressedCount > 0) Text("合并重复 ${event.metadata.suppressedCount} 次")
-            if (event.sensitivePayload.fields.isNotEmpty()) {
-                if (showSensitive) {
-                    event.sensitivePayload.fields.forEach { (field, value) ->
-                        Text("${field.name}: $value")
-                    }
-                    if (event.truncatedFields.isNotEmpty()) {
-                        Text("已截断：${event.truncatedFields.joinToString { it.name }}")
-                    }
-                } else {
-                    Text("敏感内容：••••••")
-                }
+            Text(
+                formatDiagnosticLogLine(event),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
+            )
+            if (event.truncatedFields.isNotEmpty()) {
+                Text("已截断：${event.truncatedFields.joinToString { it.name }}")
             }
         }
     }
@@ -246,7 +229,10 @@ private fun queryMatches(event: DiagnosticEvent, query: String): Boolean {
         event.metadata.event,
         event.metadata.reason,
         event.metadata.traceId,
-        event.metadata.sessionId
+        event.metadata.sessionId,
+        event.metadata.triggeredEvents
+    ).plus(
+        event.sensitivePayload.fields.values
     ).any { it?.contains(needle, ignoreCase = true) == true }
 }
 

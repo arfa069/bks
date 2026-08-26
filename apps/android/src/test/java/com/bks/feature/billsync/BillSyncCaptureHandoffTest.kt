@@ -119,17 +119,41 @@ class BillSyncCaptureHandoffTest {
         assertFalse(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
     }
 
+    @Test
+    fun outcomeReportsActualInsertDuplicateAndParserFailureReasons() {
+        val acceptedWindows = AcceptedWindowMemory()
+        val coordinator = FakeCaptureCoordinator(recognized = true)
+        val outcomes = mutableListOf<BillSyncCaptureOutcome>()
+
+        handoff(capture(), acceptedWindows, coordinator, outcomes)
+        handoff(capture(), acceptedWindows, coordinator, outcomes)
+        coordinator.recognized = false
+        handoff(capture(), acceptedWindows, coordinator, outcomes)
+
+        assertEquals(BillSyncCaptureOutcome.Inserted(1), outcomes[0])
+        assertEquals(
+            BillSyncCaptureOutcome.NotInserted("already_captured_window"),
+            outcomes[1]
+        )
+        assertEquals(
+            BillSyncCaptureOutcome.Failed(BillSyncFailureReason.CompletedStatusMissing.code),
+            outcomes[2]
+        )
+    }
+
     private fun handoff(
         capture: SanitizedBillSyncCapture,
         acceptedWindows: AcceptedWindowMemory,
-        coordinator: FakeCaptureCoordinator
+        coordinator: FakeCaptureCoordinator,
+        outcomes: MutableList<BillSyncCaptureOutcome>? = null
     ) {
         handoffSanitizedCapture(
             capture = capture,
             acceptedWindows = acceptedWindows,
             recognize = coordinator::recognize,
             persist = coordinator::persist,
-            launch = { block -> runBlocking { block() } }
+            launch = { block -> runBlocking { block() } },
+            onOutcome = { outcome -> outcomes?.add(outcome) }
         )
     }
 
@@ -154,13 +178,18 @@ class BillSyncCaptureHandoffTest {
 
         fun recognize(pageText: String): BillSyncResult {
             recognizedPageTexts += pageText
-            return BillSyncResult(recognized = recognized, createdEntries = emptyList())
+            return BillSyncResult(
+                recognized = recognized,
+                createdEntries = emptyList(),
+                failureReason = BillSyncFailureReason.CompletedStatusMissing.takeIf { !recognized }
+            )
         }
 
         suspend fun persist(result: BillSyncResult): BillSyncResult {
             persistFailure?.let { throw it }
-            persistedResults += result
-            return result
+            val persisted = result.copy(insertedCount = 1)
+            persistedResults += persisted
+            return persisted
         }
     }
 

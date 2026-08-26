@@ -96,39 +96,35 @@ class DiagnosticLogsViewModelTest {
             assertEquals(1, repository.clearCalls)
             assertTrue(viewModel.uiState.value.events.isEmpty())
             assertEquals(DiagnosticLogStats(), viewModel.uiState.value.stats)
-            assertEquals("诊断日志和设备密钥已清空。", viewModel.uiState.value.statusMessage)
+            assertEquals("诊断日志已清空。", viewModel.uiState.value.statusMessage)
         }
     }
 
     @Test
-    fun exportHandsEncryptedResultToWriterOnceAndPublishesCompletion() = runTest {
+    fun exportHandsPlaintextToWriterOnceAndPublishesCompletion() = runTest {
         val repository = FakeDiagnosticLogRepository()
-        val passphrase = "private-passphrase".toCharArray()
         withViewModel(repository) { viewModel, _ ->
             val pendingRequest = async { viewModel.writeRequests.first() }
-            viewModel.export(passphrase)
+            viewModel.export()
             runCurrent()
             val request = pendingRequest.await()
 
-            assertEquals("encrypted-sanitized-export", request.encrypted)
+            assertEquals("plaintext-sanitized-export", request.plainText)
             assertTrue(viewModel.beginWrite(request.requestId))
-            assertTrue(passphrase.all { it == '\u0000' })
-            assertFalse(viewModel.uiState.value.toString().contains("private-passphrase"))
-            assertFalse(viewModel.uiState.value.toString().contains("encrypted-sanitized-export"))
+            assertFalse(viewModel.uiState.value.toString().contains("plaintext-sanitized-export"))
 
-            viewModel.finishWrite(request.requestId, "diagnostics.aadiag")
+            viewModel.finishWrite(request.requestId, "diagnostics.log")
             assertFalse(viewModel.uiState.value.exporting)
             assertEquals("导出完成", viewModel.uiState.value.exportResult?.title)
-            assertTrue(viewModel.uiState.value.exportResult?.message.orEmpty().contains("diagnostics.aadiag"))
+            assertTrue(viewModel.uiState.value.exportResult?.message.orEmpty().contains("diagnostics.log"))
         }
     }
 
     @Test
-    fun cancelStopsEncryptionClearsPassphraseAndRejectsLateWrite() = runTest {
+    fun cancelStopsExportAndRejectsLateWrite() = runTest {
         val repository = FakeDiagnosticLogRepository().apply { blockExport = true }
-        val passphrase = "private-passphrase".toCharArray()
         withViewModel(repository) { viewModel, _ ->
-            viewModel.export(passphrase)
+            viewModel.export()
             runCurrent()
             repository.exportStarted.await()
 
@@ -137,19 +133,18 @@ class DiagnosticLogsViewModelTest {
 
             assertFalse(viewModel.uiState.value.exporting)
             assertEquals("导出已取消", viewModel.uiState.value.exportResult?.title)
-            assertTrue(passphrase.all { it == '\u0000' })
         }
 
         val completedRepository = FakeDiagnosticLogRepository()
         withViewModel(completedRepository) { viewModel, _ ->
             val pendingRequest = async { viewModel.writeRequests.first() }
-            viewModel.export("another-passphrase".toCharArray())
+            viewModel.export()
             runCurrent()
             val request = pendingRequest.await()
             viewModel.cancelExport()
 
             assertFalse(viewModel.beginWrite(request.requestId))
-            viewModel.finishWrite(request.requestId, "must-not-exist.aadiag")
+            viewModel.finishWrite(request.requestId, "must-not-exist.log")
             assertEquals("导出已取消", viewModel.uiState.value.exportResult?.title)
         }
     }
@@ -158,7 +153,7 @@ class DiagnosticLogsViewModelTest {
     fun exportAndWriterFailuresRemainStableUntilPreciselyDismissed() = runTest {
         val repository = FakeDiagnosticLogRepository().apply { failExport = true }
         withViewModel(repository) { viewModel, _ ->
-            viewModel.export("private-passphrase".toCharArray())
+            viewModel.export()
             advanceUntilIdle()
 
             val generationFailure = requireNotNull(viewModel.uiState.value.exportResult)
@@ -172,7 +167,7 @@ class DiagnosticLogsViewModelTest {
         val completedRepository = FakeDiagnosticLogRepository()
         withViewModel(completedRepository) { viewModel, _ ->
             val pendingRequest = async { viewModel.writeRequests.first() }
-            viewModel.export("private-passphrase".toCharArray())
+            viewModel.export()
             runCurrent()
             val request = pendingRequest.await()
             viewModel.finishWrite(request.requestId, displayName = null)
@@ -186,7 +181,7 @@ class DiagnosticLogsViewModelTest {
     fun clearingOwnerCancelsExportAndDropsOperationState() = runTest {
         val repository = FakeDiagnosticLogRepository().apply { blockExport = true }
         withViewModel(repository) { viewModel, store ->
-            viewModel.export("private-passphrase".toCharArray())
+            viewModel.export()
             runCurrent()
             repository.exportStarted.await()
 
@@ -261,10 +256,10 @@ private class FakeDiagnosticLogRepository : DiagnosticLogRepository {
         mutableStats.value = DiagnosticLogStats()
     }
 
-    override suspend fun exportEncrypted(passphrase: CharArray): String {
+    override suspend fun exportPlainText(): String {
         exportStarted.complete(Unit)
         if (blockExport) awaitCancellation()
         if (failExport) error("export failed")
-        return "encrypted-sanitized-export"
+        return "plaintext-sanitized-export"
     }
 }

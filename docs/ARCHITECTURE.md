@@ -46,7 +46,7 @@ flowchart LR
 - `feature:account`: 用户名/邮箱/手机号与微信登录注册、公开账号 UUID、账号 Profile、身份绑定/换绑与合并、Session、本地模式及账号注销。
 - `feature:settings`: 数据与备份及相关设置。
 - `feature:sync`: 账户同步协调器、HTTPS 客户端、Room outbox、远端应用器与 WorkManager 调度。
-- `feature:diagnostics`: 敏感事件契约、密钥脱敏、加密本地分段、诊断 UI、清除及口令导出。
+- `feature:diagnostics`: 敏感事件契约、认证秘密脱敏、UTF-8 明文 `.log` 分段、诊断 UI、清除及无口令明文导出。
 
 确保捕获解析与去重逻辑脱离 Android UI 即可进行单元测试。
 
@@ -95,9 +95,9 @@ flowchart LR
   - `LedgerSyncSettingsSection.kt` 拥有同步区稳定生命周期内的 `syncBusy`、首次同步预览与确认 Dialog、冲突展示；`LocalBackupSection.kt` 拥有文件 Launcher、导出/导入密码、`PendingRestore` 与恢复确认；`DataAndBackupScreen.kt` 保留公开签名、页面标题/返回、共享 `SnackbarHostState` 与危险区。
   - 协程 scope 由 Section 持有，Dialog 关闭后成功/失败 Snackbar 不会被取消；Android Detekt baseline 从 98 项减少到 96 项，移除两条已解决的 `CyclomaticComplexMethod`/`LongMethod`，公开入口与 `BackupPasswordDialog` 的 `LongParameterList` 兼容债务保留。
   - settings 专项、Android 全量单元测试、`assembleDebug`、`coverageReport detekt build` 均通过，未执行真机操作。
-- **第十二轮 诊断日志页面职责拆分（2026-08-03）**：保持诊断采集范围、脱敏、加密分段、清空与导出口令语义不变，只拆分 `DiagnosticLogsScreen` 的页面内容与 Dialog 职责：
-  - `DiagnosticLogsContent.kt` 拥有事件列表、搜索/级别/组件筛选、状态与操作行及 `DiagnosticEventCard`，只接收状态和事件回调；`DiagnosticLogsDialogs.kt` 承载 Release 开启确认、敏感内容确认、清空确认、导出口令与导出结果 Dialog。
-  - 导出 Job 继续由页面级 scope 持有，口令在 `finally` 中以 `\u0000` 覆盖，取消不创建文件，结果 Dialog 在口令 Dialog 关闭后仍可见；Lifecycle 后台重新遮罩与 `FLAG_SECURE` 边界保留在根函数。
+- **第十二轮 诊断日志页面职责拆分（2026-08-03）**：该轮只拆分 `DiagnosticLogsScreen` 的页面内容与 Dialog 职责；现行存储、展示与导出语义已更新，以第 10 节为准：
+  - `DiagnosticLogsContent.kt` 拥有事件列表、搜索/级别/组件筛选、状态与操作行及直接明文展示的 `DiagnosticEventCard`，只接收状态和事件回调；`DiagnosticLogsDialogs.kt` 承载 Release 开启确认、清空确认与导出结果 Dialog。
+  - 导出 Job 继续由页面级 scope 持有，取消不创建文件；`FLAG_SECURE` 边界保留在根函数，并覆盖诊断页从进入到离开的完整生命周期。
   - Android Detekt baseline 从 96 项减少到 94 项，移除两条已解决的 `CyclomaticComplexMethod`/`LongMethod`，公开入口的 `LongParameterList` 兼容债务保留；新增导出失败后结果仍稳定可见的 UI 回归测试。
   - diagnostics/compliance 专项、Android 全量单元测试、`assembleDebug`、`coverageReport detekt build` 均通过，未执行真机操作。
 - **第二十四轮全项目收口重构（2026-08-05）**：保持产品 UI、Room/PostgreSQL schema、Shared API、HTTP/JSON、备份格式、同步事务与识别规则不变，只删除重复基础逻辑并收缩职责边界：
@@ -133,7 +133,7 @@ flowchart LR
 
 敏感本地数据处理：
 - 将账本、原始证据、商家/标题、金额、分类、资金账户及 AI 请求 Payload 均视为**敏感交易信息**。
-- 对于备份以及存储在普通应用私有数据库保障之外的任何原始证据，使用加密手段保护。
+- 账本备份离开应用沙箱前必须加密。诊断日志是受用户开关控制的明确例外：设备内分段位于应用私有 `noBackupFilesDir`，但以 UTF-8 明文 `.log` 保存，明文导出后由用户自行管理。
 
 账本生命周期约束（Invariants）：
 - 手动导入的候选对象在进入账本前始终先进入全局待确认队列；用户手动撰写的条目在表单校验通过后可直接写入当前账本。
@@ -168,7 +168,7 @@ flowchart LR
 核心规则：
 - 捕获流水线**绝不直接写入**已确认的账本条目。
 - `BillSyncCaptureProcessor` 通过 `ReviewQueuePersistence` 进行持久化，应用 UI 从 Room Flow 实时刷新。
-- 原始页面文字、未命中内容和无关页面信息不进入 Room、诊断日志、备份、同步或上传链路。
+- 原始页面文字不进入 Room、账本备份、同步或上传链路。诊断日志开启时，每个实际支付宝采集批次会按诊断契约在设备内保存完整采集正文；非支付宝批次只保存元数据。
 - 初始本地规则作为可编辑的 Room 记录预置；数据库迁移与首次安装回调不得覆盖用户后续的修改。
 
 ## 5. 去重匹配 (Deduplication)
@@ -296,20 +296,22 @@ Session 与传输边界：
 重要边界：
 - 现行判断条件统一记录在[通用交易识别规则](./PAYMENT-RECOGNITION-RULES.md)。
 - Service 排除 BKS 自身，只读取可见、非密码、非可编辑文字，限制 512 节点、24 层和 16 KiB。
-- Service 不截图、不执行 OCR、不点击、不滚动、不启动应用，也不按微信/支付宝包名建立白名单或路由。
+- Service 不截图、不执行 OCR、不点击、不滚动、不启动应用，也不按微信/支付宝包名建立识别白名单或路由；包名只用于诊断留存边界，决定实际采集批次是否保存正文。
 - 付款发起、密码输入、待支付、处理中、失败、取消以及金额/方向冲突优先拒绝。
 - Manifest 保持 `exported=false`，无 `packageNames` 和 `canTakeScreenshot`；微信包查询仅供微信登录。
 
 ## 10. 敏感诊断日志 (Sensitive Diagnostic Logging)
 
-通用自动记账的诊断边界详见 [ADR 0063](./adr/0063-replace-platform-capture-with-assists-generic-recognition.md)；运维指南见 [DIAGNOSTIC-LOGS.md](./DIAGNOSTIC-LOGS.md)。
+运维指南见 [DIAGNOSTIC-LOGS.md](./DIAGNOSTIC-LOGS.md)。
 
-- `feature/diagnostics` 拥有事件契约、身份凭证脱敏、256 KB 事件上限、5 秒抑制、Android Keystore 加密、`.aadlog` 分段、查询、清除及 `.aadiag` 导出能力。
-- 自动记账链路不向 `DiagnosticRecorder` 写入页面内容、拒绝内容或交易字段；当前生产者仅记录应用异常。
-- 每个 JSON 事件在独立使用随机 AES-GCM IV 加密前均已脱敏并限制大小。文件存放在 `noBackupFilesDir` 下，使用 1 MB 分段，且仅当密文总大小超过 10 MB 时才滚动删除最旧分段。
-- Debug 默认开启。Release 默认关闭并要求知情用户确认。关闭开关保留历史；清除操作会删除所有分段及 Keystore 密钥。
-- 账本 V5 备份与诊断导出共享 PBKDF2-HMAC-SHA256/AES-256-GCM 原语，但保留独立的机制前缀与格式：`AUTO_ACCOUNTING_BACKUP_V5:` 与 `AUTO_ACCOUNTING_DIAGNOSTICS_V1:`。
-- Logcat 仅接收元数据、稳定原因、计数及相关性 ID。敏感 Payload 及完整异常消息绝不出在 Logcat 中。
+- `feature:diagnostics` 拥有事件契约、认证秘密脱敏、256 KiB 事件上限、普通事件 5 秒抑制、UTF-8 明文 `.log` 分段、查询、清除及无口令明文导出能力；自动记账批次事件不参与 5 秒抑制。
+- `feature:billsync` 将同一包名/窗口在 500 ms 稳定窗口内收到的无障碍事件合并为一次实际采集批次，并在采集或处理得到最终结果后只写一条诊断事件。事件包含秒级时间、各事件类型次数、实际遍历节点数和新增成功/未新增/失败原因。
+- 支付宝实际采集批次携带现有 512 节点、24 层、16 KiB 采集边界内的完整可读正文；非支付宝批次的正文为空，只保存元数据。两类事件均在写入前清除认证秘密。
+- 每个事件以一行 JSON 编码写入 `noBackupFilesDir/diagnostics` 下的 UTF-8 明文 `.log`。每段最多 1 MiB，现行分段总量最多 10 MiB；仅在超过总上限时滚动删除最旧分段。
+- 诊断页加载最新 1000 条并直接显示与明文导出一致的单行内容；从进入到离开全程启用 `FLAG_SECURE`，不再使用内容遮罩或二次显示确认。
+- Debug 默认开启。Release 默认关闭并要求知情用户确认。关闭开关保留历史；清空会删除现行 `.log`、遗留 `.aadlog` 与遗留诊断密钥。旧 `.aadlog` 不读取、不迁移。
+- 导出无需口令，在 Downloads 生成 UTF-8 明文 `.log`，且不会随本机数据删除。账本 V5 备份仍独立使用 PBKDF2-HMAC-SHA256/AES-256-GCM 加密，机制前缀保持 `AUTO_ACCOUNTING_BACKUP_V5:`。
+- 生产 Logcat 仅接收元数据、稳定原因、计数及相关性 ID。页面正文及完整异常消息绝不出现在生产 Logcat 中。
 
 ## 11. 构建与验证目标 (Build And Verification Targets)
 
@@ -326,8 +328,8 @@ Android 端检查：
 
 内测手动检查：
 - 自动记账四种页面状态、授权入口和开关/权限分离。
-- 通用页面准入、拒绝条件、待确认持久化与原始文字不落盘。
-- 诊断日志开关、脱敏生命周期、加密导出/解密和清除语义。
+- 通用页面准入、拒绝条件、待确认持久化，以及支付宝/非支付宝诊断正文留存边界。
+- 诊断日志开关、认证秘密脱敏、UTF-8 明文分段、全程 `FLAG_SECURE`、无口令 `.log` 导出、旧 `.aadlog` 忽略/清空和 Downloads 留存语义。
 - 备份导出与导入。
 - 账号注销冷静期与取消注销流程。
 - Session 持久化失败、离线重启、显式无效 Session、当前 Session 退出登录失败、Bearer 防冒充及哈希凭据迁移。

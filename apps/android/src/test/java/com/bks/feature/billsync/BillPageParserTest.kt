@@ -58,6 +58,30 @@ class BillPageParserTest {
         }
     }
 
+    @Test
+    fun reportsStableReasonForEveryExistingRejectionBranch() {
+        val cases = listOf(
+            "" to BillSyncFailureReason.BlankText,
+            "处理中\n支付成功\n¥8.80\n订单 1" to BillSyncFailureReason.RejectedStatus,
+            "支出\n¥8.80\n订单 1" to BillSyncFailureReason.CompletedStatusMissing,
+            "交易成功\n¥8.80\n订单 1" to BillSyncFailureReason.DirectionMissing,
+            "支付成功\n收款成功\n¥8.80\n订单 1" to BillSyncFailureReason.DirectionConflict,
+            "支付成功\n订单 1" to BillSyncFailureReason.AmountMissing,
+            "支付成功\n¥8.80" to BillSyncFailureReason.ContextMissing
+        )
+
+        cases.forEach { (pageText, expectedReason) ->
+            assertEquals(
+                expectedReason,
+                parser.parseWithDiagnostics(pageText, FALLBACK_TIME).failureReason
+            )
+        }
+    }
+
     private fun parse(text: String): List<ParsedBillEntry> =
-        parser.parse(text, fallbackTransactionTimeText = "2026-08-21 10:00")
+        parser.parse(text, fallbackTransactionTimeText = FALLBACK_TIME)
+
+    private companion object {
+        const val FALLBACK_TIME = "2026-08-21 10:00"
+    }
 }

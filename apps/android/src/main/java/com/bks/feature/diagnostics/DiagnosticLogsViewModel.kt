@@ -30,7 +30,7 @@ internal data class DiagnosticLogsUiState(
 
 internal data class DiagnosticExportWriteRequest(
     val requestId: Long,
-    val encrypted: String
+    val plainText: String
 )
 
 internal class DiagnosticLogsViewModel(
@@ -104,7 +104,7 @@ internal class DiagnosticLogsViewModel(
             try {
                 repository.clear()
                 mutableUiState.update {
-                    it.copy(statusMessage = "诊断日志和设备密钥已清空。")
+                    it.copy(statusMessage = "诊断日志已清空。")
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -116,19 +116,16 @@ internal class DiagnosticLogsViewModel(
         }
     }
 
-    fun export(passphrase: CharArray) {
-        if (activeExportRequestId != null) {
-            passphrase.fill('\u0000')
-            return
-        }
+    fun export() {
+        if (activeExportRequestId != null) return
         val requestId = ++nextId
         activeExportRequestId = requestId
         mutableUiState.update { it.copy(exporting = true, exportResult = null) }
         exportJob = viewModelScope.launch {
             try {
-                val encrypted = repository.exportEncrypted(passphrase)
+                val plainText = repository.exportPlainText()
                 if (activeExportRequestId == requestId) {
-                    writeRequestChannel.send(DiagnosticExportWriteRequest(requestId, encrypted))
+                    writeRequestChannel.send(DiagnosticExportWriteRequest(requestId, plainText))
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -140,7 +137,6 @@ internal class DiagnosticLogsViewModel(
                     )
                 }
             } finally {
-                passphrase.fill('\u0000')
                 if (activeExportRequestId == requestId) exportJob = null
             }
         }

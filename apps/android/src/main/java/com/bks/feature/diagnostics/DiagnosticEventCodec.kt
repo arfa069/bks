@@ -16,6 +16,7 @@ internal object DiagnosticEventCodec {
 
     fun encode(event: DiagnosticEvent): String = buildJsonObject {
         put("schemaVersion", 1)
+        put("time", formatDiagnosticTimestamp(event.metadata.timestampEpochMillis))
         put("timestampEpochMillis", event.metadata.timestampEpochMillis)
         put("level", event.metadata.level.name)
         put("component", event.metadata.component.name)
@@ -28,6 +29,10 @@ internal object DiagnosticEventCodec {
         put("suppressedCount", event.metadata.suppressedCount)
         event.metadata.count?.let { put("count", it) }
         event.metadata.durationMillis?.let { put("durationMillis", it) }
+        event.metadata.triggeredEvents?.let { put("triggeredEvents", it) }
+        event.metadata.nodeCount?.let { put("nodeCount", it) }
+        put("nodeLimitReached", event.metadata.nodeLimitReached)
+        event.metadata.insertedCount?.let { put("insertedCount", it) }
         put("sensitivePayload", buildJsonObject {
             event.sensitivePayload.fields.forEach { (field, value) -> put(field.name, value) }
         })
@@ -60,7 +65,13 @@ internal object DiagnosticEventCodec {
                 reason = optionalString("reason"),
                 suppressedCount = root["suppressedCount"]?.jsonPrimitive?.intOrNull ?: 0,
                 count = root["count"]?.jsonPrimitive?.intOrNull,
-                durationMillis = root["durationMillis"]?.jsonPrimitive?.longOrNull
+                durationMillis = root["durationMillis"]?.jsonPrimitive?.longOrNull,
+                triggeredEvents = optionalString("triggeredEvents"),
+                nodeCount = root["nodeCount"]?.jsonPrimitive?.intOrNull,
+                nodeLimitReached = root["nodeLimitReached"]?.jsonPrimitive?.contentOrNull
+                    ?.toBooleanStrictOrNull()
+                    ?: false,
+                insertedCount = root["insertedCount"]?.jsonPrimitive?.intOrNull
             ),
             sensitivePayload = DiagnosticSensitivePayload(payload),
             truncatedFields = truncated

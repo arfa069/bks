@@ -57,6 +57,7 @@ class BillSyncPipelineTest {
 
         assertFalse(result.recognized)
         assertTrue(result.createdEntries.isEmpty())
+        assertEquals(BillSyncFailureReason.CompletedStatusMissing, result.failureReason)
     }
 
     private fun sync(pageText: String): BillSyncResult = pipeline.sync(

@@ -14,20 +14,59 @@ data class ParsedBillEntry(
     val merchantTitleFromFallback: Boolean
 )
 
+enum class BillSyncFailureReason(val code: String) {
+    BlankText("blank_text"),
+    RejectedStatus("rejected_status"),
+    CompletedStatusMissing("completed_status_missing"),
+    DirectionMissing("direction_missing"),
+    DirectionConflict("direction_conflict"),
+    AmountMissing("amount_missing"),
+    ContextMissing("context_missing")
+}
+
+internal data class BillPageParseResult(
+    val entries: List<ParsedBillEntry>,
+    val failureReason: BillSyncFailureReason? = null
+)
+
 class BillPageParser {
-    fun parse(pageText: String, fallbackTransactionTimeText: String): List<ParsedBillEntry> {
+    fun parse(pageText: String, fallbackTransactionTimeText: String): List<ParsedBillEntry> =
+        parseWithDiagnostics(pageText, fallbackTransactionTimeText).entries
+
+    @Suppress("CyclomaticComplexMethod")
+    internal fun parseWithDiagnostics(
+        pageText: String,
+        fallbackTransactionTimeText: String
+    ): BillPageParseResult {
         val lines = pageText.normalizedLines()
         val normalizedText = lines.joinToString("\n")
-        if (normalizedText.isBlank() || REJECTED_STATUS.any(normalizedText::contains)) return emptyList()
-        if (COMPLETED_STATUS.none(normalizedText::contains)) return emptyList()
+        if (normalizedText.isBlank()) {
+            return BillPageParseResult(emptyList(), BillSyncFailureReason.BlankText)
+        }
+        if (REJECTED_STATUS.any(normalizedText::contains)) {
+            return BillPageParseResult(emptyList(), BillSyncFailureReason.RejectedStatus)
+        }
+        if (COMPLETED_STATUS.none(normalizedText::contains)) {
+            return BillPageParseResult(emptyList(), BillSyncFailureReason.CompletedStatusMissing)
+        }
 
-        val direction = inferDirection(normalizedText) ?: return emptyList()
+        val hasInflow = INFLOW_STATUS.any(normalizedText::contains)
+        val hasOutflow = OUTFLOW_STATUS.any(normalizedText::contains)
+        if (!hasInflow && !hasOutflow) {
+            return BillPageParseResult(emptyList(), BillSyncFailureReason.DirectionMissing)
+        }
+        if (hasInflow && hasOutflow) {
+            return BillPageParseResult(emptyList(), BillSyncFailureReason.DirectionConflict)
+        }
+        val direction = if (hasInflow) PaymentDirection.Inflow else PaymentDirection.Outflow
         val amount = AMOUNT_REGEX.findAll(normalizedText)
             .mapNotNull { match -> match.groupValues.drop(1).firstOrNull(String::isNotBlank) }
             .mapNotNull(::parseAmountMinor)
             .firstOrNull()
-            ?: return emptyList()
-        if (CONTEXT_LABELS.none(normalizedText::contains)) return emptyList()
+            ?: return BillPageParseResult(emptyList(), BillSyncFailureReason.AmountMissing)
+        if (CONTEXT_LABELS.none(normalizedText::contains)) {
+            return BillPageParseResult(emptyList(), BillSyncFailureReason.ContextMissing)
+        }
 
         val merchant = extractMerchant(lines)
         val title = merchant ?: FALLBACK_MERCHANT_TITLE
@@ -38,31 +77,23 @@ class BillPageParser {
         }
         val transactionTime = TRANSACTION_TIME_REGEX.find(normalizedText)?.value
             ?: fallbackTransactionTimeText
-        return listOf(
-            ParsedBillEntry(
-                merchantTitle = title,
-                amountMinor = amount,
-                transactionKindLabel = kind,
-                transactionTimeText = transactionTime,
-                parsedFields = listOf(
-                    "来源=${PaymentSource.OTHER.toReviewSourceLabel()}",
-                    "商户=$title",
-                    "金额=${amountMinorToText(amount)}",
-                    "类型=$kind"
-                ),
-                merchantTitleFromFallback = merchant == null
+        return BillPageParseResult(
+            entries = listOf(
+                ParsedBillEntry(
+                    merchantTitle = title,
+                    amountMinor = amount,
+                    transactionKindLabel = kind,
+                    transactionTimeText = transactionTime,
+                    parsedFields = listOf(
+                        "来源=${PaymentSource.OTHER.toReviewSourceLabel()}",
+                        "商户=$title",
+                        "金额=${amountMinorToText(amount)}",
+                        "类型=$kind"
+                    ),
+                    merchantTitleFromFallback = merchant == null
+                )
             )
         )
-    }
-
-    private fun inferDirection(text: String): PaymentDirection? {
-        val hasInflow = INFLOW_STATUS.any(text::contains)
-        val hasOutflow = OUTFLOW_STATUS.any(text::contains)
-        return when {
-            hasInflow == hasOutflow -> null
-            hasInflow -> PaymentDirection.Inflow
-            else -> PaymentDirection.Outflow
-        }
     }
 
     private fun extractMerchant(lines: List<String>): String? {

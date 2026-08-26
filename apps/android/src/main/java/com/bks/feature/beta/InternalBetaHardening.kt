@@ -76,7 +76,7 @@ fun buildInternalBetaReadinessReport(): InternalBetaReadinessReport = InternalBe
             id = BetaReadinessItemId.CrashAndLogIntegration,
             title = "本地崩溃/日志脱敏",
             status = BetaReadinessStatus.Ready,
-            detail = "真实诊断仓库使用设备内加密分段；认证秘密写入前脱敏，敏感内容不进入 Logcat。"
+            detail = "真实诊断仓库使用 noBackup 目录内明文分段；认证秘密写入前清除，敏感 payload 不进入生产 Logcat。"
         ),
         BetaReadinessItem(
             id = BetaReadinessItemId.DeviceMatrixTesting,

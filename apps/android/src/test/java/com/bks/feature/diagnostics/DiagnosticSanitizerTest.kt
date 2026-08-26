@@ -102,6 +102,25 @@ class DiagnosticSanitizerTest {
         assertFalse(sanitized.contains("suppressed-secret"))
     }
 
+    @Test
+    fun pageTextKeepsTransactionPlaintextButRedactsAuthenticationSecrets() {
+        val sanitized = sanitizeDiagnosticEvent(
+            diagnosticEvent(
+                mapOf(
+                    DiagnosticSensitiveField.PageText to
+                        "支付成功\n￥10.90\n商户：测试店\nCookie: session=secret-cookie\n验证码 123456"
+                )
+            )
+        ).sensitivePayload.fields.getValue(DiagnosticSensitiveField.PageText)
+
+        assertTrue(sanitized.contains("支付成功"))
+        assertTrue(sanitized.contains("￥10.90"))
+        assertTrue(sanitized.contains("商户：测试店"))
+        assertFalse(sanitized.contains("secret-cookie"))
+        assertFalse(sanitized.contains("123456"))
+        assertTrue(sanitized.contains("[REDACTED]"))
+    }
+
     private fun diagnosticEvent(fields: Map<DiagnosticSensitiveField, String>) = DiagnosticEvent(
         metadata = DiagnosticEventMetadata(
             level = DiagnosticLevel.Error,

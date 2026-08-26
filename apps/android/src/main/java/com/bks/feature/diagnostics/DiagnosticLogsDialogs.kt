@@ -1,19 +1,10 @@
 package com.bks.feature.diagnostics
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
 import com.bks.ui.components.Button
 import com.bks.ui.components.TextButton
 
@@ -27,29 +18,13 @@ internal fun EnableDiagnosticsConfirmationDialog(
         title = { Text("开启敏感诊断日志？") },
         text = {
             Text(
-                "将记录应用故障事件和完整异常。自动记账读取的页面文字不会写入诊断日志。" +
-                    "日志会长期保留，最多占用 10 MB，超过上限才删除最旧分段；设备内加密且不会上传。" +
-                    "你可以随时关闭或清空。导出文件使用口令加密，但分享后仍有泄露风险。截图本身不会保存，认证秘密始终脱敏。"
+                "将以明文记录应用故障、自动记账触发事件、节点数和支付宝页面文字。" +
+                    "日志仅保存在本机应用目录，长期保留且最多占用 10 MB，超过上限才删除最旧分段，不会上传。" +
+                    "认证秘密会在写入前清除，诊断页面禁止系统截图。导出的 UTF-8 .log 也是明文，需自行保管或删除。"
             )
         },
         confirmButton = {
             Button(onClick = onConfirm) { Text("理解并开启") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
-}
-
-@Composable
-internal fun RevealSensitiveConfirmationDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("显示敏感交易内容？") },
-        text = { Text("仅本次页面会话显示；离开页面或应用进入后台后会立即重新遮罩，并禁止系统截图。") },
-        confirmButton = {
-            Button(onClick = onConfirm) { Text("显示") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
@@ -63,63 +38,11 @@ internal fun ClearDiagnosticsConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("确认清空诊断日志？") },
-        text = { Text("将删除全部日志分段和设备密钥，无法恢复；记录开关状态保持不变。") },
+        text = { Text("将删除全部新旧诊断日志分段，无法恢复；记录开关状态保持不变。") },
         confirmButton = {
             Button(onClick = onConfirm) { Text("确认清空") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
-}
-
-@Composable
-internal fun DiagnosticExportDialog(
-    exporting: Boolean,
-    onDismiss: () -> Unit,
-    onExport: (CharArray) -> Unit
-) {
-    var passphrase by remember { mutableStateOf("") }
-    var confirmation by remember { mutableStateOf("") }
-    val valid = passphrase.length >= MIN_EXPORT_PASSPHRASE_LENGTH && passphrase == confirmation
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("口令加密导出") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("口令至少 8 位，不会被保存。忘记口令将无法解密导出文件。")
-                OutlinedTextField(
-                    value = passphrase,
-                    onValueChange = { passphrase = it },
-                    label = { Text("导出口令") },
-                    enabled = !exporting,
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.testTag("diagnostic-export-passphrase")
-                )
-                OutlinedTextField(
-                    value = confirmation,
-                    onValueChange = { confirmation = it },
-                    label = { Text("再次输入口令") },
-                    enabled = !exporting,
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.testTag("diagnostic-export-confirmation")
-                )
-                if (exporting) Text("正在读取并加密日志，请稍候。")
-            }
-        },
-        confirmButton = {
-            Button(
-                enabled = valid && !exporting,
-                onClick = { onExport(passphrase.toCharArray()) },
-                modifier = Modifier.testTag("diagnostic-export-confirm")
-            ) { Text(if (exporting) "正在导出…" else "导出") }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("diagnostic-export-cancel")
-            ) { Text(if (exporting) "取消导出" else "取消") }
-        }
     )
 }
 

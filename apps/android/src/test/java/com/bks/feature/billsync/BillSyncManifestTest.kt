@@ -24,7 +24,13 @@ class BillSyncManifestTest {
         assertTrue(manifest.contains("com.ven.assists.ui.ClipboardActivity"))
         assertFalse(service.contains("packageNames"))
         assertFalse(service.contains("canTakeScreenshot"))
-        assertTrue(service.contains("android:accessibilityEventTypes=\"typeAllMask\""))
+        assertTrue(
+            service.contains(
+                "android:accessibilityEventTypes=\"typeWindowStateChanged|" +
+                    "typeWindowContentChanged|typeWindowsChanged\""
+            )
+        )
+        assertFalse(service.contains("typeAllMask"))
         assertTrue(service.contains("flagRequestEnhancedWebAccessibility"))
         assertTrue(build.contains("io.github.ven-coder:assists-base:3.5.5"))
         assertFalse(build.contains("mlkit.text.recognition"))

@@ -38,8 +38,8 @@ internal object BillSyncCaptureLog {
         pageText(pageText)
     }
 
-    fun processed(recognized: Boolean, createdEntries: Int) = debug {
-        "processed recognized=$recognized created=$createdEntries"
+    fun processed(recognized: Boolean, insertedCount: Int) = debug {
+        "processed recognized=$recognized inserted=$insertedCount"
     }
 
     fun failed(packageName: String?, windowId: Int, error: Throwable) {

@@ -8,14 +8,12 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -41,7 +39,7 @@ class DiagnosticLogsScreenTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun sensitivePayloadIsMaskedUntilConfirmedAndCanBeMaskedAgain() {
+    fun plaintextPayloadIsDisplayedWithoutRevealConfirmation() {
         val repository = FakeDiagnosticRepository(initialEnabled = true)
         composeRule.setContent {
             DiagnosticLogsScreen(
@@ -54,20 +52,11 @@ class DiagnosticLogsScreenTest {
         val eventList = composeRule.onNodeWithTag("diagnostic-event-list")
         eventList.performScrollToIndex(EVENT_ITEM_INDEX)
         composeRule.onNodeWithText("application_failure", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("敏感内容：••••••").assertIsDisplayed()
-        composeRule.onNodeWithText("测试商户秘密").assertDoesNotExist()
+        composeRule.onNodeWithText("测试异常秘密", substring = true).assertIsDisplayed()
 
         eventList.performScrollToIndex(ACTIONS_ITEM_INDEX)
-        composeRule.onNodeWithText("显示敏感内容").performScrollTo().performClick()
-        composeRule.onNodeWithText("显示").performClick()
-
-        eventList.performScrollToIndex(EVENT_ITEM_INDEX)
-        composeRule.onNodeWithText("ExceptionDetails: 测试异常秘密").assertIsDisplayed()
-        eventList.performScrollToIndex(ACTIONS_ITEM_INDEX)
-        composeRule.onNodeWithText("遮罩内容").performScrollTo().performClick()
-        eventList.performScrollToIndex(EVENT_ITEM_INDEX)
-        composeRule.onNodeWithText("测试异常秘密", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithText("敏感内容：••••••").assertIsDisplayed()
+        composeRule.onNodeWithText("显示敏感内容").assertDoesNotExist()
+        composeRule.onNodeWithText("遮罩内容").assertDoesNotExist()
     }
 
     @Test
@@ -91,7 +80,7 @@ class DiagnosticLogsScreenTest {
     }
 
     @Test
-    fun backgroundingRemasksSensitivePayload() {
+    fun backgroundingKeepsPlaintextVisibleAfterReturning() {
         val repository = FakeDiagnosticRepository(initialEnabled = true)
         composeRule.setContent {
             DiagnosticLogsScreen(
@@ -101,23 +90,14 @@ class DiagnosticLogsScreenTest {
             )
         }
         val eventList = composeRule.onNodeWithTag("diagnostic-event-list")
-        eventList.performScrollToIndex(ACTIONS_ITEM_INDEX)
-        composeRule.onNodeWithText("显示敏感内容").performScrollTo().performClick()
-        composeRule.onNodeWithText("显示").performClick()
         eventList.performScrollToIndex(EVENT_ITEM_INDEX)
-        composeRule.onNodeWithText("ExceptionDetails: 测试异常秘密").assertIsDisplayed()
+        composeRule.onNodeWithText("测试异常秘密", substring = true).assertIsDisplayed()
 
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         
-        composeRule.waitUntil(timeoutMillis = 3_000L) {
-            composeRule.onAllNodesWithText("测试异常秘密", substring = true)
-                .fetchSemanticsNodes()
-                .isEmpty()
-        }
-
         eventList.performScrollToIndex(EVENT_ITEM_INDEX)
-        composeRule.onNodeWithText("敏感内容：••••••").assertIsDisplayed()
+        composeRule.onNodeWithText("测试异常秘密", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -153,7 +133,7 @@ class DiagnosticLogsScreenTest {
     }
 
     @Test
-    fun exportShowsProgressAndCanBeCancelled() {
+    fun exportShowsProgressAndPreventsDuplicateStart() {
         val repository = FakeDiagnosticRepository(initialEnabled = true).apply {
             blockExport = true
         }
@@ -167,14 +147,12 @@ class DiagnosticLogsScreenTest {
 
         startExport(repository)
 
-        composeRule.onNodeWithTag("diagnostic-export-confirm").assertIsNotEnabled()
+        composeRule.onNodeWithTag("diagnostic-export").assertIsNotEnabled()
         composeRule.onNodeWithText("正在导出…").assertIsDisplayed()
-        composeRule.onNodeWithTag("diagnostic-export-cancel").performClick()
-        composeRule.onNodeWithText("导出已取消").assertIsDisplayed()
     }
 
     @Test
-    fun backgroundingCancelsExportAndClearsPassphraseFields() {
+    fun backgroundingCancelsExportAndAllowsFreshDirectExport() {
         val repository = FakeDiagnosticRepository(initialEnabled = true).apply {
             blockExport = true
         }
@@ -182,7 +160,7 @@ class DiagnosticLogsScreenTest {
             DiagnosticLogsScreen(
                 isDebugBuild = true,
                 onBack = {},
-                overrides = diagnosticScreenOverrides(repository)
+                overrides = diagnosticScreenOverrides(repository) { "fresh-diagnostics.log" }
             )
         }
         startExport(repository)
@@ -190,20 +168,10 @@ class DiagnosticLogsScreenTest {
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
 
-        composeRule.onNodeWithTag("diagnostic-export-passphrase").assertDoesNotExist()
         composeRule.onNodeWithText("导出已取消").assertDoesNotExist()
-        composeRule.onNodeWithText("加密导出").performScrollTo().performClick()
-        assertEquals(
-            "",
-            composeRule.onNodeWithTag("diagnostic-export-passphrase")
-                .fetchSemanticsNode().config[SemanticsProperties.EditableText].text
-        )
-        assertEquals(
-            "",
-            composeRule.onNodeWithTag("diagnostic-export-confirmation")
-                .fetchSemanticsNode().config[SemanticsProperties.EditableText].text
-        )
-        composeRule.onNodeWithTag("diagnostic-export-confirm").assertIsNotEnabled()
+        repository.blockExport = false
+        startExport(repository, expectedExportCalls = 2)
+        composeRule.onNodeWithText("导出完成").assertIsDisplayed()
     }
 
     @Test
@@ -242,8 +210,8 @@ class DiagnosticLogsScreenTest {
 
         startExport(repository, expectedExportCalls = 1)
         composeRule.waitUntil(timeoutMillis = 5_000L) { firstWriterStarted.isCompleted }
-        composeRule.onNodeWithTag("diagnostic-export-cancel").performClick()
-        composeRule.onNodeWithText("确定").performClick()
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
 
         startExport(repository, expectedExportCalls = 2)
         composeRule.waitUntil(timeoutMillis = 5_000L) { secondWriterStarted.isCompleted }
@@ -262,7 +230,7 @@ class DiagnosticLogsScreenTest {
             DiagnosticLogsScreen(
                 isDebugBuild = true,
                 onBack = {},
-                overrides = diagnosticScreenOverrides(repository) { "test-diagnostics.aadiag" }
+                overrides = diagnosticScreenOverrides(repository) { "test-diagnostics.log" }
             )
         }
 
@@ -274,7 +242,7 @@ class DiagnosticLogsScreenTest {
     }
 
     @Test
-    fun failedExportKeepsResultVisibleAfterPassphraseDialogCloses() {
+    fun failedDirectExportKeepsResultVisible() {
         val repository = FakeDiagnosticRepository(initialEnabled = true).apply {
             failExport = true
         }
@@ -297,10 +265,7 @@ class DiagnosticLogsScreenTest {
     private fun startExport(repository: FakeDiagnosticRepository, expectedExportCalls: Int = 1) {
         val eventList = composeRule.onNodeWithTag("diagnostic-event-list")
         eventList.performScrollToIndex(ACTIONS_ITEM_INDEX)
-        composeRule.onNodeWithText("加密导出").performClick()
-        composeRule.onNodeWithTag("diagnostic-export-passphrase").performTextInput("12345678")
-        composeRule.onNodeWithTag("diagnostic-export-confirmation").performTextInput("12345678")
-        composeRule.onNodeWithTag("diagnostic-export-confirm").performClick()
+        composeRule.onNodeWithTag("diagnostic-export").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000L) {
             repository.exportCallCount == expectedExportCalls
         }
@@ -377,10 +342,10 @@ private class FakeDiagnosticRepository(initialEnabled: Boolean) : DiagnosticLogR
         mutableStats.value = DiagnosticLogStats()
     }
 
-    override suspend fun exportEncrypted(passphrase: CharArray): String {
+    override suspend fun exportPlainText(): String {
         exportCallCount += 1
         if (blockExport) awaitCancellation()
         if (failExport) error("export failed")
-        return "encrypted"
+        return "plaintext"
     }
 }

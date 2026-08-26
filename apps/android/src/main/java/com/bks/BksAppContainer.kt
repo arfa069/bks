@@ -119,7 +119,8 @@ internal class BksAppContainer(context: Context) {
                 recognize = processor::recognize,
                 persist = processor::persist
             ),
-            applicationScope = billSyncCoordinatorScope
+            applicationScope = billSyncCoordinatorScope,
+            diagnosticRecorder = diagnosticLogs
         )
     }
 
