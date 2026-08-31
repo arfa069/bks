@@ -1,4 +1,4 @@
-# 架构设计草案 (Architecture Draft)
+# 当前架构设计 (Current Architecture)
 
 ## 1. 系统形态
 
@@ -30,27 +30,45 @@ flowchart LR
   Backend --> AI["云端 AI 服务商"]
 ```
 
-## 2. Android 应用模块划分
+## 2. Android 全局 MVVM 结构
 
-推荐模块设计：
-- `app`: Android 入口、导航路由与依赖注入组装。
-- `core:model`: 共享领域模型。
-- `core:database`: Room 实体、DAO 与数据库迁移。
-- `core:security`: 本地加密辅助工具与备份加解密。
-- `core:permissions`: 权限状态与设备设置引导。
-- `feature:review`: 待确认队列及待确认条目详情。
-- `feature:ledger`: 账本列表、搜索、筛选与条目详情。
-- `feature:reports`: 月度概览、分类占比与分类趋势。
-- `feature:billsync`: Assists 无障碍事件接入、受限节点遍历、通用页面解析、去重及待确认交接。
-- `feature:categorization`: 本地分类规则及 AI 分类客户端。
-- `feature:account`: 用户名/邮箱/手机号与微信登录注册、公开账号 UUID、账号 Profile、身份绑定/换绑与合并、Session、本地模式及账号注销。
-- `feature:settings`: 数据与备份及相关设置。
-- `feature:sync`: 账户同步协调器、HTTPS 客户端、Room outbox、远端应用器与 WorkManager 调度。
-- `feature:diagnostics`: 敏感事件契约、认证秘密脱敏、UTF-8 明文 `.log` 分段、诊断 UI、清除及无口令明文导出。
+Android 保持单一 Gradle 模块，生产源码在 `com.bks` 下严格使用三个顶层包；业务名称位于层级之后：
 
-确保捕获解析与去重逻辑脱离 Android UI 即可进行单元测试。
+```text
+com/bks/
+├── model/
+│   ├── domain/{account,beta,billsync,categorization,compliance,diagnostics,ledger,review,settings,sync}/
+│   ├── application/{account,billsync,review,sync}/
+│   ├── data/{local,remote,security}/
+│   └── platform/{app,account,billsync,sync}/
+├── viewmodel/{account,categorization,diagnostics,ledger,monitoring,review,settings,sync}/
+└── view/{app,navigation,common,account,beta,categorization,compliance,diagnostics,home,ledger,monitoring,profile,review,settings}/
+```
 
-### 数据层与状态解耦架构（2026-07-22 重构）
+依赖方向固定为：
+
+```text
+View → ViewModel → Model Domain
+                       ↑
+       Model Data / Application / Platform
+```
+
+- `model/domain` 是纯 Kotlin 业务边界，保存领域模型、规则、命令、结果与 Repository/Gateway 接口；不依赖 Android、Room、Compose、ViewModel 或 Shared API wire DTO。
+- `model/application` 保存 Session、Cloud Settings、Bill Sync、Review 与 Ledger Sync 协调器，只面向领域接口。
+- `model/data` 保存 Room Entity/DAO/Database、Repository/HTTP 实现、wire mapper、备份与加密；Entity/DTO 必须映射为领域类型后才能向上返回。
+- `model/platform` 保存 `BksApplication`、`BksAppContainer`、无障碍 Service、WorkManager Worker 与微信 SDK adapter。容器只向 UI composition 暴露领域接口、application coordinator 和必要 platform gateway。
+- `viewmodel` 保存 AndroidX ViewModel、UiState/UiModel、UI command/result、reducer 与 Domain → UI mapper；不依赖 Compose、Context/Intent/URI、Room、具体 data 实现或 wire DTO。
+- `view` 保存 Activity、Compose、Route、Navigation、Dialog 和界面侧平台操作；普通 Screen 只接收 UiState、actions 与必要平台回调，不访问 Database、DAO、具体 Repository 或 Container。
+
+当前 Android 组件 FQCN 为 `com.bks.view.app.MainActivity`、`com.bks.model.platform.app.BksApplication`、`com.bks.model.platform.billsync.BillSyncAccessibilityService` 和 `com.bks.model.platform.sync.LedgerSyncWorker`。各构建变体的 `${applicationId}.wxapi.WXEntryActivity` 是微信 SDK 要求的唯一包结构例外。
+
+Room 数据库仍为 `bks.db`、schema 版本仍为 12；schema 历史位于 `apps/android/schemas/com.bks.model.data.local.database.BksDatabase/`。同步使用 v2 WorkManager 唯一名称，Runtime 启动时取消旧名称后再按 Session/eligibility gate 调度。
+
+`MvvmPackageArchitectureTest` 由 Gradle 注入主源码与测试源码根目录，检查路径/package 一致、三顶层约束、依赖方向、框架类型归属和旧包零残留。`src/test` 镜像被测生产层，测试替身只存在于测试源码。
+
+### 历史演进记录（目录名称已失效）
+
+以下条目记录历次重构决策与当时验证结果；其中旧 `feature`、`data/local` 和根包路径仅是历史名称，现行目录与依赖规则以上述结构为准。
 - **领域仓储 (Domain Repositories)**：数据持久化划分为严格的领域接口：
   - `LedgerBookRepository`: 账本的增删改查 (CRUD) 及活动选择。
   - `LedgerEntryRepository`: 活动与软删除条目的生命周期管理及保留期清理。
@@ -291,7 +309,7 @@ Session 与传输边界：
 
 ## 9. 权限架构 (Permission Architecture)
 
-自动记账页面分别追踪用户意图开关、无障碍授权状态和服务实时连接状态。权限或连接断开不反写用户开关。
+自动记账页面分别追踪用户意图开关、无障碍授权状态、服务实时连接状态和公开 API 可读取的系统电池优化豁免状态。Activity 恢复时刷新系统状态；权限或连接断开不反写用户开关。厂商自启动没有可靠公开查询 API，因此页面只提供诚实的未知状态和受限系统设置跳转；不使用隐藏 API，也不直接请求电池优化白名单。
 
 重要边界：
 - 现行判断条件统一记录在[通用交易识别规则](./PAYMENT-RECOGNITION-RULES.md)。
@@ -308,8 +326,8 @@ Session 与传输边界：
 - `feature:billsync` 将同一包名/窗口在 500 ms 稳定窗口内收到的无障碍事件合并为一次实际采集批次，并在采集或处理得到最终结果后只写一条诊断事件。事件包含秒级时间、各事件类型次数、实际遍历节点数和新增成功/未新增/失败原因。
 - 支付宝实际采集批次携带现有 512 节点、24 层、16 KiB 采集边界内的完整可读正文；非支付宝批次的正文为空，只保存元数据。两类事件均在写入前清除认证秘密。
 - 每个事件以一行 JSON 编码写入 `noBackupFilesDir/diagnostics` 下的 UTF-8 明文 `.log`。每段最多 1 MiB，现行分段总量最多 10 MiB；仅在超过总上限时滚动删除最旧分段。
-- 诊断页加载最新 1000 条并直接显示与明文导出一致的单行内容；从进入到离开全程启用 `FLAG_SECURE`，不再使用内容遮罩或二次显示确认。
-- Debug 默认开启。Release 默认关闭并要求知情用户确认。关闭开关保留历史；清空会删除现行 `.log`、遗留 `.aadlog` 与遗留诊断密钥。旧 `.aadlog` 不读取、不迁移。
+- Debug 在 Profile 总览中组装独立诊断入口和页面，入口紧随“合规与隐私”；页面加载最新 1000 条并直接显示与明文导出一致的单行内容，从进入到离开全程启用 `FLAG_SECURE`，不再使用内容遮罩或二次显示确认。
+- Debug 默认开启。Release 默认关闭，并在 Profile 入口过滤与诊断路由两层都禁止显示按钮或页面。关闭开关保留历史；清空会删除现行 `.log`、遗留 `.aadlog` 与遗留诊断密钥。旧 `.aadlog` 不读取、不迁移。
 - 导出无需口令，在 Downloads 生成 UTF-8 明文 `.log`，且不会随本机数据删除。账本 V5 备份仍独立使用 PBKDF2-HMAC-SHA256/AES-256-GCM 加密，机制前缀保持 `AUTO_ACCOUNTING_BACKUP_V5:`。
 - 生产 Logcat 仅接收元数据、稳定原因、计数及相关性 ID。页面正文及完整异常消息绝不出现在生产 Logcat 中。
 

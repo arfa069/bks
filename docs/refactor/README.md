@@ -1,5 +1,7 @@
 # Android 系统性架构重构执行计划
 
+> 本目录是已完成重构阶段的历史快照，保留当时路径和测试记录；现行 Android 目录与依赖规则以 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) 为准。
+
 ## 重构总体目标
 
 在不改变现有业务行为和外部数据契约的前提下，渐进拆除由 `BksAppRuntimeState`、`BksAppActions`、`BksAppEffects`、`BksAppPresentation` 与 `BksRouteContext` 共同形成的 Application-level God Layer，收敛为：

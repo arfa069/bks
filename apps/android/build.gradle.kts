@@ -205,6 +205,14 @@ tasks.withType<Test>().configureEach {
     // Robolectric specific optimizations
     systemProperty("robolectric.looperMode", "PAUSED")
     systemProperty("robolectric.graphicsMode", "NATIVE") // or "LEGACY" if NATIVE is too slow
+    systemProperty(
+        "bks.android.mainSourceRoot",
+        layout.projectDirectory.dir("src/main/java").asFile.absolutePath
+    )
+    systemProperty(
+        "bks.android.testSourceRoot",
+        layout.projectDirectory.dir("src/test/java").asFile.absolutePath
+    )
 }
 
 tasks.register<JacocoReport>("jacocoDebugTestReport") {

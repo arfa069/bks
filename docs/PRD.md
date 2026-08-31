@@ -27,7 +27,7 @@ The first delivery target is a feature-complete internal beta, not a small MVP. 
 - AI categorization uploads minimal fields by default; users may opt into enhanced context.
 - AI categorization logs are retained during internal beta and must be revisited before public store submission.
 - Transaction, bill, merchant, amount, category, and funding-account data are treated as sensitive personal information.
-- Diagnostic logs are a separate user-controlled, on-device troubleshooting capability: Debug defaults on, Release defaults off with informed opt-in, on-device segments and exports are UTF-8 plaintext `.log` files, Alipay capture batches retain complete collected text, authentication secrets are always redacted, and no diagnostic data is uploaded.
+- Diagnostic logs are a separate Debug-only user interface for on-device troubleshooting: Debug defaults on, while Release defaults off and exposes neither the entry nor the page. On-device segments and exports are UTF-8 plaintext `.log` files, Alipay capture batches retain complete collected text, authentication secrets are always redacted, and no diagnostic data is uploaded.
 
 ## 4. Users And Jobs
 
@@ -43,7 +43,7 @@ Core jobs:
 - Build categorization rules from repeated corrections.
 - Create and switch local ledger books, manage shared funding accounts, and view the current ledger book and reports.
 - Export CSV and create encrypted backups.
-- Control, inspect, clear, and directly export sensitive diagnostic logs as plaintext `.log` files when troubleshooting is needed.
+- In Debug builds, control, inspect, clear, and directly export sensitive diagnostic logs as plaintext `.log` files when troubleshooting is needed.
 - Manage permissions, account, AI consent, and privacy controls.
 
 ## 5. Functional Scope
@@ -265,7 +265,7 @@ Backend limits:
 
 ### 5.9 Sensitive Diagnostic Logs
 
-- “合规与隐私”在 Debug 和 Release 都提供独立的“诊断日志”入口。Debug 默认开启；Release 默认关闭，并在首次开启前说明支付宝正文留存、排障用途、10 MiB 上限、长期保留、设备内明文、关闭/清空方式和明文导出风险。
+- Debug 构建在“我的”总览中直接提供独立的“诊断日志”入口，位置紧随“合规与隐私”，并默认开启记录；Release 默认关闭且始终不显示该入口或页面。
 - 每个自动记账实际采集批次只记录一条事件，包含秒级时间、触发的无障碍事件及各自次数、实际遍历节点数和最终结果/原因。支付宝批次额外保存现有采集上限内的完整正文；非支付宝批次只保存元数据。应用异常仍可记录完整异常信息。
 - 密码、验证码、Token、Cookie、Authorization、API Key、备份口令、签名私钥、微信 code/票据、OpenID 和 UnionID 等认证秘密或身份标识始终在写入前脱敏；账号流程不写入昵称、头像 URL 或 Provider 正文。
 - 日志以 UTF-8 明文 JSON 行写入应用私有 `noBackupFilesDir` 下的 `.log` 分段，不上传、不进入账本备份或系统备份。每条事件最多 256 KiB，每段最多 1 MiB，现行分段总量最多 10 MiB；超过上限才轮转最旧分段。
@@ -299,16 +299,18 @@ Profile top:
 
 Profile overview:
 - Shows only a one-line status summary and navigation affordance for each entry. It contains no switches, system-permission buttons, backup passphrase inputs, or other detailed controls.
-- Lists entries for Account Management, Automatic Bookkeeping, Categorization Rules, Data and Backup, and Compliance and Privacy.
+- Lists entries for Account Management, Automatic Bookkeeping, Categorization Rules, Data and Backup, and Compliance and Privacy. Debug builds additionally show Diagnostic Logs immediately after Compliance and Privacy; Release builds omit it.
 - Each entry opens a full in-app secondary page with a title and back action. Destination and secondary pages hide bottom navigation; back from a Profile secondary page returns to the Profile overview, and back from the Profile overview returns Home.
 
 Profile entries:
 - Account Management: local-mode sign-in/register entry; or, when signed in, masked phone number, validating/verified/offline/deletion-pending connection state, server deletion deadline, sign out without deleting local ledger books, and a separately protected account-deletion area. Do not add registered-device UI until its real data and actions are available.
 - Account flow back hierarchy: Recovery returns to Login; Login, Registration, Local Mode Explanation, and Compliance Materials return to the account landing page; an account landing page opened from Account Management returns to Account Management. System back and visible back actions must be equivalent.
+- Automatic Bookkeeping: user-intent switch, accessibility authorization and live service state, self-start guidance, and a system battery-optimization status/settings shortcut. Self-start is not reported as enabled because Android exposes no reliable cross-vendor query API; the app does not directly request a battery-optimization exemption.
 - Categorization Rules: local rule management plus the separately explained cloud-AI consent and enhanced-context settings.
 - Data and Backup: normal actions for current-ledger CSV export and all-ledger encrypted-backup export/import, followed by a visually isolated destructive Local Data Deletion area that retains its backup reminder and typed confirmation.
-- Compliance and Privacy: entry points for the privacy policy, personal-information collection list, third-party-service list, permission explanations, and the separate Diagnostic Logs control. Each document opens separately and is available in local mode; Diagnostic Logs is visible in both builds and follows section 5.9.
-- Internal-beta readiness, device matrices, retention checks, and quality metrics are not user settings. They appear only in Debug-build Developer Tools and are absent from release builds and the Profile overview. They must not be conflated with the user-controlled Diagnostic Logs entry.
+- Compliance and Privacy: entry points for the privacy policy, personal-information collection list, third-party-service list, and permission explanations. Each document opens separately and is available in local mode.
+- Diagnostic Logs: a separate Debug-only Profile entry immediately below Compliance and Privacy; it opens the existing full diagnostic page and follows section 5.9. Release builds expose neither the entry nor the page.
+- Internal-beta readiness, device matrices, retention checks, and quality metrics are not user settings. They appear only in Debug-build Developer Tools and are absent from release builds and the Profile overview. They remain separate from the Debug-only Diagnostic Logs entry.
 
 ## 7. Visual And Copy Direction
 

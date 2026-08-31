@@ -27,7 +27,7 @@ internal class BenchmarkApp(private val device: UiDevice) {
     fun resetAndSeed(entryCount: Int = SMALL_DATASET_ENTRY_COUNT) {
         check(device.executeShellCommand("pm clear $TARGET_PACKAGE").contains("Success"))
         val launchResult = device.executeShellCommand(
-            "am start -W -n $TARGET_PACKAGE/com.bks.MainActivity"
+            "am start -W -n $TARGET_PACKAGE/com.bks.view.app.MainActivity"
         )
         check(launchResult.contains("Status: ok")) { launchResult }
         val result = InstrumentationRegistry.getInstrumentation().context.contentResolver.call(

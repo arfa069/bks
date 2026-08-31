@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.WRITE_CONTACTS" tools:node="remove" />
 
     <application
-        android:name=".BksApplication"
+        android:name="com.bks.model.platform.app.BksApplication"
         android:allowBackup="false"
         android:usesCleartextTraffic="${allowHttpLedgerSync}"
         android:icon="@mipmap/ic_launcher"
@@ -18,12 +18,16 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Bks">
         <activity
-            android:name=".MainActivity"
+            android:name="com.bks.view.app.MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.bks.action.WECHAT_AUTH_CALLBACK" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         <activity
@@ -47,7 +51,7 @@
             android:name="com.ven.assists.ui.ClipboardActivity"
             tools:node="remove" />
         <service
-            android:name=".feature.billsync.BillSyncAccessibilityService"
+            android:name="com.bks.model.platform.billsync.BillSyncAccessibilityService"
             android:exported="false"
             android:label="@string/bill_sync_accessibility_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

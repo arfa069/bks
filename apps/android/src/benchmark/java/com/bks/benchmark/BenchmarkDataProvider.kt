@@ -8,23 +8,24 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.os.Trace
 import androidx.room.withTransaction
-import com.bks.data.local.BksDatabaseProvider
-import com.bks.data.local.EntryOrigin
-import com.bks.data.local.FlowDirection
-import com.bks.data.local.LedgerEntryEntity
-import com.bks.data.local.LocalLedgerRepository
-import com.bks.data.local.PaymentSource
-import com.bks.data.local.TransactionKind
-import com.bks.feature.account.AccountCredentials
-import com.bks.feature.account.AccountHttpObserver
-import com.bks.feature.account.AccountHttpStage
-import com.bks.feature.account.HttpUrlConnectionAccountTransport
-import com.bks.feature.account.LocalModeSessionStore
-import com.bks.feature.account.SecureAccountSessionStore
-import com.bks.feature.ledger.toLedgerUiEntry
-import com.bks.feature.settings.BackupLedgerEntryUiModel
-import com.bks.feature.settings.LocalDataBackupRepository
-import com.bks.feature.settings.exportLedgerCsv
+import com.bks.model.data.local.account.LocalModeSessionStore
+import com.bks.model.data.local.account.SecureAccountSessionStore
+import com.bks.model.data.local.backup.LocalDataBackupRepository
+import com.bks.model.data.local.database.BksDatabaseProvider
+import com.bks.model.data.local.database.LedgerEntryEntity
+import com.bks.model.data.local.ledger.toDomain
+import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.data.remote.account.AccountHttpObserver
+import com.bks.model.data.remote.account.AccountHttpStage
+import com.bks.model.data.remote.account.HttpUrlConnectionAccountTransport
+import com.bks.model.domain.account.AccountCredentials
+import com.bks.model.domain.ledger.EntryOrigin
+import com.bks.model.domain.ledger.FlowDirection
+import com.bks.model.domain.ledger.PaymentSource
+import com.bks.model.domain.ledger.TransactionKind
+import com.bks.viewmodel.ledger.toLedgerUiEntry
+import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
+import com.bks.viewmodel.settings.exportLedgerCsv
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -113,7 +114,7 @@ class BenchmarkDataProvider : ContentProvider() {
                 withContext(Dispatchers.Default) {
                     exportLedgerCsv(
                         entries.map { entity ->
-                            val entry = entity.toLedgerUiEntry()
+                            val entry = entity.toDomain().toLedgerUiEntry()
                             BackupLedgerEntryUiModel(
                                 id = entry.id,
                                 transactionTimeText = entry.transactionTimeText,

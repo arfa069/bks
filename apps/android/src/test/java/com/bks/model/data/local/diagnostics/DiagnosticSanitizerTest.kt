@@ -1,0 +1,149 @@
+package com.bks.model.data.local.diagnostics
+
+import com.bks.model.data.local.diagnostics.DiagnosticEventCodec
+import com.bks.model.data.local.diagnostics.sanitizeDiagnosticEvent
+import com.bks.model.domain.diagnostics.DiagnosticComponent
+import com.bks.model.domain.diagnostics.DiagnosticEvent
+import com.bks.model.domain.diagnostics.DiagnosticEventMetadata
+import com.bks.model.domain.diagnostics.DiagnosticLevel
+import com.bks.model.domain.diagnostics.DiagnosticSensitiveField
+import com.bks.model.domain.diagnostics.DiagnosticSensitivePayload
+import com.bks.model.domain.diagnostics.toDiagnosticExceptionDetails
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DiagnosticSanitizerTest {
+    @Test
+    fun authenticationSecretsAreRedactedButOrdinaryContextRemains() {
+        val event = diagnosticEvent(
+            mapOf(
+                DiagnosticSensitiveField.ExceptionDetails to
+                    "支付成功 token=secret-token Authorization: Basic basic-secret\n" +
+                        "Cookie: sid=hidden; auth=second-cookie-secret\n" +
+                        "ordinary-context ORDER-20260717\n" +
+                        "IllegalStateException: API Key=top-secret\n" +
+                        "passphrase=correct horse battery staple; next=value\n" +
+                        "备份口令：中文秘密 仍是口令；验证码：123456\n" +
+                        "-----BEGIN ENCRYPTED PRIVATE KEY-----\nprivate-key-secret\n" +
+                        "-----END ENCRYPTED PRIVATE KEY-----\nstack"
+            )
+        ).let {
+            it.copy(
+                metadata = it.metadata.copy(
+                    reason = "Authorization: Basic metadata-secret",
+                    attributes = mapOf("triggerPkg" to "token=attribute-secret")
+                )
+            )
+        }
+
+        val sanitized = sanitizeDiagnosticEvent(event)
+        val all = sanitized.sensitivePayload.fields.values.joinToString("\n")
+
+        assertFalse(all.contains("secret-token"))
+        assertFalse(all.contains("basic-secret"))
+        assertFalse(all.contains("second-cookie-secret"))
+        assertFalse(all.contains("top-secret"))
+        assertFalse(all.contains("correct horse battery staple"))
+        assertFalse(all.contains("中文秘密"))
+        assertFalse(all.contains("123456"))
+        assertFalse(all.contains("private-key-secret"))
+        assertFalse(sanitized.metadata.reason.orEmpty().contains("metadata-secret"))
+        assertFalse(sanitized.metadata.attributes.values.any { it.contains("attribute-secret") })
+        assertTrue(all.contains("[REDACTED]"))
+        assertTrue(all.contains("ordinary-context ORDER-20260717"))
+    }
+
+    @Test
+    fun wechatOAuthSecretsAndIdentityIdentifiersAreRedacted() {
+        val event = diagnosticEvent(
+            mapOf(
+                DiagnosticSensitiveField.ExceptionDetails to
+                    "wechat_code=wx-code-secret wechat-ticket: ticket-secret " +
+                        "OpenID=openid-secret Union_ID=unionid-secret " +
+                        "access_token=access-secret refresh-token=refresh-secret\n" +
+                        "{\"wechat_code\":\"json-code-secret\",\"openid\":\"json-openid-secret\"}"
+            )
+        )
+
+        val sanitized = sanitizeDiagnosticEvent(event)
+            .sensitivePayload.fields.getValue(DiagnosticSensitiveField.ExceptionDetails)
+
+        listOf(
+            "wx-code-secret",
+            "ticket-secret",
+            "openid-secret",
+            "unionid-secret",
+            "access-secret",
+            "refresh-secret",
+            "json-code-secret",
+            "json-openid-secret"
+        ).forEach { secret -> assertFalse(sanitized.contains(secret)) }
+        assertTrue(sanitized.contains("[REDACTED]"))
+    }
+
+    @Test
+    fun oversizedEventTruncatesLargestFieldsAndMarksThem() {
+        val event = diagnosticEvent(
+            mapOf(DiagnosticSensitiveField.ExceptionDetails to "异常上下文".repeat(60_000))
+        )
+
+        val sanitized = sanitizeDiagnosticEvent(event)
+
+        assertTrue(DiagnosticSensitiveField.ExceptionDetails in sanitized.truncatedFields)
+        assertTrue(DiagnosticEventCodec.encode(sanitized).toByteArray().size <= 256 * 1024)
+    }
+
+    @Test
+    fun exceptionDetailsIncludeCauseSuppressedAndStackBeforeRedaction() {
+        val cause = IllegalArgumentException("token=cause-secret")
+        val error = IllegalStateException("password=root-secret", cause).apply {
+            addSuppressed(IllegalStateException("Cookie: suppressed-secret"))
+        }
+
+        val sanitized = sanitizeDiagnosticEvent(
+            diagnosticEvent(
+                mapOf(
+                    DiagnosticSensitiveField.ExceptionDetails to
+                        error.toDiagnosticExceptionDetails()
+                )
+            )
+        ).sensitivePayload.fields.getValue(DiagnosticSensitiveField.ExceptionDetails)
+
+        assertTrue(sanitized.contains("Caused by"))
+        assertTrue(sanitized.contains("Suppressed"))
+        assertFalse(sanitized.contains("cause-secret"))
+        assertFalse(sanitized.contains("root-secret"))
+        assertFalse(sanitized.contains("suppressed-secret"))
+    }
+
+    @Test
+    fun pageTextKeepsTransactionPlaintextButRedactsAuthenticationSecrets() {
+        val sanitized = sanitizeDiagnosticEvent(
+            diagnosticEvent(
+                mapOf(
+                    DiagnosticSensitiveField.PageText to
+                        "支付成功\n￥10.90\n商户：测试店\nCookie: session=secret-cookie\n验证码 123456"
+                )
+            )
+        ).sensitivePayload.fields.getValue(DiagnosticSensitiveField.PageText)
+
+        assertTrue(sanitized.contains("支付成功"))
+        assertTrue(sanitized.contains("￥10.90"))
+        assertTrue(sanitized.contains("商户：测试店"))
+        assertFalse(sanitized.contains("secret-cookie"))
+        assertFalse(sanitized.contains("123456"))
+        assertTrue(sanitized.contains("[REDACTED]"))
+    }
+
+    private fun diagnosticEvent(fields: Map<DiagnosticSensitiveField, String>) = DiagnosticEvent(
+        metadata = DiagnosticEventMetadata(
+            level = DiagnosticLevel.Error,
+            component = DiagnosticComponent.Application,
+            event = "test_event",
+            traceId = "trace-test",
+            reason = "test"
+        ),
+        sensitivePayload = DiagnosticSensitivePayload(fields)
+    )
+}

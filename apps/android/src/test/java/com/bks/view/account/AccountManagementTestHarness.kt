@@ -1,0 +1,95 @@
+package com.bks.view.account
+
+import com.bks.model.domain.account.AccountDeletionState
+import com.bks.model.application.account.AccountSessionMutationResult
+import com.bks.model.domain.account.AccountCredentials
+import com.bks.model.domain.account.AccountRepository
+import com.bks.model.domain.account.AccountRuntimeState
+import com.bks.model.domain.account.AccountSession
+import com.bks.model.platform.account.WechatAuthCallback
+import com.bks.model.platform.account.WechatAuthGateway
+import com.bks.viewmodel.account.AccountManagementViewModel
+import android.content.Context
+import android.net.Uri
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+
+@Composable
+@Suppress("LongParameterList")
+internal fun TestAccountManagementScreen(
+    session: AccountSession,
+    runtimeState: AccountRuntimeState,
+    deletionState: AccountDeletionState,
+    accountRepository: AccountRepository,
+    onSignInOrRegister: () -> Unit,
+    onSessionVerified: (AccountCredentials) -> Unit,
+    onInvalidSession: () -> Unit,
+    persistSession: (AccountCredentials) -> Boolean = { true },
+    clearPersistedSession: () -> Boolean,
+    wechatAuthGateway: WechatAuthGateway? = null,
+    wechatAuthCallback: WechatAuthCallback? = null,
+    onWechatAuthCallbackConsumed: () -> Unit = {},
+    avatarCacheOverride: WechatAvatarCache? = null,
+    avatarDataReader: suspend (Context, Uri) -> String = { context, uri ->
+        context.readCompressedAvatarDataUrl(uri)
+    },
+    onSignedOut: () -> Unit,
+    onDeletionStateChange: (AccountDeletionState) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val avatarCache = avatarCacheOverride ?: rememberWechatAvatarCache()
+    val viewModel = remember(accountRepository, wechatAuthGateway, avatarCache) {
+        AccountManagementViewModel(
+            accountRepository = accountRepository,
+            commitManagementCredentials = { _, credentials ->
+                if (persistSession(credentials)) {
+                    onSessionVerified(credentials)
+                    avatarCache.prepareUrl(credentials.avatarUrl)
+                    AccountSessionMutationResult.Applied
+                } else {
+                    AccountSessionMutationResult.PersistenceFailed
+                }
+            },
+            commitVerifiedCredentials = { _, credentials ->
+                if (persistSession(credentials)) {
+                    onSessionVerified(credentials)
+                    avatarCache.prepareUrl(credentials.avatarUrl)
+                    AccountSessionMutationResult.Applied
+                } else {
+                    AccountSessionMutationResult.PersistenceFailed
+                }
+            },
+            invalidateSession = {
+                clearPersistedSession().also { cleared ->
+                    if (cleared) {
+                        avatarCache.clear()
+                        onSignedOut()
+                        onInvalidSession()
+                    }
+                }
+            },
+            updateDeletionState = { _, state ->
+                onDeletionStateChange(state)
+                AccountSessionMutationResult.Applied
+            },
+            wechatAuthGateway = wechatAuthGateway
+        )
+    }
+    AccountManagementScreen(
+        screenState = AccountManagementScreenState(session, runtimeState, deletionState),
+        dependencies = AccountManagementScreenDependencies(
+            viewModel = viewModel,
+            wechatAuthCallback = wechatAuthCallback,
+            onWechatAuthCallbackConsumed = onWechatAuthCallbackConsumed,
+            avatarCacheOverride = avatarCache,
+            avatarDataReader = avatarDataReader
+        ),
+        actions = AccountManagementScreenActions(
+            onSignInOrRegister = onSignInOrRegister,
+            onBack = onBack
+        ),
+        modifier = modifier
+    )
+}

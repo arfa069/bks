@@ -30,7 +30,7 @@ class Batch9EnvironmentValidationTest {
 
         device.executeShellCommand("am force-stop $TARGET_PACKAGE")
         val launchResult = device.executeShellCommand(
-            "am start -W -n $TARGET_PACKAGE/com.bks.MainActivity"
+            "am start -W -n $TARGET_PACKAGE/com.bks.view.app.MainActivity"
         )
         assertTrue(launchResult.contains("Status: ok"))
         assertTrue(device.wait(Until.hasObject(By.text("账本")), TIMEOUT_MILLIS))
@@ -84,7 +84,7 @@ class Batch9EnvironmentValidationTest {
     private fun resetTarget() {
         check(device.executeShellCommand("pm clear $TARGET_PACKAGE").contains("Success"))
         val launchResult = device.executeShellCommand(
-            "am start -W -n $TARGET_PACKAGE/com.bks.MainActivity"
+            "am start -W -n $TARGET_PACKAGE/com.bks.view.app.MainActivity"
         )
         check(launchResult.contains("Status: ok")) { launchResult }
     }

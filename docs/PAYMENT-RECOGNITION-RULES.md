@@ -47,9 +47,9 @@
 
 ## 5. 实现依据
 
-- 无障碍入口：[`BillSyncAccessibilityService.kt`](../apps/android/src/main/java/com/bks/feature/billsync/BillSyncAccessibilityService.kt)
-- 通用解析：[`BillPageParser.kt`](../apps/android/src/main/java/com/bks/feature/billsync/BillPageParser.kt)
-- 候选生成：[`BillSyncPipeline.kt`](../apps/android/src/main/java/com/bks/feature/billsync/BillSyncPipeline.kt)
-- 待确认写入：[`BillSyncCaptureProcessor.kt`](../apps/android/src/main/java/com/bks/feature/billsync/BillSyncCaptureProcessor.kt)
+- 无障碍入口：[`BillSyncAccessibilityService.kt`](../apps/android/src/main/java/com/bks/model/platform/billsync/BillSyncAccessibilityService.kt)
+- 通用解析：[`BillPageParser.kt`](../apps/android/src/main/java/com/bks/model/domain/billsync/BillPageParser.kt)
+- 候选生成：[`BillSyncPipeline.kt`](../apps/android/src/main/java/com/bks/model/domain/billsync/BillSyncPipeline.kt)
+- 待确认写入：[`BillSyncCaptureProcessor.kt`](../apps/android/src/main/java/com/bks/model/application/billsync/BillSyncCaptureProcessor.kt)
 
 历史 `PaymentSource.WECHAT`、`PaymentSource.ALIPAY`、通知捕获和账单同步枚举值仅用于读取旧记录，不代表当前识别入口。

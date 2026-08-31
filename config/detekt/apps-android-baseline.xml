@@ -23,7 +23,6 @@
     <ID>LongParameterList:BillSyncPipelineTest.kt$BillSyncPipelineTest$( id: String, transactionTimeText: String, title: String = "未知来源", amountMinor: Long = 3_590, sourceLabel: String = "支付宝", capturedAtEpochMillis: Long = NOW - 60_000 )</ID>
     <ID>LongParameterList:CategorizationRulesTest.kt$CategorizationRulesTest$( id: String = "rule-1", merchantContains: String = "", titleContains: String = "", sourceLabel: String = "", transactionKind: String = "", category: String, priority: Int = 0, enabled: Boolean = true, updatedAtEpochMillis: Long = 0 )</ID>
     <ID>LongParameterList:DataAndBackupScreen.kt$( ledgerEntries: List&lt;LedgerUiEntry&gt;, currentLedgerName: String = "默认账本", onExportEncryptedBackup: suspend (String) -&gt; String, onValidateEncryptedBackup: suspend (String, String) -&gt; Unit, onImportEncryptedBackup: suspend (String, String) -&gt; Unit, onDeleteLocalData: () -&gt; Unit, onBack: () -&gt; Unit, modifier: Modifier = Modifier, snackbarHostState: SnackbarHostState = SnackbarHostState(), ledgerSyncState: LedgerSyncUiState = LedgerSyncUiState(), onPreviewLedgerSync: suspend () -&gt; LedgerSyncOperationResult&lt;LedgerSyncPreview&gt; = { LedgerSyncOperationResult.Failure(null, "请先登录账户", false) }, onEnableLedgerSync: suspend (LedgerSyncInitialMode) -&gt; LedgerSyncOperationResult&lt;Unit&gt; = { LedgerSyncOperationResult.Failure(null, "请先登录账户", false) }, onSyncNow: suspend () -&gt; LedgerSyncOperationResult&lt;Unit&gt; = { LedgerSyncOperationResult.Failure(null, "请先登录账户", false) }, onDisableLedgerSync: suspend () -&gt; Unit = {}, onResolveLedgerSyncConflict: suspend (String, Long, LedgerSyncConflictChoiceContract) -&gt; LedgerSyncOperationResult&lt;Unit&gt; = { _, _, _ -&gt; LedgerSyncOperationResult.Failure(null, "请先登录账户", false) } )</ID>
-    <ID>LongParameterList:DedupeEngineTest.kt$DedupeEngineTest$( id: String = "notification-1", title: String = "午餐", amountMinor: Long = 3590, transactionTimeText: String = "2026-07-08 12:20", source: String = "微信", kind: String = "支出", captureReason: String = "补录账单", rawEvidence: String = "微信支付收款凭证 午餐 35.90", note: String? = null )</ID>
     <ID>LongParameterList:DiagnosticLogsScreen.kt$( isDebugBuild: Boolean, onBack: () -&gt; Unit, modifier: Modifier = Modifier, repositoryOverride: DiagnosticLogRepository? = null, applySecureWindowFlag: Boolean = true, exportWriterOverride: ((String) -&gt; String)? = null )</ID>
     <ID>LongParameterList:LedgerDaos.kt$CategoryDao$( id: String, name: String, kind: TransactionKind?, sortOrder: Int, isSystem: Boolean, createdAtEpochMillis: Long )</ID>
     <ID>LongParameterList:LedgerDaos.kt$FundingAccountDao$( id: Long, syncId: String, sourceScope: FundingAccountSourceScope, paymentSource: PaymentSource?, label: String, createdAtEpochMillis: Long )</ID>
@@ -39,27 +38,23 @@
     <ID>LongParameterList:ReviewQueueScreen.kt$( state: ReviewQueueState, onStateChange: (ReviewQueueState) -&gt; Unit, targetLedgerName: String = "默认账本", categories: List&lt;CategoryEntity&gt; = emptyList(), fundingAccounts: List&lt;FundingAccountEntity&gt; = emptyList(), modifier: Modifier = Modifier, onCategorizationRuleRequested: (CategorizationRule) -&gt; Unit = {}, accountSession: AccountSession? = null, aiSettings: AiCategorizationSettings = AiCategorizationSettings(), aiCategorizationGateway: AiCategorizationGateway? = null, onOpenBillImport: () -&gt; Unit = {}, openPendingEntryId: String? = null, openPendingEntryRequestId: Long = 0, onNavigateHome: () -&gt; Unit = {} )</ID>
     <ID>LongParameterList:WechatAccountDialogs.kt$( title: String, password: String, operationInProgress: Boolean, errorMessage: String?, onPasswordChange: (String) -&gt; Unit, onDismiss: () -&gt; Unit, onConfirm: () -&gt; Unit )</ID>
     <ID>LongParameterList:WechatAccountDialogs.kt$( title: String, state: AccountIdentityUiState, allowPasswordMerge: Boolean, onStateChange: (AccountIdentityUiState) -&gt; Unit, onRequestSms: () -&gt; Unit, onConfirm: () -&gt; Unit )</ID>
-    <ID>MatchingDeclarationName:AccountDeletionState.kt$AccountDeletionUiState</ID>
     <ID>MatchingDeclarationName:AppBottomNavigationBar.kt$AppBottomNavigationItem</ID>
     <ID>MatchingDeclarationName:ComplianceAndPrivacyScreen.kt$ComplianceMaterialPage</ID>
     <ID>MatchingDeclarationName:ProfileScreen.kt$ProfileDestination</ID>
     <ID>MatchingDeclarationName:WechatAvatar.kt$WechatAvatarCache</ID>
     <ID>TooManyFunctions:AccountRepository.kt$AccountRepository</ID>
-    <ID>TooManyFunctions:AccountRepository.kt$FakeAccountRepository : AccountRepository</ID>
     <ID>TooManyFunctions:AndroidDiagnosticLogRepository.kt$AndroidDiagnosticLogRepository : DiagnosticLogRepository</ID>
-    <ID>TooManyFunctions:DiagnosticEncryptedStore.kt$DiagnosticEncryptedStore</ID>
     <ID>TooManyFunctions:HttpAccountRepository.kt$HttpAccountRepository : AccountRepository</ID>
     <ID>TooManyFunctions:LedgerDaos.kt$CategoryDao</ID>
     <ID>TooManyFunctions:LedgerDaos.kt$FundingAccountDao</ID>
     <ID>TooManyFunctions:LedgerDaos.kt$LedgerBookDao</ID>
     <ID>TooManyFunctions:LedgerDaos.kt$LedgerEntryDao</ID>
-    <ID>TooManyFunctions:LedgerModels.kt$com.bks.feature.ledger.LedgerModels.kt</ID>
     <ID>TooManyFunctions:LedgerSyncDao.kt$LedgerSyncDao</ID>
     <ID>TooManyFunctions:LedgerTypeConverters.kt$LedgerTypeConverters</ID>
+    <ID>TooManyFunctions:LocalLedgerDomainRepository.kt$LocalLedgerDomainRepository : LedgerRepository</ID>
     <ID>TooManyFunctions:LocalLedgerRepository.kt$LocalLedgerRepository : LedgerBookRepositoryLedgerEntryRepositoryFundingAccountRepository</ID>
-    <ID>TooManyFunctions:ReviewQueuePersistenceMappers.kt$com.bks.feature.review.ReviewQueuePersistenceMappers.kt</ID>
-    <ID>TooManyFunctions:SecureAccountSessionStore.kt$SecureAccountSessionStore</ID>
-    <ID>TooManyFunctions:WechatAccountDialogs.kt$com.bks.feature.account.WechatAccountDialogs.kt</ID>
+    <ID>TooManyFunctions:SecureAccountSessionStore.kt$SecureAccountSessionStore : AccountSessionStore</ID>
+    <ID>TooManyFunctions:WechatAccountDialogs.kt$com.bks.view.account.WechatAccountDialogs.kt</ID>
     <ID>TooManyFunctions:WechatLoginFlow.kt$WechatLoginController</ID>
   </CurrentIssues>
 </SmellBaseline>
