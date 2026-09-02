@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,21 +40,31 @@ internal fun CashFlowPanel(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("7 个月收支", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Surface(
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            )
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 CashFlowHeader()
-                totals.forEach { total ->
+                totals.forEachIndexed { index, total ->
                     CashFlowRow(
                         total = total,
                         isAnchorMonth = total.monthKey == anchorMonthKey
                     )
+                    if (index < totals.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                        )
+                    }
                 }
             }
         }
@@ -64,7 +76,7 @@ private fun CashFlowHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(
             text = "月份",
@@ -102,7 +114,7 @@ private fun CashFlowRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(
                 if (isAnchorMonth) {
                     MaterialTheme.colorScheme.primaryContainer
@@ -113,7 +125,7 @@ private fun CashFlowRow(
             .semantics(mergeDescendants = true) {
                 contentDescription = rowDescription
             }
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(

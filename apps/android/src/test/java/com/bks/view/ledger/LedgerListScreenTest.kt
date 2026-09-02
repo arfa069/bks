@@ -6,8 +6,12 @@ import com.bks.viewmodel.ledger.LedgerUiEntry
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.FontScale
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -17,6 +21,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.then
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -41,9 +48,11 @@ class LedgerListScreenTest {
         }
 
         composeRule.onNodeWithText("日常账本").assertIsDisplayed()
+        composeRule.onNodeWithText("账本").assertIsDisplayed()
         composeRule.onNodeWithText("本月支出 ¥41.90").assertIsDisplayed()
         composeRule.onNodeWithText("本月收入 ¥12.90").assertIsDisplayed()
-        composeRule.onNodeWithText("净额\n-¥29.00").assertIsDisplayed()
+        composeRule.onNodeWithText("本月净额").assertIsDisplayed()
+        composeRule.onNodeWithText("-¥29.00").assertIsDisplayed()
         composeRule.onNodeWithText("午餐").assertIsDisplayed()
 
         val searchBounds = composeRule.onNodeWithTag(LedgerTestTags.SEARCH_FIELD)
@@ -52,14 +61,13 @@ class LedgerListScreenTest {
         val filterBounds = composeRule.onNodeWithTag(LedgerTestTags.FILTER_BUTTON)
             .fetchSemanticsNode()
             .boundsInRoot
-        assertEquals(searchBounds.width, filterBounds.width, 1f)
-        assertEquals(searchBounds.height, filterBounds.height, 1f)
-        assertEquals(searchBounds.top + 4f, filterBounds.top, 1f)
-        assertEquals(searchBounds.bottom + 4f, filterBounds.bottom, 1f)
+        assertTrue(searchBounds.width > filterBounds.width)
+        assertEquals(searchBounds.center.y, filterBounds.center.y, 1f)
 
         composeRule.onNodeWithText("搜索商户或备注").performTextInput("地铁")
         composeRule.onNodeWithText("地铁出行").assertIsDisplayed()
         composeRule.onNodeWithText("筛选").performClick()
+        composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(3)
         composeRule.onNodeWithText("来源").assertIsDisplayed()
         composeRule.onNodeWithText("分类").assertIsDisplayed()
     }
@@ -125,7 +133,7 @@ class LedgerListScreenTest {
     }
 
     @Test
-    fun ledgerKeepsHeaderVisibleWhenEntryListScrolls() {
+    fun ledgerListScrollsToOldestEntryAndKeepsMonthStateReachable() {
         val entries = List(20) { index ->
             sampleEntries().first().copy(
                 id = "entry-$index",
@@ -142,8 +150,7 @@ class LedgerListScreenTest {
 
         composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(19)
         composeRule.onNodeWithText("账目 0").assertIsDisplayed()
-        composeRule.onNodeWithText("日常账本").assertIsDisplayed()
-        composeRule.onNodeWithText("本月支出 ¥718.00").assertIsDisplayed()
+        composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(3)
         composeRule.onNodeWithText("2026-07 明细").assertIsDisplayed()
     }
 
@@ -195,6 +202,56 @@ class LedgerListScreenTest {
         composeRule.onNodeWithTag(LedgerTestTags.MANAGE_FUNDING_ACCOUNTS).assertIsDisplayed()
         composeRule.onNodeWithTag(LedgerTestTags.RECENTLY_DELETED).assertIsDisplayed()
     }
+
+    @Test
+    fun redesignedLedgerRemainsReachableAcrossWindowSizesAndLargeFonts() {
+        var forcedSize by mutableStateOf(DpSize(400.dp, 500.dp))
+        var fontScale by mutableFloatStateOf(1f)
+        composeRule.setContent {
+            DeviceConfigurationOverride(
+                DeviceConfigurationOverride.ForcedSize(forcedSize) then
+                    DeviceConfigurationOverride.FontScale(fontScale)
+            ) {
+                LedgerScreen(
+                    entries = sampleEntries().take(1),
+                    activeLedgerName = "自适应账本"
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        listOf(
+            TestConfiguration(DpSize(400.dp, 500.dp)),
+            TestConfiguration(DpSize(400.dp, 800.dp)),
+            TestConfiguration(DpSize(610.dp, 500.dp)),
+            TestConfiguration(DpSize(900.dp, 1_000.dp)),
+            TestConfiguration(DpSize(400.dp, 500.dp), fontScale = 1.5f)
+        ).forEach { configuration ->
+            composeRule.runOnIdle {
+                forcedSize = configuration.size
+                fontScale = configuration.fontScale
+            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(0)
+            composeRule.onNodeWithText("自适应账本").assertIsDisplayed()
+            composeRule.onNodeWithTag("ledger-summary-card").assertIsDisplayed()
+            composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(2)
+            composeRule.onNodeWithTag(LedgerTestTags.SEARCH_FIELD).assertIsDisplayed()
+            composeRule.onNodeWithTag(LedgerTestTags.FILTER_BUTTON).assertIsDisplayed()
+            composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(4)
+            composeRule.onNodeWithText("午餐").assertIsDisplayed()
+        }
+
+        composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(2)
+        composeRule.onNodeWithTag(LedgerTestTags.FILTER_BUTTON).performClick()
+        composeRule.onNodeWithTag(LedgerTestTags.ENTRY_LIST).performScrollToIndex(3)
+        composeRule.onNodeWithText("交易类型").assertIsDisplayed()
+    }
+
+    private data class TestConfiguration(
+        val size: DpSize,
+        val fontScale: Float = 1f
+    )
 
     private fun sampleEntries(): List<LedgerUiEntry> = listOf(
         LedgerUiEntry(

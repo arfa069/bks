@@ -202,7 +202,7 @@ class ReviewQueueAiSuggestionTest {
     )
 
     private fun scrollToFirstPendingEntry() {
-        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(4)
+        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(3)
         composeRule.waitForIdle()
     }
 

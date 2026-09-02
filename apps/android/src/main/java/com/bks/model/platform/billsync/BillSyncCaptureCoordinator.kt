@@ -115,7 +115,7 @@ internal class BillSyncCaptureCoordinator(
             scope = applicationScope.childScope(),
             runtimeProbe = runtimeProbe
         )
-        BillSyncServiceHealth.markServiceConnected(applicationContext, true)
+        BillSyncServiceHealth.markServiceConnected(true)
         diagnosticRecorder.recordBillSyncServiceEvent(
             eventName = "CONNECTED",
             timestampEpochMillis = clock(),
@@ -191,7 +191,7 @@ internal class BillSyncCaptureCoordinator(
             enabled = automaticBookkeepingEnabled,
             processStartElapsedMillis = processStartElapsedMillis
         )
-        BillSyncServiceHealth.markServiceConnected(applicationContext, false)
+        BillSyncServiceHealth.markServiceConnected(false)
         endCaptureSession("unbind")
     }
 
@@ -205,7 +205,7 @@ internal class BillSyncCaptureCoordinator(
             enabled = automaticBookkeepingEnabled,
             processStartElapsedMillis = processStartElapsedMillis
         )
-        BillSyncServiceHealth.markServiceConnected(applicationContext, false)
+        BillSyncServiceHealth.markServiceConnected(false)
         endCaptureSession("destroyed")
     }
 

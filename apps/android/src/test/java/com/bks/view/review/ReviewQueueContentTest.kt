@@ -3,8 +3,14 @@ package com.bks.view.review
 import com.bks.model.domain.ledger.Category
 import com.bks.viewmodel.review.ReviewQueueEntry
 import com.bks.viewmodel.review.ReviewQueueState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.FontScale
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -14,6 +20,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.then
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.bks.model.domain.ledger.ConfidenceState
 import org.junit.Assert.assertTrue
@@ -39,8 +47,9 @@ class ReviewQueueContentTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("review-header-row").assertHeightIsEqualTo(48.dp)
-        composeRule.onNodeWithTag("review-header-row").assertTopPositionInRootIsEqualTo(20.dp)
+        composeRule.onNodeWithTag("review-header-row")
+            .assertIsDisplayed()
+            .assertTopPositionInRootIsEqualTo(20.dp)
         
         composeRule.waitUntil(timeoutMillis = 3_000L) {
             composeRule.onAllNodesWithText("确认后记入「家庭账本」")
@@ -90,13 +99,13 @@ class ReviewQueueContentTest {
         composeRule.onNodeWithText("待确认记录").assertIsDisplayed()
         composeRule.onAllNodesWithText("快速确认").assertCountEquals(0)
         composeRule.onAllNodesWithText("需细看").assertCountEquals(0)
-        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(4)
+        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(3)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("detail-duplicate").assertIsDisplayed()
-        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(5)
+        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(4)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("detail-needs-review").assertIsDisplayed()
-        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(6)
+        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(5)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("detail-high").assertIsDisplayed()
     }
@@ -130,7 +139,7 @@ class ReviewQueueContentTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(23)
+        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(22)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("detail-pending-20").assertIsDisplayed()
     }
@@ -176,10 +185,53 @@ class ReviewQueueContentTest {
         composeRule.onNodeWithText("已确认 午餐").assertIsDisplayed()
     }
 
+    @Test
+    fun redesignedQueueRemainsReachableAcrossWindowSizesAndLargeFonts() {
+        var forcedSize by mutableStateOf(DpSize(400.dp, 500.dp))
+        var fontScale by mutableFloatStateOf(1f)
+        composeRule.setContent {
+            DeviceConfigurationOverride(
+                DeviceConfigurationOverride.ForcedSize(forcedSize) then
+                    DeviceConfigurationOverride.FontScale(fontScale)
+            ) {
+                ReviewQueueScreen(
+                    initialState = ReviewQueueState(
+                        pendingEntries = listOf(sampleEntry(id = "adaptive-entry"))
+                    )
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        listOf(
+            TestConfiguration(DpSize(400.dp, 500.dp)),
+            TestConfiguration(DpSize(400.dp, 800.dp)),
+            TestConfiguration(DpSize(610.dp, 500.dp)),
+            TestConfiguration(DpSize(900.dp, 1_000.dp)),
+            TestConfiguration(DpSize(400.dp, 500.dp), fontScale = 1.5f)
+        ).forEach { configuration ->
+            composeRule.runOnIdle {
+                forcedSize = configuration.size
+                fontScale = configuration.fontScale
+            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(0)
+            composeRule.onNodeWithTag("review-header-row").assertIsDisplayed()
+            composeRule.onNodeWithTag("review-summary-card").assertIsDisplayed()
+            composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(3)
+            composeRule.onNodeWithTag("detail-adaptive-entry").assertIsDisplayed()
+        }
+    }
+
     private fun scrollToFirstPendingEntry() {
-        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(4)
+        composeRule.onNodeWithTag("review-queue-list").performScrollToIndex(3)
         composeRule.waitForIdle()
     }
+
+    private data class TestConfiguration(
+        val size: DpSize,
+        val fontScale: Float = 1f
+    )
 
     private fun sampleEntry(
         id: String = "pending-lunch",

@@ -52,9 +52,11 @@ class ProfileScreenTest {
 
         composeRule.onNodeWithTag("profile-account-status-card").assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-AccountManagement").assertDoesNotExist()
+        composeRule.onNodeWithText("记账设置").assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-AutomaticBookkeeping").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-CategorizationRules").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-DataAndBackup").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("数据与安全").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-ComplianceAndPrivacy").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-DiagnosticLogs").assertDoesNotExist()
         composeRule.onAllNodesWithText("进入").assertCountEquals(0)
@@ -136,6 +138,7 @@ class ProfileScreenTest {
 
         listOf(
             TestConfiguration(DpSize(400.dp, 500.dp)),
+            TestConfiguration(DpSize(400.dp, 800.dp)),
             TestConfiguration(DpSize(610.dp, 500.dp)),
             TestConfiguration(DpSize(900.dp, 1_000.dp)),
             TestConfiguration(DpSize(400.dp, 500.dp), fontScale = 1.5f)

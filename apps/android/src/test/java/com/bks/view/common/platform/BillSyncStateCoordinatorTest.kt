@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import com.bks.model.domain.diagnostics.BILL_SYNC_APP_EVENT
 import com.bks.model.domain.diagnostics.InMemoryDiagnosticRecorder
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,7 +82,7 @@ class BillSyncStateCoordinatorTest {
         val activityController = Robolectric.buildActivity(ComponentActivity::class.java).create()
         val activity = activityController.get()
         val recorder = InMemoryDiagnosticRecorder()
-        BillSyncServiceHealth.markServiceConnected(activity, true)
+        BillSyncServiceHealth.markServiceConnected(true)
         val coordinator = BillSyncStateCoordinator(
             activity = activity,
             diagnosticRecorder = recorder,
@@ -116,7 +117,44 @@ class BillSyncStateCoordinatorTest {
             assertTrue(appEvents.all { it.metadata.attributes["eventSilenceMs"] == "1000" })
         } finally {
             coordinator.onDestroy()
-            BillSyncServiceHealth.markServiceConnected(activity, false)
+            BillSyncServiceHealth.markServiceConnected(false)
+            activityController.destroy()
+        }
+    }
+
+    @Test
+    fun serviceRunningStateRequiresCurrentAccessibilityGrant() {
+        val activityController = Robolectric.buildActivity(ComponentActivity::class.java).create()
+        val activity = activityController.get()
+        var accessGranted = false
+        BillSyncServiceHealth.markServiceConnected(true)
+        val coordinator = BillSyncStateCoordinator(
+            activity = activity,
+            accessibilityAccessGranted = { accessGranted }
+        )
+
+        try {
+            coordinator.onCreate()
+            assertFalse(coordinator.billSyncAccessibilityAccessGranted.value)
+            assertFalse(coordinator.billSyncAccessibilityServiceConnected.value)
+
+            accessGranted = true
+            coordinator.onResume()
+            assertTrue(coordinator.billSyncAccessibilityAccessGranted.value)
+            assertTrue(coordinator.billSyncAccessibilityServiceConnected.value)
+
+            BillSyncServiceHealth.markServiceConnected(false)
+            assertFalse(coordinator.billSyncAccessibilityServiceConnected.value)
+            BillSyncServiceHealth.markServiceConnected(true)
+            assertTrue(coordinator.billSyncAccessibilityServiceConnected.value)
+
+            accessGranted = false
+            coordinator.onResume()
+            assertFalse(coordinator.billSyncAccessibilityAccessGranted.value)
+            assertFalse(coordinator.billSyncAccessibilityServiceConnected.value)
+        } finally {
+            coordinator.onDestroy()
+            BillSyncServiceHealth.markServiceConnected(false)
             activityController.destroy()
         }
     }

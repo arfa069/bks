@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -25,8 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -61,69 +63,128 @@ internal fun CategoryShareDonut(
     slices: List<CategoryShareSlice>,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (slices.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 112.dp)
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "本月暂无支出分类",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            val semantics = buildDonutDescription(expenseMinor, slices)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 164.dp)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(32.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Text(
+            text = "支出分类",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            ),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            if (slices.isEmpty()) {
                 Box(
-                    modifier = Modifier.size(120.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 112.dp)
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CategoryDonutCanvas(
-                        slices = slices,
-                        contentDescription = semantics,
-                        modifier = Modifier.fillMaxSize()
+                    Text(
+                        text = "本月暂无支出分类",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "本月支出",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatMoney(expenseMinor),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
                 }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    slices.forEachIndexed { index, slice ->
-                        CategoryLegendRow(
-                            slice = slice,
-                            color = ReportChartPalette[index % ReportChartPalette.size]
-                        )
+            } else {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val semantics = buildDonutDescription(expenseMinor, slices)
+                    if (maxWidth < 520.dp) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(18.dp)
+                        ) {
+                            CategoryDonutSummary(
+                                expenseMinor = expenseMinor,
+                                slices = slices,
+                                contentDescription = semantics
+                            )
+                            CategoryLegend(slices = slices)
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 164.dp)
+                                .padding(horizontal = 24.dp, vertical = 18.dp),
+                            horizontalArrangement = Arrangement.spacedBy(32.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CategoryDonutSummary(
+                                expenseMinor = expenseMinor,
+                                slices = slices,
+                                contentDescription = semantics
+                            )
+                            CategoryLegend(
+                                slices = slices,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CategoryDonutSummary(
+    expenseMinor: Long,
+    slices: List<CategoryShareSlice>,
+    contentDescription: String
+) {
+    Box(
+        modifier = Modifier.size(120.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CategoryDonutCanvas(
+            slices = slices,
+            contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize()
+        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "本月支出",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatMoney(expenseMinor),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryLegend(
+    slices: List<CategoryShareSlice>,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        slices.forEachIndexed { index, slice ->
+            CategoryLegendRow(
+                slice = slice,
+                color = ReportChartPalette[index % ReportChartPalette.size]
+            )
         }
     }
 }
@@ -225,11 +286,33 @@ internal fun CategoryRankingPreview(
                 Text("更多")
             }
         }
-        if (totals.isEmpty()) {
-            Text("本月暂无支出分类", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            totals.take(3).forEach { total ->
-                CategoryRankingRow(total)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            ),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            if (totals.isEmpty()) {
+                Text(
+                    text = "本月暂无支出分类",
+                    modifier = Modifier.padding(18.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val previewTotals = totals.take(3)
+                previewTotals.forEachIndexed { index, total ->
+                    CategoryRankingRow(total)
+                    if (index < previewTotals.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -242,45 +325,99 @@ internal fun FullCategoryRankingScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "分类排行",
-                modifier = Modifier.testTag(ReportTestTags.FULL_CATEGORY_RANKING_TITLE),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.testTag(ReportTestTags.BACK_TO_REPORTS)
-            ) {
-                Text("返回")
-            }
-        }
-        LazyColumn(
-            state = listState,
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val horizontalPadding = if (maxWidth >= 600.dp) 32.dp else 20.dp
+
+        Column(
             modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = 880.dp)
                 .fillMaxWidth()
-                .weight(1f)
-                .testTag(ReportTestTags.CATEGORY_RANKING_LIST),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .padding(
+                    start = horizontalPadding,
+                    top = 20.dp,
+                    end = horizontalPadding,
+                    bottom = 32.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (totals.isEmpty()) {
-                item {
-                    Text("本月暂无支出分类", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "分类排行",
+                        modifier = Modifier.testTag(ReportTestTags.FULL_CATEGORY_RANKING_TITLE),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "本月支出分类明细",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            } else {
-                items(totals, key = { it.category }) { total ->
-                    CategoryRankingRow(total)
+                Spacer(Modifier.width(12.dp))
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.testTag(ReportTestTags.BACK_TO_REPORTS)
+                ) {
+                    Text("返回")
+                }
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .testTag(ReportTestTags.CATEGORY_RANKING_LIST),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 4.dp)
+            ) {
+                if (totals.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                            ),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Text(
+                                text = "本月暂无支出分类",
+                                modifier = Modifier.padding(18.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    items(totals, key = { it.category }) { total ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                            ),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            CategoryRankingRow(total)
+                        }
+                    }
                 }
             }
         }
@@ -291,27 +428,26 @@ internal fun FullCategoryRankingScreen(
 private fun CategoryRankingRow(
     total: CategoryTotal
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.onSurface)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            CategoryArtwork(
-                categoryName = total.category,
-                transactionKind = TransactionKind.EXPENSE,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clearAndSetSemantics {}
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("${total.category} ${formatMoney(total.amountMinor)}")
-        }
+        CategoryArtwork(
+            categoryName = total.category,
+            transactionKind = TransactionKind.EXPENSE,
+            modifier = Modifier
+                .size(36.dp)
+                .clearAndSetSemantics {}
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = "${total.category} ${formatMoney(total.amountMinor)}",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

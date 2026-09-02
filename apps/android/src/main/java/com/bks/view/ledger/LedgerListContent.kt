@@ -1,17 +1,10 @@
 package com.bks.view.ledger
 
-import com.bks.viewmodel.ledger.label
 import com.bks.viewmodel.ledger.monthlySummary
-import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.ledger.formatMoney
-import com.bks.viewmodel.ledger.formatSignedMoney
 import com.bks.viewmodel.ledger.latestMonthKey
 import com.bks.viewmodel.ledger.LedgerFlowType
 import com.bks.viewmodel.ledger.LedgerUiEntry
-import com.bks.viewmodel.ledger.MonthlySummary
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.clickable
@@ -20,28 +13,23 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
-import com.bks.view.common.components.Button
-import com.bks.view.common.components.EmptyStatePanel
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -50,10 +38,6 @@ import com.bks.view.common.components.HomeReturnButton
 import androidx.compose.material3.MaterialTheme
 import com.bks.view.common.components.OutlinedButton
 import com.bks.view.common.components.OutlinedTextField
-import com.bks.view.common.components.SlidePageTransition
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import com.bks.view.common.components.TextButton
 import androidx.compose.runtime.Composable
@@ -61,9 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,22 +54,17 @@ import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.invalidateDraw
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.bks.R
 import com.bks.view.common.visual.CategoryArtwork
-import java.math.BigDecimal
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import kotlin.math.max
 import kotlinx.coroutines.launch
 
+private val LedgerContentMaxWidth = 880.dp
+
 @Composable
+@Suppress("LongMethod")
 internal fun LedgerList(
     entries: List<LedgerUiEntry>,
     entryListState: LazyListState,
@@ -139,45 +116,76 @@ internal fun LedgerList(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val horizontalPadding = if (maxWidth >= 600.dp) 32.dp else 20.dp
+
+        LazyColumn(
+            state = entryListState,
             modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = LedgerContentMaxWidth)
+                .fillMaxWidth()
                 .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .testTag(LedgerTestTags.ENTRY_LIST),
+            contentPadding = PaddingValues(
+                start = horizontalPadding,
+                top = 20.dp,
+                end = horizontalPadding,
+                bottom = 32.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            LedgerListHeader(
-                activeLedgerName = activeLedgerName,
-                onLedgerBooksClick = onLedgerBooksClick,
-                onFundingAccountsClick = onFundingAccountsClick,
-                onRecentlyDeletedClick = onRecentlyDeletedClick,
-                onNavigateHome = onNavigateHome
-            )
-            LedgerSummary(summary)
-            LedgerSearchBar(
-                searchText = searchText,
-                onSearchChange = { searchText = it },
-                onToggleFilters = { showFilters = !showFilters }
-            )
-            if (showFilters) {
-                FilterPanel(
-                    sourceFilter = sourceFilter,
-                    categoryFilter = categoryFilter,
-                    kindFilter = kindFilter,
-                    onSourceChange = { sourceFilter = it },
-                    onCategoryChange = { categoryFilter = it },
-                    onKindChange = { kindFilter = it }
+            item(key = "ledger-header") {
+                LedgerListHeader(
+                    activeLedgerName = activeLedgerName,
+                    onLedgerBooksClick = onLedgerBooksClick,
+                    onFundingAccountsClick = onFundingAccountsClick,
+                    onRecentlyDeletedClick = onRecentlyDeletedClick,
+                    onNavigateHome = onNavigateHome
                 )
             }
-            LedgerMonthNavigation(
-                monthKey = monthKey,
-                monthIndex = monthIndex,
-                availableMonthKeys = availableMonthKeys,
-                onMonthChange = { monthKey = it }
-            )
-            LedgerEntryList(
+            item(key = "ledger-summary") {
+                LedgerSummary(summary)
+            }
+            item(key = "ledger-search") {
+                LedgerSearchBar(
+                    searchText = searchText,
+                    onSearchChange = { searchText = it },
+                    onToggleFilters = { showFilters = !showFilters }
+                )
+            }
+            if (showFilters) {
+                item(key = "ledger-filters") {
+                    FilterPanel(
+                        sourceFilter = sourceFilter,
+                        categoryFilter = categoryFilter,
+                        kindFilter = kindFilter,
+                        onSourceChange = { sourceFilter = it },
+                        onCategoryChange = { categoryFilter = it },
+                        onKindChange = { kindFilter = it }
+                    )
+                }
+            }
+            item(key = "ledger-month-navigation") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "账目明细",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    LedgerMonthNavigation(
+                        monthKey = monthKey,
+                        monthIndex = monthIndex,
+                        availableMonthKeys = availableMonthKeys,
+                        onMonthChange = { monthKey = it }
+                    )
+                }
+            }
+
+            ledgerEntryItems(
                 entries = filteredEntries,
-                entryListState = entryListState,
                 hasCurrentMonthEntries = hasCurrentMonthEntries,
                 hasActiveFilters = hasActiveFilters,
                 onEntryClick = onEntryClick
@@ -224,11 +232,24 @@ private fun LedgerListHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            activeLedgerName,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold
-        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = "账本",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = activeLedgerName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box {
                 TextButton(
@@ -276,9 +297,7 @@ private fun LedgerSearchBar(
     onToggleFilters: () -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -289,15 +308,13 @@ private fun LedgerSearchBar(
             singleLine = true,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
                 .testTag(LedgerTestTags.SEARCH_FIELD)
         )
         OutlinedButton(
             onClick = onToggleFilters,
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .offset(y = 4.dp)
+                .widthIn(min = 88.dp)
+                .heightIn(min = 56.dp)
                 .testTag(LedgerTestTags.FILTER_BUTTON)
         ) {
             Text("筛选")
@@ -337,49 +354,29 @@ private fun LedgerMonthNavigation(
     }
 }
 
-@Composable
-private fun ColumnScope.LedgerEntryList(
+private fun LazyListScope.ledgerEntryItems(
     entries: List<LedgerUiEntry>,
-    entryListState: LazyListState,
     hasCurrentMonthEntries: Boolean,
     hasActiveFilters: Boolean,
     onEntryClick: (String) -> Unit
 ) {
-    LazyColumn(
-        state = entryListState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .weight(1f)
-            .testTag(LedgerTestTags.ENTRY_LIST),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        if (entries.isEmpty()) {
-            item {
-                if (!hasCurrentMonthEntries && !hasActiveFilters) {
-                    EmptyStatePanel("当前没有已确认账目")
-                } else {
-                    EmptyStatePanel("没有符合当前筛选条件的账目")
-                }
-            }
-        } else {
-            items(entries, key = { it.id }) { entry ->
-                LedgerEntryRow(entry) { onEntryClick(entry.id) }
+    if (entries.isEmpty()) {
+        item(key = "ledger-empty") {
+            if (!hasCurrentMonthEntries && !hasActiveFilters) {
+                LedgerEmptyState(
+                    title = "当前没有已确认账目",
+                    description = "确认后的收支记录会显示在这里。"
+                )
+            } else {
+                LedgerEmptyState(
+                    title = "没有符合当前筛选条件的账目",
+                    description = "可以调整关键词或筛选条件后再试。"
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun LedgerSummary(summary: MonthlySummary) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Text("本月支出 ${formatMoney(summary.expenseMinor)}", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
-        }
-        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Text("本月收入 ${formatMoney(summary.incomeMinor)}", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
-        }
-        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Text("净额\n${formatSignedMoney(summary.netMinor)}", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+    } else {
+        items(entries, key = { it.id }) { entry ->
+            LedgerEntryRow(entry) { onEntryClick(entry.id) }
         }
     }
 }
@@ -393,11 +390,48 @@ private fun FilterPanel(
     onCategoryChange: (String) -> Unit,
     onKindChange: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(sourceFilter, onSourceChange, label = { Text("来源") }, singleLine = true)
-        OutlinedTextField(categoryFilter, onCategoryChange, label = { Text("分类") }, singleLine = true)
-        OutlinedTextField(kindFilter, onKindChange, label = { Text("交易类型") }, singleLine = true)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        BoxWithConstraints(modifier = Modifier.padding(16.dp)) {
+            if (maxWidth >= 720.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LedgerFilterField("来源", sourceFilter, onSourceChange, Modifier.weight(1f))
+                    LedgerFilterField("分类", categoryFilter, onCategoryChange, Modifier.weight(1f))
+                    LedgerFilterField("交易类型", kindFilter, onKindChange, Modifier.weight(1f))
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LedgerFilterField("来源", sourceFilter, onSourceChange)
+                    LedgerFilterField("分类", categoryFilter, onCategoryChange)
+                    LedgerFilterField("交易类型", kindFilter, onKindChange)
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun LedgerFilterField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -414,9 +448,14 @@ private fun LedgerEntryRow(entry: LedgerUiEntry, onClick: () -> Unit) {
                 interactionSource = interactionSource,
                 indication = pressIndication,
                 onClick = onClick
-            ),
+        ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Row(
             modifier = Modifier
@@ -429,12 +468,24 @@ private fun LedgerEntryRow(entry: LedgerUiEntry, onClick: () -> Unit) {
                 categoryId = entry.categoryId,
                 categoryName = entry.category,
                 transactionKind = entry.transactionKind,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(44.dp)
             )
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(entry.title.ifBlank { "未填写标题" }, fontWeight = FontWeight.SemiBold)
-                Text("${entry.category} · ${entry.sourceLabel} · ${entry.transactionTimeText}")
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = entry.title.ifBlank { "未填写标题" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${entry.category} · ${entry.sourceLabel} · ${entry.transactionTimeText}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Spacer(Modifier.width(12.dp))
             val signedAmount = when (entry.flowType) {
@@ -442,7 +493,11 @@ private fun LedgerEntryRow(entry: LedgerUiEntry, onClick: () -> Unit) {
                 LedgerFlowType.EXPENSE -> "-${formatMoney(entry.amountMinor)}"
                 LedgerFlowType.NEUTRAL -> formatMoney(entry.amountMinor)
             }
-            Text(signedAmount, fontWeight = FontWeight.Bold)
+            Text(
+                text = signedAmount,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

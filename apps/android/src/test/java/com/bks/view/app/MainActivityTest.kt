@@ -167,7 +167,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun reviewTitleAlignsVerticallyWithLedgerTitle() {
+    fun reviewTitleAlignsVerticallyWithLedgerPageTitle() {
         composeRule.setContent {
             BksApp()
         }
@@ -180,7 +180,7 @@ class MainActivityTest {
 
         composeRule.onNodeWithTag("return-home").performClick()
         composeRule.onNodeWithTag("app-tab-Ledger", useUnmergedTree = true).performClick()
-        val ledgerTitleTop = composeRule.onNodeWithText("默认账本")
+        val ledgerTitleTop = composeRule.onNodeWithText("账本")
             .fetchSemanticsNode()
             .boundsInRoot
             .top

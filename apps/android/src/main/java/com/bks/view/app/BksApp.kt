@@ -67,7 +67,7 @@ import kotlinx.coroutines.launch
 
 data class BksAppBindings(
     val billSyncAccessibilityAccessGranted: Boolean = false,
-    val billSyncAccessibilityServiceConnected: Boolean = true,
+    val billSyncAccessibilityServiceConnected: Boolean = false,
     val billSyncBatteryOptimizationIgnored: Boolean? = null,
     val onOpenBillSyncAccessibilitySettings: () -> Unit = {},
     val onOpenBillSyncAutoStartSettings: () -> Unit = {},

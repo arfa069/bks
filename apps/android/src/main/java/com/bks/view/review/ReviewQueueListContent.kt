@@ -1,7 +1,6 @@
 package com.bks.view.review
 
 import com.bks.viewmodel.review.toTransactionKind
-import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.review.formatAmount
 import com.bks.viewmodel.review.ReviewQueueEntry
 import com.bks.viewmodel.review.ReviewQueueState
@@ -10,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,7 +36,6 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import com.bks.view.common.components.Button
-import com.bks.view.common.components.EmptyStatePanel
 import com.bks.view.common.components.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
@@ -55,6 +55,8 @@ import com.bks.view.common.components.HomeReturnButton
 import com.bks.view.common.visual.CategoryArtwork
 import kotlin.math.abs
 
+private val ReviewContentMaxWidth = 880.dp
+
 @Composable
 internal fun ReviewQueueListContent(
     state: ReviewQueueState,
@@ -64,64 +66,76 @@ internal fun ReviewQueueListContent(
 ) {
     val sortedEntries = remember(state.pendingEntries) { state.sortedPendingEntries }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("review-queue-list"),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item(key = "review-header") {
-            ReviewHeader(
-                targetLedgerName = targetLedgerName,
-                onShowIgnoredList = actions.onShowIgnoredList,
-                onNavigateHome = actions.onNavigateHome
-            )
-        }
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val horizontalPadding = if (maxWidth >= 600.dp) 32.dp else 20.dp
 
-        item(key = "review-summary") {
-            ReviewSummaryCard(state)
-        }
-
-        item(key = "review-list-header") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "待确认记录",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "向右滑确认 · 向左滑忽略",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        LazyColumn(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = ReviewContentMaxWidth)
+                .fillMaxWidth()
+                .fillMaxSize()
+                .testTag("review-queue-list"),
+            contentPadding = PaddingValues(
+                start = horizontalPadding,
+                top = 20.dp,
+                end = horizontalPadding,
+                bottom = 32.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            item(key = "review-header") {
+                ReviewHeader(
+                    targetLedgerName = targetLedgerName,
+                    onShowIgnoredList = actions.onShowIgnoredList,
+                    onNavigateHome = actions.onNavigateHome
                 )
             }
-        }
 
-        if (sortedEntries.isEmpty()) {
-            item(key = "review-empty") {
-                EmptyStatePanel("暂无待确认记录")
+            item(key = "review-summary") {
+                ReviewSummaryCard(state)
             }
-        } else {
-            items(
-                items = sortedEntries,
-                key = { entry -> entry.id }
-            ) { entry ->
-                ReviewEntryRow(
-                    entry = entry,
-                    onConfirm = { actions.onConfirm(entry.id) },
-                    onIgnore = { actions.onIgnore(entry.id) },
-                    onEdit = { actions.onEdit(entry) }
-                )
-            }
-        }
 
-        item(key = "review-list-bottom-space") {
-            Spacer(Modifier.height(8.dp))
+            item(key = "review-list-header") {
+                Column(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = "待确认记录",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "向右滑确认 · 向左滑忽略",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (sortedEntries.isEmpty()) {
+                item(key = "review-empty") {
+                    ReviewEmptyState()
+                }
+            } else {
+                items(
+                    items = sortedEntries,
+                    key = { entry -> entry.id }
+                ) { entry ->
+                    ReviewEntryRow(
+                        entry = entry,
+                        onConfirm = { actions.onConfirm(entry.id) },
+                        onIgnore = { actions.onIgnore(entry.id) },
+                        onEdit = { actions.onEdit(entry) }
+                    )
+                }
+            }
+
+            item(key = "review-list-bottom-space") {
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
 }
@@ -132,95 +146,34 @@ private fun ReviewHeader(
     onShowIgnoredList: () -> Unit,
     onNavigateHome: () -> Unit
 ) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("review-header-row"),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("review-header-row"),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
                 text = "待确认",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onShowIgnoredList) {
-                    Text("忽略记录")
-                }
-                HomeReturnButton(onClick = onNavigateHome)
-            }
+            Text(
+                text = "确认后记入「$targetLedgerName」",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        Text(
-            text = "确认后记入「$targetLedgerName」",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ReviewSummaryCard(state: ReviewQueueState) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "当前任务",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "${state.pendingEntries.size} 条待确认",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabelPill(
-                        text = "疑似重复 ${state.duplicateSuspectCount}",
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    LabelPill(
-                        text = "今日待确认 ${state.todaysNewlyCapturedCount}",
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+        Spacer(Modifier.width(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onShowIgnoredList) {
+                Text("忽略记录")
             }
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "✓",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
+            HomeReturnButton(onClick = onNavigateHome)
         }
     }
 }
@@ -308,8 +261,12 @@ private fun ReviewEntryCard(
             .testTag("detail-${entry.id}")
             .clickable(onClick = onEdit),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(12.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -419,6 +376,7 @@ private fun SwipeBackground(direction: SwipeToDismissBoxValue) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clip(RoundedCornerShape(20.dp))
             .background(color)
             .padding(horizontal = 20.dp),
         contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) {

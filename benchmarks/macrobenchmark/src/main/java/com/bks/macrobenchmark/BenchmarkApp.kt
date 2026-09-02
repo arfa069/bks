@@ -55,19 +55,35 @@ internal class BenchmarkApp(private val device: UiDevice) {
     }
 
     fun scrollLedgerAndOpenDetail() {
-        val list = checkNotNull(device.wait(Until.findObject(By.scrollable(true)), TIMEOUT_MILLIS))
-        val bounds = list.visibleBounds
-        val gestureInset = bounds.height() / 6
+        val entriesBeforeScroll = checkNotNull(
+            device.wait(
+                Until.findObjects(By.text(Pattern.compile("基准账目 \\d+"))),
+                TIMEOUT_MILLIS
+            )
+        )
+        check(entriesBeforeScroll.isNotEmpty())
+        val listCenterY = entriesBeforeScroll
+            .map { it.visibleBounds.centerY() }
+            .average()
+            .toInt()
+        val gestureMargin = device.displayHeight / 5
         check(
             device.swipe(
-                bounds.centerX(),
-                bounds.bottom - gestureInset,
-                bounds.centerX(),
-                bounds.top + gestureInset,
+                device.displayWidth / 2,
+                device.displayHeight - gestureMargin,
+                device.displayWidth / 2,
+                gestureMargin,
                 20
             )
         )
-        check(device.wait(Until.gone(By.text("基准账目 01")), TIMEOUT_MILLIS))
+        check(device.wait(Until.gone(By.text("基准账目 01")), TIMEOUT_MILLIS)) {
+            val visibleEntries = device.findObjects(
+                By.text(Pattern.compile("基准账目 \\d+"))
+            ).joinToString { "${it.text}=${it.visibleBounds}" }
+            "Ledger did not scroll; display=${device.displayWidth}x${device.displayHeight}, " +
+                "before=${entriesBeforeScroll.joinToString { "${it.text}=${it.visibleBounds}" }}, " +
+                "after=$visibleEntries"
+        }
         uiAutomator {
             check(!waitForStableInActiveWindow().isTimeout)
         }
@@ -80,7 +96,7 @@ internal class BenchmarkApp(private val device: UiDevice) {
             )
         )
         val entry = checkNotNull(
-            entries.minByOrNull { abs(it.visibleBounds.centerY() - bounds.centerY()) }
+            entries.minByOrNull { abs(it.visibleBounds.centerY() - listCenterY) }
         )
         entry.click()
         waitForText("编辑账目")

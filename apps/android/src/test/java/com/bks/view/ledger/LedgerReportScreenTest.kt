@@ -10,7 +10,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToIndex
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,14 +34,17 @@ class LedgerReportScreenTest {
         composeRule.onNodeWithText("报表").assertIsDisplayed()
         composeRule.onNodeWithText("本月支出 ¥41.90").assertIsDisplayed()
         composeRule.onNodeWithText("本月收入 ¥12.90").assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(2)
         composeRule.onNodeWithContentDescription(
             "本月支出分类环形图，总支出 ¥41.90，餐饮 85.7%，交通 14.3%"
         ).assertIsDisplayed()
         composeRule.onNodeWithText("85.7%").assertIsDisplayed()
         composeRule.onNodeWithText("14.3%").assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(3)
         composeRule.onNodeWithText("分类排行").assertExists()
         composeRule.onNodeWithText("餐饮 ¥35.90").assertHasNoClickAction()
         composeRule.onAllNodesWithContentDescription("餐饮").assertCountEquals(0)
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(4)
         composeRule.onNodeWithText("7 个月收支").assertIsDisplayed()
         composeRule.onAllNodesWithText("2026-04").assertCountEquals(1)
         composeRule.onAllNodesWithText("2026-10").assertCountEquals(1)
@@ -69,6 +74,7 @@ class LedgerReportScreenTest {
             ReportsScreen(entries = entries)
         }
 
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(2)
         composeRule.onNodeWithContentDescription(
             "本月支出分类环形图，总支出 ¥16.00，" +
                 "餐饮 31.3%，交通 25.0%，住房 18.7%，通讯 12.5%，其他 12.5%"
@@ -91,6 +97,7 @@ class LedgerReportScreenTest {
 
         composeRule.onNodeWithText("本月支出 ¥35.90").assertIsDisplayed()
         composeRule.onNodeWithText("本月收入 ¥0.00").assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(2)
         composeRule.onNodeWithContentDescription(
             "本月支出分类环形图，总支出 ¥35.90，餐饮 100.0%"
         ).assertIsDisplayed()
@@ -112,7 +119,9 @@ class LedgerReportScreenTest {
 
         composeRule.onNodeWithText("本月支出 ¥0.00").assertIsDisplayed()
         composeRule.onNodeWithText("本月收入 ¥129.00").assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(2)
         composeRule.onAllNodesWithText("本月暂无支出分类").assertCountEquals(2)
+        composeRule.onNodeWithTag(ReportTestTags.OVERVIEW_LIST).performScrollToIndex(4)
         composeRule.onNodeWithText("7 个月收支").assertIsDisplayed()
         composeRule.onNodeWithContentDescription(
             "基准月份 2026-07，支出 ¥0.00，收入 ¥129.00"

@@ -16,12 +16,15 @@ class BillSyncStateCoordinator internal constructor(
     private val healthSnapshot: () -> BillSyncRuntimeHealthSnapshot = {
         BillSyncRuntimeHealthSnapshot(
             sessionId = null,
-            serviceConnected = BillSyncServiceHealth.isServiceConnected(activity),
+            serviceConnected = BillSyncServiceHealth.isServiceConnected(),
             automaticBookkeepingEnabled = false,
             lastEventAtEpochMillis = null,
             lastEventPackageName = null,
             eventSilenceMillis = null
         )
+    },
+    private val accessibilityAccessGranted: () -> Boolean = {
+        BillSyncPermission.isGranted(activity)
     },
     private val batteryOptimizationIgnored: () -> Boolean? = {
         BillSyncBackgroundSettings.isBatteryOptimizationIgnored(activity)
@@ -32,21 +35,18 @@ class BillSyncStateCoordinator internal constructor(
     val billSyncAccessibilityServiceConnected = mutableStateOf(false)
     val billSyncBatteryOptimizationIgnored = mutableStateOf<Boolean?>(null)
 
-    private var serviceHealthListener:
-        android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var serviceHealthListener: ((Boolean) -> Unit)? = null
 
     fun onCreate() {
-        billSyncAccessibilityServiceConnected.value = BillSyncServiceHealth.isServiceConnected(activity)
-        refreshBackgroundSettingsState()
-        serviceHealthListener = BillSyncServiceHealth.registerListener(activity) { connected ->
-            billSyncAccessibilityServiceConnected.value = connected
+        serviceHealthListener = BillSyncServiceHealth.registerListener { connected ->
+            billSyncAccessibilityServiceConnected.value =
+                billSyncAccessibilityAccessGranted.value && connected
         }
+        refreshSystemState()
     }
 
     fun onResume() {
-        billSyncAccessibilityAccessGranted.value = BillSyncPermission.isGranted(activity)
-        billSyncAccessibilityServiceConnected.value = BillSyncServiceHealth.isServiceConnected(activity)
-        refreshBackgroundSettingsState()
+        refreshSystemState()
         recordAppState("FOREGROUND")
     }
 
@@ -56,7 +56,7 @@ class BillSyncStateCoordinator internal constructor(
 
     fun onDestroy() {
         serviceHealthListener?.let { listener ->
-            BillSyncServiceHealth.unregisterListener(activity, listener)
+            BillSyncServiceHealth.unregisterListener(listener)
         }
         serviceHealthListener = null
     }
@@ -81,7 +81,11 @@ class BillSyncStateCoordinator internal constructor(
         )
     }
 
-    private fun refreshBackgroundSettingsState() {
+    private fun refreshSystemState() {
+        val accessGranted = accessibilityAccessGranted()
+        billSyncAccessibilityAccessGranted.value = accessGranted
+        billSyncAccessibilityServiceConnected.value =
+            accessGranted && BillSyncServiceHealth.isServiceConnected()
         billSyncBatteryOptimizationIgnored.value = batteryOptimizationIgnored()
     }
 

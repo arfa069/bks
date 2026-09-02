@@ -2,10 +2,8 @@ package com.bks.model.platform.billsync
 
 import com.bks.model.platform.billsync.BillSyncAccessibilityService
 import com.bks.model.platform.billsync.BillSyncServiceHealth
-import android.content.Context
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
-import androidx.test.core.app.ApplicationProvider
 import com.ven.assists.service.AssistsService
 import com.ven.assists.service.AssistsServiceListener
 import org.junit.Assert.assertEquals
@@ -20,11 +18,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class BillSyncAccessibilityServiceHealthTest {
-    private val context = ApplicationProvider.getApplicationContext<Context>()
-
     @Test
     fun serviceConnectionHealthTracksLifecycle() {
-        BillSyncServiceHealth.markServiceConnected(context, false)
+        BillSyncServiceHealth.markServiceConnected(false)
         val controller = Robolectric.buildService(BillSyncAccessibilityService::class.java)
             .create()
         val service = controller.get()
@@ -35,7 +31,7 @@ class BillSyncAccessibilityServiceHealthTest {
             .invoke(service)
         service.onInterrupt()
 
-        assertTrue(BillSyncServiceHealth.isServiceConnected(context))
+        assertTrue(BillSyncServiceHealth.isServiceConnected())
         assertEquals(
             BillSyncAccessibilityService::class.java,
             BillSyncAccessibilityService::class.java
@@ -44,15 +40,15 @@ class BillSyncAccessibilityServiceHealthTest {
         )
 
         service.onUnbind(Intent())
-        assertFalse(BillSyncServiceHealth.isServiceConnected(context))
+        assertFalse(BillSyncServiceHealth.isServiceConnected())
 
         controller.destroy()
-        assertFalse(BillSyncServiceHealth.isServiceConnected(context))
+        assertFalse(BillSyncServiceHealth.isServiceConnected())
     }
 
     @Test
     fun serviceDestroyEndsConnectionWithoutExplicitUnbind() {
-        BillSyncServiceHealth.markServiceConnected(context, false)
+        BillSyncServiceHealth.markServiceConnected(false)
         val controller = Robolectric.buildService(BillSyncAccessibilityService::class.java)
             .create()
 
@@ -60,16 +56,16 @@ class BillSyncAccessibilityServiceHealthTest {
             .getDeclaredMethod("onServiceConnected")
             .apply { isAccessible = true }
             .invoke(controller.get())
-        assertTrue(BillSyncServiceHealth.isServiceConnected(context))
+        assertTrue(BillSyncServiceHealth.isServiceConnected())
 
         controller.destroy()
 
-        assertFalse(BillSyncServiceHealth.isServiceConnected(context))
+        assertFalse(BillSyncServiceHealth.isServiceConnected())
     }
 
     @Test
     fun directCoordinatorCallbackSurvivesThrowingAssistsListener() {
-        BillSyncServiceHealth.markServiceConnected(context, false)
+        BillSyncServiceHealth.markServiceConnected(false)
         val throwingListener = object : AssistsServiceListener {
             override fun onServiceConnected(service: AssistsService) {
                 error("expected")
@@ -85,7 +81,7 @@ class BillSyncAccessibilityServiceHealthTest {
                 .apply { isAccessible = true }
                 .invoke(controller.get())
 
-            assertTrue(BillSyncServiceHealth.isServiceConnected(context))
+            assertTrue(BillSyncServiceHealth.isServiceConnected())
         } finally {
             AssistsService.listeners.remove(throwingListener)
             controller.destroy()

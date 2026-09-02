@@ -1,40 +1,25 @@
 package com.bks.model.platform.billsync
 
-import android.content.Context
-import android.content.SharedPreferences
+import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.atomic.AtomicBoolean
 
 object BillSyncServiceHealth {
-    fun isServiceConnected(context: Context): Boolean =
-        preferences(context).getBoolean(SERVICE_CONNECTED_KEY, false)
+    private val serviceConnected = AtomicBoolean(false)
+    private val listeners = CopyOnWriteArraySet<(Boolean) -> Unit>()
 
-    fun markServiceConnected(context: Context, connected: Boolean) {
-        preferences(context).edit()
-            .putBoolean(SERVICE_CONNECTED_KEY, connected)
-            .apply()
+    fun isServiceConnected(): Boolean = serviceConnected.get()
+
+    fun markServiceConnected(connected: Boolean) {
+        if (serviceConnected.getAndSet(connected) == connected) return
+        listeners.forEach { listener -> listener(connected) }
     }
 
-    fun registerListener(
-        context: Context,
-        onChanged: (Boolean) -> Unit
-    ): SharedPreferences.OnSharedPreferenceChangeListener {
-        val preferences = preferences(context)
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == SERVICE_CONNECTED_KEY) {
-                onChanged(isServiceConnected(context))
-            }
-        }
-        preferences.registerOnSharedPreferenceChangeListener(listener)
-        return listener
+    fun registerListener(onChanged: (Boolean) -> Unit): (Boolean) -> Unit {
+        listeners += onChanged
+        return onChanged
     }
 
-    fun unregisterListener(
-        context: Context,
-        listener: SharedPreferences.OnSharedPreferenceChangeListener
-    ) {
-        preferences(context).unregisterOnSharedPreferenceChangeListener(listener)
+    fun unregisterListener(listener: (Boolean) -> Unit) {
+        listeners -= listener
     }
-
-    private fun preferences(context: Context): SharedPreferences = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-    private const val PREFERENCES_NAME = "bill_sync_service_health"
-    private const val SERVICE_CONNECTED_KEY = "service_connected"
 }

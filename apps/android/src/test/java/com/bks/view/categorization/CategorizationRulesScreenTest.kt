@@ -6,9 +6,13 @@ import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.categorization.CategorizationAiUiState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.FontScale
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -24,6 +28,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.then
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -95,7 +102,7 @@ class CategorizationRulesScreenTest {
         }
 
         composeRule.onNodeWithText("分类规则").assertIsDisplayed()
-        composeRule.onNodeWithTag("create-rule").performClick()
+        composeRule.onNodeWithTag("create-rule").performScrollTo().performClick()
         composeRule.onNodeWithText("商户包含").performTextInput("星巴克")
         composeRule.onNodeWithText("标题关键词").performTextInput("拿铁")
         composeRule.onNodeWithText("来源").performTextInput("微信")
@@ -103,12 +110,12 @@ class CategorizationRulesScreenTest {
         composeRule.onNodeWithText("分类").performTextInput("餐饮")
         composeRule.onNodeWithText("保存规则").performClick()
 
-        composeRule.onNodeWithText("星巴克").assertIsDisplayed()
+        composeRule.onNodeWithText("星巴克").performScrollTo().assertIsDisplayed()
         composeRule.runOnIdle {
             assertEquals("餐饮", rules.single().category)
         }
 
-        composeRule.onNodeWithTag("rule-menu-rule-1").performClick()
+        composeRule.onNodeWithTag("rule-menu-rule-1").performScrollTo().performClick()
         composeRule.onNodeWithTag("edit-rule-rule-1").performClick()
         composeRule.onNodeWithText("分类").performTextClearance()
         composeRule.onNodeWithText("分类").performTextInput("工作餐")
@@ -136,7 +143,7 @@ class CategorizationRulesScreenTest {
             )
         }
 
-        composeRule.onNodeWithTag("rule-menu-rule-delete").performClick()
+        composeRule.onNodeWithTag("rule-menu-rule-delete").performScrollTo().performClick()
         composeRule.onNodeWithTag("delete-rule-rule-delete").performClick()
 
         assertTrue(updatedRules?.isEmpty() == true)
@@ -157,7 +164,7 @@ class CategorizationRulesScreenTest {
             )
         }
 
-        composeRule.onNodeWithTag("create-rule").performClick()
+        composeRule.onNodeWithTag("create-rule").performScrollTo().performClick()
         composeRule.onNodeWithText("分类").performTextInput("购物")
         composeRule.onNodeWithText("保存规则").performClick()
 
@@ -215,9 +222,10 @@ class CategorizationRulesScreenTest {
             )
         }
 
+        composeRule.onNodeWithTag("rule-filter-row").performScrollTo()
         composeRule.onNodeWithTag("rule-filter-Expense").performClick()
 
-        composeRule.onNodeWithTag("rule-card-expense").assertIsDisplayed()
+        composeRule.onNodeWithTag("rule-card-expense").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("rule-card-income").assertDoesNotExist()
         composeRule.onNodeWithTag("rule-card-other").assertDoesNotExist()
     }
@@ -235,8 +243,9 @@ class CategorizationRulesScreenTest {
             )
         }
 
-        composeRule.onNodeWithTag("rule-filter-Expense").performClick()
-        composeRule.onNodeWithTag("create-rule").performClick()
+        composeRule.onNodeWithTag("rule-filter-row").performScrollTo()
+        composeRule.onNodeWithTag("rule-filter-Expense").performClick().assertIsSelected()
+        composeRule.onNodeWithTag("create-rule").performScrollTo().performClick()
         composeRule.onNodeWithText("商户包含").performTextInput("星巴克")
         composeRule.onNodeWithText("分类").performTextInput("餐饮")
 
@@ -246,5 +255,79 @@ class CategorizationRulesScreenTest {
         composeRule.onNodeWithText("分类").assertTextContains("餐饮")
         composeRule.onNodeWithTag("rule-filter-Expense").assertIsSelected()
     }
+
+    @Test
+    fun profileStyleLayoutRemainsReachableAcrossWindowSizesAndLargeFonts() {
+        var forcedSize by mutableStateOf(DpSize(400.dp, 500.dp))
+        var fontScale by mutableFloatStateOf(1f)
+        var backRequested = false
+        composeRule.setContent {
+            DeviceConfigurationOverride(
+                DeviceConfigurationOverride.ForcedSize(forcedSize) then
+                    DeviceConfigurationOverride.FontScale(fontScale)
+            ) {
+                CategorizationRulesScreen(
+                    rules = listOf(
+                        CategorizationRule(
+                            id = "adaptive-rule",
+                            merchantContains = "咖啡店",
+                            transactionKind = "支出",
+                            category = "餐饮"
+                        )
+                    ),
+                    onRulesChange = {},
+                    actions = CategorizationRulesActions(
+                        onBack = { backRequested = true }
+                    )
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        listOf(
+            TestConfiguration(DpSize(400.dp, 500.dp)),
+            TestConfiguration(DpSize(400.dp, 800.dp)),
+            TestConfiguration(DpSize(610.dp, 500.dp)),
+            TestConfiguration(DpSize(900.dp, 1_000.dp)),
+            TestConfiguration(DpSize(400.dp, 500.dp), fontScale = 1.5f)
+        ).forEach { configuration ->
+            composeRule.runOnIdle {
+                forcedSize = configuration.size
+                fontScale = configuration.fontScale
+            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("categorization-back")
+                .performScrollTo()
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("categorization-summary-card")
+                .performScrollTo()
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("categorization-rule-count")
+                .assertTextContains("1 条规则")
+            composeRule.onNodeWithTag("categorization-ai-card")
+                .performScrollTo()
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("create-rule")
+                .performScrollTo()
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("rule-filter-row").performScrollTo()
+            composeRule.onNodeWithTag("rule-filter-Other")
+                .performScrollTo()
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("rule-card-adaptive-rule")
+                .performScrollTo()
+                .assertIsDisplayed()
+        }
+
+        composeRule.onNodeWithTag("categorization-back")
+            .performScrollTo()
+            .performClick()
+        assertTrue(backRequested)
+    }
+
+    private data class TestConfiguration(
+        val size: DpSize,
+        val fontScale: Float = 1f
+    )
 
 }

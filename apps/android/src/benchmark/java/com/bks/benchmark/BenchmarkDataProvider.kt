@@ -26,6 +26,8 @@ import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.ledger.toLedgerUiEntry
 import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
 import com.bks.viewmodel.settings.exportLedgerCsv
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -309,31 +311,50 @@ class BenchmarkDataProvider : ContentProvider() {
             entryCount: Int,
             ledgerBookId: String,
             nowEpochMillis: Long
-        ): List<LedgerEntryEntity> = List(entryCount) { index ->
-            LedgerEntryEntity(
-                id = "benchmark-entry-${index + 1}",
-                ledgerBookId = ledgerBookId,
-                paymentSource = if (index % 2 == 0) PaymentSource.WECHAT else PaymentSource.ALIPAY,
-                originalCaptureSource = null,
-                entryOrigin = EntryOrigin.MANUAL,
-                originPendingEntryId = null,
-                flowDirection = FlowDirection.OUTFLOW,
-                transactionKind = TransactionKind.EXPENSE,
-                amountMinor = (index + 1L) * 123L,
-                currency = "CNY",
-                merchantTitle = "$ENTRY_PREFIX ${String.format(Locale.ROOT, "%02d", index + 1)}",
-                transactionTimeEpochMillis = nowEpochMillis -
-                    (index % 180) * MILLIS_PER_DAY -
-                    ((index / 180) % 24) * MILLIS_PER_HOUR,
-                categoryId = EXPENSE_CATEGORY_IDS[index % EXPENSE_CATEGORY_IDS.size],
-                fundingAccountId = null,
-                note = null,
-                evidenceSummary = null,
-                parsedFieldsText = null,
-                confirmedAtEpochMillis = nowEpochMillis,
-                updatedAtEpochMillis = nowEpochMillis,
-                deletedAtEpochMillis = null
-            )
+        ): List<LedgerEntryEntity> {
+            val currentMonthStartEpochMillis = if (entryCount == DEFAULT_ENTRY_COUNT) {
+                val zoneId = ZoneId.systemDefault()
+                Instant.ofEpochMilli(nowEpochMillis)
+                    .atZone(zoneId)
+                    .withDayOfMonth(1)
+                    .toLocalDate()
+                    .atStartOfDay(zoneId)
+                    .toInstant()
+                    .toEpochMilli()
+            } else {
+                0L
+            }
+            return List(entryCount) { index ->
+                LedgerEntryEntity(
+                    id = "benchmark-entry-${index + 1}",
+                    ledgerBookId = ledgerBookId,
+                    paymentSource = if (index % 2 == 0) PaymentSource.WECHAT else PaymentSource.ALIPAY,
+                    originalCaptureSource = null,
+                    entryOrigin = EntryOrigin.MANUAL,
+                    originPendingEntryId = null,
+                    flowDirection = FlowDirection.OUTFLOW,
+                    transactionKind = TransactionKind.EXPENSE,
+                    amountMinor = (index + 1L) * 123L,
+                    currency = "CNY",
+                    merchantTitle = "$ENTRY_PREFIX ${String.format(Locale.ROOT, "%02d", index + 1)}",
+                    transactionTimeEpochMillis = if (entryCount == DEFAULT_ENTRY_COUNT) {
+                        val elapsedInCurrentMonth = nowEpochMillis - currentMonthStartEpochMillis
+                        nowEpochMillis - elapsedInCurrentMonth * index / entryCount
+                    } else {
+                        nowEpochMillis -
+                            (index % 180) * MILLIS_PER_DAY -
+                            ((index / 180) % 24) * MILLIS_PER_HOUR
+                    },
+                    categoryId = EXPENSE_CATEGORY_IDS[index % EXPENSE_CATEGORY_IDS.size],
+                    fundingAccountId = null,
+                    note = null,
+                    evidenceSummary = null,
+                    parsedFieldsText = null,
+                    confirmedAtEpochMillis = nowEpochMillis,
+                    updatedAtEpochMillis = nowEpochMillis,
+                    deletedAtEpochMillis = null
+                )
+            }
         }
     }
 
