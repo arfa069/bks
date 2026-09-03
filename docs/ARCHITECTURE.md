@@ -179,7 +179,7 @@ Room 数据库仍为 `bks.db`、schema 版本仍为 12；schema 历史位于 `ap
 1. `AssistsService.listeners` 接收窗口状态、内容或窗口集合变化事件。
 2. 500 ms 后通过 `AssistsCore.getAccessibilityRootNodes(ActiveWindow)` 复核包名与窗口，并受限采集可读节点文字。
 3. `BillPageParser` 在内存中执行通用完成态、金额、方向和上下文准入。
-4. `BillSyncPipeline` 生成 `OTHER` / `ACCESSIBILITY_AUTO` / `NEEDS_REVIEW` 候选并执行既有去重。
+4. `BillSyncPipeline` 生成经已验证采集根节点包名映射的支付来源（当前支付宝采集生成 `ALIPAY`，保留 `OTHER` 回退）/ `ACCESSIBILITY_AUTO` / `NEEDS_REVIEW` 候选并执行既有去重。
 5. 本地分类规则应用后，`ReviewQueuePersistence` 创建或合并待确认条目。
 6. 用户确认后才由 Repository 写入当前账本。
 
@@ -322,8 +322,8 @@ Session 与传输边界：
 
 运维指南见 [DIAGNOSTIC-LOGS.md](./DIAGNOSTIC-LOGS.md)。
 
-- `feature:diagnostics` 拥有事件契约、认证秘密脱敏、256 KiB 事件上限、普通事件 5 秒抑制、UTF-8 明文 `.log` 分段、查询、清除及无口令明文导出能力；自动记账批次事件不参与 5 秒抑制。
-- `feature:billsync` 将同一包名/窗口在 500 ms 稳定窗口内收到的无障碍事件合并为一次实际采集批次，并在采集或处理得到最终结果后只写一条诊断事件。事件包含秒级时间、各事件类型次数、实际遍历节点数和新增成功/未新增/失败原因。
+- 诊断模块（`model/domain/diagnostics`、`model/data/local/diagnostics`、`viewmodel/diagnostics`、`view/diagnostics`）拥有事件契约、认证秘密脱敏、256 KiB 事件上限、普通事件 5 秒抑制、UTF-8 明文 `.log` 分段、查询、清除及无口令明文导出能力；自动记账批次事件不参与 5 秒抑制。
+- 自动记账模块（`model/domain/billsync`、`model/application/billsync`、`model/platform/billsync`）将同一包名/窗口在 500 ms 稳定窗口内收到的无障碍事件合并为一次实际采集批次，并在采集或处理得到最终结果后只写一条诊断事件。事件包含秒级时间、各事件类型次数、实际遍历节点数和新增成功/未新增/失败原因。
 - 支付宝实际采集批次携带现有 512 节点、24 层、16 KiB 采集边界内的完整可读正文；非支付宝批次的正文为空，只保存元数据。两类事件均在写入前清除认证秘密。
 - 每个事件以一行 JSON 编码写入 `noBackupFilesDir/diagnostics` 下的 UTF-8 明文 `.log`。每段最多 1 MiB，现行分段总量最多 10 MiB；仅在超过总上限时滚动删除最旧分段。
 - Debug 在 Profile 总览中组装独立诊断入口和页面，入口紧随“合规与隐私”；页面加载最新 1000 条并直接显示与明文导出一致的单行内容，从进入到离开全程启用 `FLAG_SECURE`，不再使用内容遮罩或二次显示确认。

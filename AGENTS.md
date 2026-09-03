@@ -54,7 +54,7 @@
 - Android 生产代码只使用 `com.bks.model`、`com.bks.viewmodel`、`com.bks.view` 三个顶层包；业务名称位于层级之下，不再使用 feature-first 顶层目录；
 - 数据持久层通过 `LedgerRepository`、`PreferencesRepository`、`ReviewQueueRepository` 等领域接口向上提供能力；Room Entity、DAO 与 `Local*`/`Http*` 实现不得进入 ViewModel 或 View；
 - Activity 回调与自动记账界面状态由 `view.common.platform.BillSyncStateCoordinator` 托管，组合导航状态由 `view.common.BksAppState` 管理；
-- 优先沿用现有领域接口、application coordinator 与 platform adapter，不为简单问题引入新抽象。ADR 使用下一个四位编号，例如 `docs/adr/0063-describe-decision.md`。
+- 优先沿用现有领域接口、application coordinator 与 platform adapter，不为简单问题引入新抽象。重大架构与业务规则变更同步更新 `docs/` 下对应现行基线文档。
 
 ## 测试规范
 
