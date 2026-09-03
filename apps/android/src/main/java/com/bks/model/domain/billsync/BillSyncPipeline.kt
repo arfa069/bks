@@ -5,6 +5,7 @@ import com.bks.model.domain.ledger.ConfidenceState
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.PendingEntry
 import com.bks.model.domain.ledger.TransactionKind
+import com.bks.model.domain.ledger.categorizationLabel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,7 +23,8 @@ class BillSyncPipeline(
 ) {
     fun sync(
         pageText: String,
-        capturedAtEpochMillis: Long
+        capturedAtEpochMillis: Long,
+        paymentSource: PaymentSource
     ): BillSyncResult {
         val parseResult = parser.parseWithDiagnostics(
             pageText,
@@ -38,14 +40,19 @@ class BillSyncPipeline(
 
         return BillSyncResult(
             recognized = true,
-            createdEntries = parseResult.entries.map { it.toPendingEntry(capturedAtEpochMillis) }
+            createdEntries = parseResult.entries.map {
+                it.toPendingEntry(capturedAtEpochMillis, paymentSource)
+            }
         )
     }
 
-    private fun ParsedBillEntry.toPendingEntry(capturedAtEpochMillis: Long): PendingEntry =
+    private fun ParsedBillEntry.toPendingEntry(
+        capturedAtEpochMillis: Long,
+        paymentSource: PaymentSource
+    ): PendingEntry =
         PendingEntry(
             id = stableId(capturedAtEpochMillis),
-            source = PaymentSource.OTHER,
+            source = paymentSource,
             captureReason = CaptureReason.ACCESSIBILITY_AUTO,
             confidence = ConfidenceState.NEEDS_REVIEW,
             transactionKind = transactionKindLabel.toTransactionKind(),
@@ -59,7 +66,8 @@ class BillSyncPipeline(
             fundingAccountLabel = null,
             note = "商户未识别，请人工确认".takeIf { merchantTitleFromFallback },
             evidenceSummary = null,
-            parsedFieldsText = parsedFields.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+            parsedFieldsText = (listOf("来源=${paymentSource.categorizationLabel()}") + parsedFields)
+                .joinToString("\n"),
             suggestedCategoryLabel = null
         )
 

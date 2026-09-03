@@ -64,12 +64,13 @@ class BillSyncCaptureProcessorTest {
     @Test
     fun acceptedCapturePersistsReviewOnlyAndConfirmationMovesItToLedger() = runBlocking {
         val result = processor.process(
-            "支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12"
+            pageText = "支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12",
+            paymentSource = PaymentSource.ALIPAY
         )
 
         assertEquals(1, result.insertedCount)
         val pending = database.pendingEntryDao().listPendingEntries().single()
-        assertEquals(PaymentSource.OTHER, pending.source)
+        assertEquals(PaymentSource.ALIPAY, pending.source)
         assertEquals(CaptureReason.ACCESSIBILITY_AUTO, pending.captureReason)
         assertEquals(ConfidenceState.NEEDS_REVIEW, pending.confidence)
         assertNull(pending.fundingAccountId)
@@ -77,7 +78,7 @@ class BillSyncCaptureProcessorTest {
         assertNull(pending.evidenceSummary)
         assertTrue(database.ledgerEntryDao().listLedgerEntries().isEmpty())
         val reviewEntry = persistence.loadSnapshot().pendingEntries.single()
-        assertEquals(PaymentSource.OTHER, reviewEntry.source)
+        assertEquals(PaymentSource.ALIPAY, reviewEntry.source)
         assertEquals(CaptureReason.ACCESSIBILITY_AUTO, reviewEntry.captureReason)
 
         persistence.execute(
@@ -89,7 +90,7 @@ class BillSyncCaptureProcessorTest {
 
         assertNull(database.pendingEntryDao().getById(pending.id))
         val ledger = database.ledgerEntryDao().listLedgerEntries().single()
-        assertEquals(PaymentSource.OTHER, ledger.paymentSource)
+        assertEquals(PaymentSource.ALIPAY, ledger.paymentSource)
         assertNull(ledger.fundingAccountId)
         assertEquals(pending.id, ledger.originPendingEntryId)
     }
@@ -105,16 +106,19 @@ class BillSyncCaptureProcessorTest {
         )
         val page = "支付成功\n¥4.99\n交易方式\n花呗"
 
-        repeatedProcessor.process(page)
+        repeatedProcessor.process(page, PaymentSource.ALIPAY)
         now += 1
-        repeatedProcessor.process(page)
+        repeatedProcessor.process(page, PaymentSource.ALIPAY)
 
         assertEquals(2, database.pendingEntryDao().listPendingEntries().size)
     }
 
     @Test
     fun recognitionDoesNotPersistUntilExplicitlyRequested() = runBlocking {
-        val recognized = processor.recognize("支付成功\n¥5.99\n交易方式\n花呗")
+        val recognized = processor.recognize(
+            "支付成功\n¥5.99\n交易方式\n花呗",
+            PaymentSource.ALIPAY
+        )
 
         assertTrue(recognized.recognized)
         assertTrue(database.pendingEntryDao().listPendingEntries().isEmpty())
@@ -126,7 +130,10 @@ class BillSyncCaptureProcessorTest {
 
     @Test
     fun persistenceReportsDatabaseInsertCountInsteadOfParsedEntryCount() = runBlocking {
-        val recognized = processor.recognize("支付成功\n¥5.99\n交易方式\n花呗")
+        val recognized = processor.recognize(
+            "支付成功\n¥5.99\n交易方式\n花呗",
+            PaymentSource.ALIPAY
+        )
 
         val first = processor.persist(recognized)
         val duplicate = processor.persist(recognized)

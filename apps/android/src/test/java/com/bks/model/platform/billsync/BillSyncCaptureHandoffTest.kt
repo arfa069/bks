@@ -2,6 +2,7 @@ package com.bks.model.platform.billsync
 
 import com.bks.model.domain.billsync.BillSyncFailureReason
 import com.bks.model.domain.billsync.BillSyncResult
+import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.platform.billsync.AcceptedWindowMemory
 import com.bks.model.platform.billsync.BillSyncCaptureOutcome
 import com.bks.model.platform.billsync.collectReadableText
@@ -34,6 +35,10 @@ class BillSyncCaptureHandoffTest {
         handoff(capture, acceptedWindows, coordinator)
 
         assertEquals(listOf("safe", "safe"), coordinator.recognizedPageTexts)
+        assertEquals(
+            listOf(PaymentSource.ALIPAY, PaymentSource.ALIPAY),
+            coordinator.recognizedPaymentSources
+        )
         assertEquals(1, coordinator.persistedResults.size)
         assertFalse(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
     }
@@ -148,6 +153,13 @@ class BillSyncCaptureHandoffTest {
         )
     }
 
+    @Test
+    fun packageNameMapsToKnownPaymentSourceWithOtherFallback() {
+        assertEquals(PaymentSource.ALIPAY, paymentSourceForPackage(ALIPAY_PACKAGE_NAME))
+        assertEquals(PaymentSource.WECHAT, paymentSourceForPackage(WECHAT_PACKAGE_NAME))
+        assertEquals(PaymentSource.OTHER, paymentSourceForPackage("com.example.pay"))
+    }
+
     private fun handoff(
         capture: SanitizedBillSyncCapture,
         acceptedWindows: AcceptedWindowMemory,
@@ -181,10 +193,12 @@ class BillSyncCaptureHandoffTest {
         private val persistFailure: Throwable? = null
     ) {
         val recognizedPageTexts = mutableListOf<String>()
+        val recognizedPaymentSources = mutableListOf<PaymentSource>()
         val persistedResults = mutableListOf<BillSyncResult>()
 
-        fun recognize(pageText: String): BillSyncResult {
+        fun recognize(pageText: String, paymentSource: PaymentSource): BillSyncResult {
             recognizedPageTexts += pageText
+            recognizedPaymentSources += paymentSource
             return BillSyncResult(
                 recognized = recognized,
                 createdEntries = emptyList(),
@@ -201,7 +215,7 @@ class BillSyncCaptureHandoffTest {
     }
 
     private companion object {
-        const val PAYMENT_PACKAGE = "com.example.pay"
+        const val PAYMENT_PACKAGE = ALIPAY_PACKAGE_NAME
         const val WINDOW_ID = 7
     }
 }

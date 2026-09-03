@@ -1,11 +1,11 @@
 # 通用交易识别规则
 
-本文记录当前 Android 客户端基于 `assists-base` 的通用自动记账规则。识别不按微信、支付宝或其他平台分流，也不使用截图或 OCR。
+本文记录当前 Android 客户端基于 `assists-base` 的自动记账规则。当前采集入口只接纳经活动根节点验证的支付宝窗口；交易正文仍按通用规则解析，不依赖支付宝专属控件，也不使用截图或 OCR。
 
 ## 1. 采集边界
 
 - 用户必须先开启自动记账；开关默认关闭，与无障碍授权和服务连接状态分别保存与展示。
-- `AssistsService` 接收全部无障碍事件，并立即读取当前活动窗口。
+- `AssistsService` 接收无障碍事件；支付宝候选事件以及包名缺失的窗口集合变化事件进入采集波次，采集时再次验证当前活动根节点属于支付宝。
 - 排除 BKS 自身。只读取当前活动窗口中可见、非密码、非可编辑节点的文字，最多 512 个节点、24 层和 16 KiB。
 - 不点击、不滚动、不启动其他应用、不截图、不执行 OCR。
 - 同一包名、窗口 ID 和页面指纹成功创建后，在该窗口显示其他页面前不重复处理；不查询或合并待确认候选和历史记录。
@@ -35,9 +35,9 @@
 
 ## 4. 候选输出
 
-每个新候选固定使用：
+每个新候选使用：
 
-- `PaymentSource.OTHER`，界面显示`其他应用`。
+- 经实际采集根节点包名映射的支付来源；当前支付宝采集写入 `PaymentSource.ALIPAY`，界面显示`支付宝`。映射器为后续入口保留未知包名到 `PaymentSource.OTHER` 的回退，但当前非支付宝根节点会在识别前被拒绝。
 - `CaptureReason.ACCESSIBILITY_AUTO`，界面显示`支付结果自动捕获`。
 - `ConfidenceState.NEEDS_REVIEW`。
 - 资金账户为空，不自动创建或选择账户。
@@ -52,4 +52,4 @@
 - 候选生成：[`BillSyncPipeline.kt`](../apps/android/src/main/java/com/bks/model/domain/billsync/BillSyncPipeline.kt)
 - 待确认写入：[`BillSyncCaptureProcessor.kt`](../apps/android/src/main/java/com/bks/model/application/billsync/BillSyncCaptureProcessor.kt)
 
-历史 `PaymentSource.WECHAT`、`PaymentSource.ALIPAY`、通知捕获和账单同步枚举值仅用于读取旧记录，不代表当前识别入口。
+`PaymentSource.WECHAT` 已保留包名映射，但当前自动采集入口尚未接纳微信窗口；通知捕获和账单同步枚举值仍用于兼容相应历史记录。

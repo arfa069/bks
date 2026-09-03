@@ -2,6 +2,7 @@ package com.bks.model.application.billsync
 
 import com.bks.model.domain.billsync.BillSyncPipeline
 import com.bks.model.domain.billsync.BillSyncResult
+import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.settings.PreferencesRepository
 import com.bks.model.application.review.ReviewQueueCaptureCoordinator
 import com.bks.model.domain.review.ReviewQueueRepository
@@ -15,11 +16,16 @@ class BillSyncCaptureProcessor(
     private val clock: () -> Long = System::currentTimeMillis,
     private val captureCoordinator: ReviewQueueCaptureCoordinator = ReviewQueueCaptureCoordinator.Shared
 ) {
-    suspend fun process(pageText: String): BillSyncResult = persist(recognize(pageText))
+    suspend fun process(pageText: String, paymentSource: PaymentSource): BillSyncResult =
+        persist(recognize(pageText, paymentSource))
 
-    internal fun recognize(pageText: String): BillSyncResult = pipeline.sync(
+    internal fun recognize(
+        pageText: String,
+        paymentSource: PaymentSource
+    ): BillSyncResult = pipeline.sync(
         pageText = pageText,
-        capturedAtEpochMillis = clock()
+        capturedAtEpochMillis = clock(),
+        paymentSource = paymentSource
     )
 
     internal suspend fun persist(result: BillSyncResult): BillSyncResult {

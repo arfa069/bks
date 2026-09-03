@@ -1,7 +1,5 @@
 package com.bks.model.domain.billsync
 
-import com.bks.model.domain.ledger.PaymentSource
-import com.bks.model.domain.ledger.categorizationLabel
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -85,7 +83,6 @@ class BillPageParser {
                     transactionKindLabel = kind,
                     transactionTimeText = transactionTime,
                     parsedFields = listOf(
-                        "来源=${PaymentSource.OTHER.categorizationLabel()}",
                         "商户=$title",
                         "金额=${amountMinorToText(amount)}",
                         "类型=$kind"

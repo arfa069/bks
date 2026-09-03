@@ -3,6 +3,7 @@
 package com.bks.model.platform.billsync
 
 import com.bks.model.domain.billsync.BillSyncResult
+import com.bks.model.domain.ledger.PaymentSource
 import android.content.Context
 import android.os.Build
 import android.os.Process
@@ -442,8 +443,8 @@ internal class BillSyncCaptureCoordinator(
                 handoffSanitizedCapture(
                     capture = SanitizedBillSyncCapture(activePackage, root.windowId, captured.pageText),
                     acceptedWindows = acceptedWindows,
-                    recognize = { pageText ->
-                        recognizeWithTiming(pageText) { recognizeMillis = it }
+                    recognize = { pageText, paymentSource ->
+                        recognizeWithTiming(pageText, paymentSource) { recognizeMillis = it }
                     },
                     persist = { result ->
                         persistWithTiming(result) { persistMillis = it }
@@ -503,11 +504,12 @@ internal class BillSyncCaptureCoordinator(
 
     private fun recognizeWithTiming(
         pageText: String,
+        paymentSource: PaymentSource,
         onMeasured: (Long) -> Unit
     ): BillSyncResult {
         val startedAt = uptimeClock()
         return try {
-            processor.recognize(pageText)
+            processor.recognize(pageText, paymentSource)
         } finally {
             onMeasured((uptimeClock() - startedAt).coerceAtLeast(0L))
         }
@@ -939,7 +941,7 @@ private class BillSyncWaveAccumulator(
 }
 
 internal class BillSyncCaptureOperations(
-    val recognize: (String) -> BillSyncResult,
+    val recognize: (String, PaymentSource) -> BillSyncResult,
     val persist: suspend (BillSyncResult) -> BillSyncResult
 )
 
@@ -970,12 +972,12 @@ internal fun shouldCaptureEvent(
 internal fun handoffSanitizedCapture(
     capture: SanitizedBillSyncCapture,
     acceptedWindows: AcceptedWindowMemory,
-    recognize: (String) -> BillSyncResult,
+    recognize: (String, PaymentSource) -> BillSyncResult,
     persist: suspend (BillSyncResult) -> BillSyncResult,
     launch: (suspend () -> Unit) -> Unit,
     onOutcome: (BillSyncCaptureOutcome) -> Unit = {}
 ) {
-    val recognized = recognize(capture.pageText)
+    val recognized = recognize(capture.pageText, paymentSourceForPackage(capture.packageName))
     if (!recognized.recognized) {
         acceptedWindows.release(capture.packageName, capture.windowId)
         BillSyncCaptureLog.processed(recognized = false, insertedCount = 0)
@@ -1021,6 +1023,12 @@ internal fun handoffSanitizedCapture(
             notifyCaptureOutcome(onOutcome, BillSyncCaptureOutcome.Failed("persistence_failed"))
         }
     }
+}
+
+internal fun paymentSourceForPackage(packageName: String): PaymentSource = when (packageName) {
+    ALIPAY_PACKAGE_NAME -> PaymentSource.ALIPAY
+    WECHAT_PACKAGE_NAME -> PaymentSource.WECHAT
+    else -> PaymentSource.OTHER
 }
 
 private fun notifyCaptureOutcome(
@@ -1208,6 +1216,7 @@ internal const val CAPTURE_SETTLE_MILLIS = 500L
 internal const val MAX_CAPTURE_INTERVAL_MILLIS = 1_000L
 internal const val WAVE_INTERVAL_MILLIS = 1_000L
 internal const val MAIN_PROBE_INTERVAL_MILLIS = 2_000L
+internal const val WECHAT_PACKAGE_NAME = "com.tencent.mm"
 private const val RUNTIME_PROBE_THREAD_NAME = "BksBillSyncProbe"
 
 private val CAPTURE_EVENT_TYPES = setOf(

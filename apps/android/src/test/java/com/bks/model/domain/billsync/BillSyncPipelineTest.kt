@@ -17,12 +17,13 @@ class BillSyncPipelineTest {
     private val pipeline = BillSyncPipeline(captureTimeFormatter = { "2026-08-21 10:00" })
 
     @Test
-    fun genericCaptureCreatesReviewOnlyCandidateWithoutRawTextOrAccount() {
+    fun capturePreservesPaymentSourceWithoutRawTextOrAccount() {
         val result = sync("支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12")
         val entry = result.createdEntries.single()
 
         assertTrue(result.recognized)
-        assertEquals(PaymentSource.OTHER, entry.source)
+        assertEquals(PaymentSource.ALIPAY, entry.source)
+        assertTrue(entry.parsedFieldsText.orEmpty().contains("来源=支付宝"))
         assertEquals(CaptureReason.ACCESSIBILITY_AUTO, entry.captureReason)
         assertEquals(ConfidenceState.NEEDS_REVIEW, entry.confidence)
         assertNull(entry.fundingAccountLabel)
@@ -44,7 +45,8 @@ class BillSyncPipelineTest {
             .createdEntries.single()
         val second = pipeline.sync(
             pageText = "支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12",
-            capturedAtEpochMillis = NOW + 31_000
+            capturedAtEpochMillis = NOW + 31_000,
+            paymentSource = PaymentSource.ALIPAY
         ).createdEntries.single()
 
         assertTrue(first.id != second.id)
@@ -61,7 +63,8 @@ class BillSyncPipelineTest {
 
     private fun sync(pageText: String): BillSyncResult = pipeline.sync(
         pageText = pageText,
-        capturedAtEpochMillis = NOW
+        capturedAtEpochMillis = NOW,
+        paymentSource = PaymentSource.ALIPAY
     )
 
     private companion object {

@@ -58,7 +58,7 @@ Source and runtime:
 Admission and output:
 - A page must contain an explicit completed state, one unique amount, one unconflicted inflow/outflow direction, and at least one transaction-context field.
 - Payment initiation, password entry, pending, processing, failure, cancellation, amount conflicts, and direction conflicts are rejected.
-- Accepted candidates use source `OTHER`, capture reason `ACCESSIBILITY_AUTO`, confidence `NEEDS_REVIEW`, and no automatic funding account. A missing merchant falls back to “其他应用支付”.
+- Accepted candidates use the payment source mapped from the verified capture-root package. The current Alipay-only capture path therefore uses `ALIPAY`; the mapper retains an `OTHER` fallback for future capture sources, while non-Alipay roots are currently rejected before recognition. Capture reason remains `ACCESSIBILITY_AUTO`, confidence remains `NEEDS_REVIEW`, and no funding account is selected automatically. A missing merchant falls back to “其他应用支付”.
 - Candidates pass through existing categorization, deduplication, and `ReviewQueuePersistence`; they enter pending only and require user confirmation before ledger insertion.
 
 ### 5.2 Review Queue

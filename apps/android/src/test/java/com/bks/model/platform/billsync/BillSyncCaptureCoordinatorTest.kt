@@ -2,6 +2,7 @@ package com.bks.model.platform.billsync
 
 import com.bks.model.domain.billsync.BillSyncResult
 import com.bks.model.domain.diagnostics.DiagnosticRecorder
+import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.platform.billsync.ALIPAY_PACKAGE_NAME
 import com.bks.model.platform.billsync.BillSyncAccessibilityCallbackTiming
 import com.bks.model.platform.billsync.BillSyncCaptureCoordinator
@@ -367,6 +368,7 @@ class BillSyncCaptureCoordinatorTest {
 
             assertEquals(1, activeWindowLookups)
             assertEquals(listOf(PAGE_TEXT), processor.recognizedPageTexts)
+            assertEquals(listOf(PaymentSource.ALIPAY), processor.recognizedPaymentSources)
             val leading = captureEvents(diagnostics).single()
             assertEquals("active", leading.metadata.attributes["rootBy"])
             assertEquals("0", leading.metadata.attributes["allRoots"])
@@ -800,12 +802,14 @@ class BillSyncCaptureCoordinatorTest {
         var persistBlock: (suspend () -> Unit)? = null
     ) {
         val recognizedPageTexts = mutableListOf<String>()
+        val recognizedPaymentSources = mutableListOf<PaymentSource>()
         val persistedResults = mutableListOf<BillSyncResult>()
         var persistAttempts = 0
         var cancelledPersistences = 0
 
-        fun recognize(pageText: String): BillSyncResult {
+        fun recognize(pageText: String, paymentSource: PaymentSource): BillSyncResult {
             recognizedPageTexts += pageText
+            recognizedPaymentSources += paymentSource
             return BillSyncResult(recognized = recognized(pageText), createdEntries = emptyList())
         }
 
