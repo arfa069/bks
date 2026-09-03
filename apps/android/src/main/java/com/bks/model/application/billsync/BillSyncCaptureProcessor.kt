@@ -34,7 +34,10 @@ class BillSyncCaptureProcessor(
         return captureCoordinator.serialize {
             reviewQueuePersistence.ensureSystemCategories()
             val rules = preferencesRepository.categorizationRules.first()
-            val createdEntries = result.createdEntries.map { it.applyCategorizationSuggestion(rules) }
+            val categories = reviewQueuePersistence.loadCategories()
+            val createdEntries = result.createdEntries.map {
+                it.applyCategorizationSuggestion(rules, categories)
+            }
             val insertedCount = if (createdEntries.isEmpty()) {
                 0
             } else {

@@ -10,10 +10,12 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.bks.model.data.local.database.BksDatabase
+import com.bks.model.data.local.database.CategoryEntity
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.ConfidenceState
 import com.bks.model.data.local.ledger.LocalLedgerRepository
 import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.data.local.ledger.ReviewQueuePersistence
 import com.bks.model.domain.review.ReviewPersistenceCommand
@@ -142,6 +144,40 @@ class BillSyncCaptureProcessorTest {
         assertEquals(0, duplicate.insertedCount)
         assertEquals(1, duplicate.createdEntries.size)
         assertEquals(1, database.pendingEntryDao().listPendingEntries().size)
+    }
+
+    @Test
+    fun persistedSuggestionUsesCurrentCustomCategoryId() = runBlocking {
+        database.categoryDao().upsert(
+            CategoryEntity(
+                id = "custom-fixed-expense",
+                name = "固定支出",
+                kind = com.bks.model.domain.ledger.TransactionKind.EXPENSE,
+                sortOrder = 1,
+                isSystem = false,
+                createdAtEpochMillis = NOW
+            )
+        )
+        LocalPreferencesRepository(database).updateCategorizationRules {
+            listOf(
+                CategorizationRule(
+                    id = "rule-telecom",
+                    merchantContains = "中国电信",
+                    transactionKind = "支出",
+                    category = "固定支出"
+                )
+            )
+        }
+
+        processor.process(
+            pageText = "支付成功￥3.99\n支付成功\n3.99\n中国电信\n￥3.99\n交易方式\n花呗",
+            paymentSource = PaymentSource.ALIPAY
+        )
+
+        val pending = database.pendingEntryDao().listPendingEntries().single()
+        assertEquals("中国电信", pending.merchantTitle)
+        assertEquals("custom-fixed-expense", pending.suggestedCategoryId)
+        assertEquals("固定支出", pending.suggestedCategoryLabel)
     }
 
     private companion object {

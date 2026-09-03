@@ -28,7 +28,8 @@ object BksDatabaseProvider {
                     BksDatabase.MIGRATION_8_9,
                     BksDatabase.MIGRATION_9_10,
                     BksDatabase.MIGRATION_10_11,
-                    BksDatabase.MIGRATION_11_12
+                    BksDatabase.MIGRATION_11_12,
+                    BksDatabase.MIGRATION_12_13
                 )
                 .addCallback(DEFAULT_CATEGORIZATION_RULES_CALLBACK)
                 .build()

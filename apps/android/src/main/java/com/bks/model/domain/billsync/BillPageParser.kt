@@ -98,14 +98,26 @@ class BillPageParser {
             val inline = MERCHANT_LABELS.firstNotNullOfOrNull { label ->
                 line.substringAfter(label, missingDelimiterValue = "")
                     .trimStart(' ', ':', '：')
+                    .normalizeMerchantValue()
                     .takeIf(::isMerchantValue)
             }
             if (inline != null) return inline
             if (line.trimEnd(' ', ':', '：') in MERCHANT_LABELS) {
-                lines.getOrNull(index + 1)?.takeIf(::isMerchantValue)?.let { return it }
+                lines.getOrNull(index + 1)
+                    ?.normalizeMerchantValue()
+                    ?.takeIf(::isMerchantValue)
+                    ?.let { return it }
             }
         }
-        return null
+        val completedStatusIndex = lines.indexOfFirst { line ->
+            COMPLETED_STATUS.any { status -> line == status }
+        }
+        if (completedStatusIndex == -1) return null
+        return lines.asSequence()
+            .drop(completedStatusIndex + 1)
+            .takeWhile { line -> !line.startsWithContextLabel() }
+            .map(String::normalizeMerchantValue)
+            .firstOrNull(::isStandaloneMerchantValue)
     }
 
     private fun isMerchantValue(value: String): Boolean =
@@ -114,6 +126,12 @@ class BillPageParser {
             !AMOUNT_REGEX.containsMatchIn(value) &&
             COMPLETED_STATUS.none(value::contains) &&
             REJECTED_STATUS.none(value::contains)
+
+    private fun isStandaloneMerchantValue(value: String): Boolean =
+        isMerchantValue(value) &&
+            !PLAIN_AMOUNT_REGEX.matches(value) &&
+            value !in MERCHANT_NAVIGATION_LABELS &&
+            !value.startsWith("点击")
 }
 
 private enum class PaymentDirection { Inflow, Outflow }
@@ -138,6 +156,12 @@ internal fun String.normalizedLines(): List<String> = lineSequence()
     .filter(String::isNotBlank)
     .toList()
 
+private fun String.normalizeMerchantValue(): String =
+    trim().replace(MERCHANT_WHITESPACE_REGEX, " ")
+
+private fun String.startsWithContextLabel(): Boolean =
+    CONTEXT_LABELS.any { label -> startsWith(label) }
+
 internal const val FALLBACK_MERCHANT_TITLE = "其他应用支付"
 
 private const val MAX_MERCHANT_LENGTH = 80
@@ -145,6 +169,10 @@ private val AMOUNT_REGEX = Regex(
     "(?:[¥￥]\\s*([0-9]{1,9}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)|" +
         "([0-9]{1,9}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)\\s*元)"
 )
+private val PLAIN_AMOUNT_REGEX = Regex(
+    "^[+-]?(?:[¥￥]\\s*)?[0-9]{1,9}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?(?:\\s*元)?$"
+)
+private val MERCHANT_WHITESPACE_REGEX = Regex("[\\s\\u3000]+")
 private val TRANSACTION_TIME_REGEX = Regex(
     "\\d{4}[-/.年]\\d{1,2}[-/.月]\\d{1,2}(?:日)?\\s+\\d{1,2}:\\d{2}(?::\\d{2})?"
 )
@@ -163,3 +191,4 @@ private val CONTEXT_LABELS = listOf(
     "支付方式", "交易时间", "创建时间", "账单", "交易方式"
 )
 private val MERCHANT_LABELS = listOf("商户", "收款方", "付款方", "交易对象", "对方", "商品")
+private val MERCHANT_NAVIGATION_LABELS = setOf("回首页", "完成")

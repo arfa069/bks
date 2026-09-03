@@ -38,7 +38,7 @@ internal data class PendingCategoryRuleSave(
     fun toRuleRequest(): ReviewCategoryRuleRequest = ReviewCategoryRuleRequest(
         id = "rule-${entry.id}-${entry.capturedAtEpochMillis}",
         merchantContains = edit.title.trim(),
-        sourceLabel = entry.sourceLabel,
+        sourceLabel = "",
         transactionKind = edit.transactionKind.trim(),
         category = edit.category.trim(),
         updatedAtEpochMillis = entry.capturedAtEpochMillis

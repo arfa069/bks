@@ -1,10 +1,26 @@
 package com.bks.model.data.local.settings
 
 import com.bks.model.data.local.database.CategorizationRuleEntity
-import com.bks.model.domain.ledger.TransactionKind
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object DefaultCategorizationRules {
+    private val merchantRules = listOf(
+        defaultMerchantRule(
+            id = "default-mcdonalds",
+            merchantContains = "麦当劳",
+            transactionKind = "支出",
+            category = "餐饮",
+            priority = 100
+        ),
+        defaultMerchantRule(
+            id = "default-china-telecom",
+            merchantContains = "中国电信",
+            transactionKind = "支出",
+            category = "通讯",
+            priority = 100
+        )
+    )
+
     val rules: List<CategorizationRuleEntity> = listOf(
         defaultRule(
             id = "default-refund",
@@ -54,9 +70,20 @@ object DefaultCategorizationRules {
             category = "医疗",
             priority = 100
         )
-    )
+    ) + merchantRules
 
     fun insertMissing(db: SupportSQLiteDatabase) {
+        insertMissing(db, rules)
+    }
+
+    fun insertNewMerchantRules(db: SupportSQLiteDatabase) {
+        insertMissing(db, merchantRules)
+    }
+
+    private fun insertMissing(
+        db: SupportSQLiteDatabase,
+        rules: List<CategorizationRuleEntity>
+    ) {
         rules.forEach { rule ->
             db.execSQL(
                 """
@@ -91,6 +118,24 @@ object DefaultCategorizationRules {
         id = id,
         merchantContains = "",
         titleContains = titleContains,
+        sourceLabel = "",
+        transactionKind = transactionKind,
+        category = category,
+        priority = priority,
+        enabled = true,
+        updatedAtEpochMillis = 0
+    )
+
+    private fun defaultMerchantRule(
+        id: String,
+        merchantContains: String,
+        transactionKind: String,
+        category: String,
+        priority: Int
+    ): CategorizationRuleEntity = CategorizationRuleEntity(
+        id = id,
+        merchantContains = merchantContains,
+        titleContains = "",
         sourceLabel = "",
         transactionKind = transactionKind,
         category = category,

@@ -7,6 +7,7 @@ import com.bks.model.domain.review.ReviewPersistenceResult
 import com.bks.model.domain.review.ReviewPersistenceUndo
 import com.bks.model.domain.review.ReviewQueueRepository
 import com.bks.model.domain.review.ReviewQueueSnapshot
+import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.PendingEntry
 import com.bks.model.data.local.database.LedgerEntryEntity
 import com.bks.model.data.local.database.PendingEntryEntity
@@ -49,6 +50,9 @@ class ReviewQueuePersistence(
     override suspend fun ensureSystemCategories() {
         repository.seedSystemCategories()
     }
+
+    override suspend fun loadCategories(): List<Category> =
+        repository.categories.first().map { it.toDomain() }
 
     override suspend fun insertCapturedEntries(entries: List<PendingEntry>): Int =
         entries.count { entry ->

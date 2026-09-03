@@ -7,6 +7,7 @@ import com.bks.model.data.local.settings.LocalPreferencesRepository
 import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.ConfidenceState
+import com.bks.model.domain.ledger.DefaultCategories
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.PendingEntry
 import com.bks.model.domain.ledger.TransactionKind
@@ -155,7 +156,7 @@ class LocalPreferencesRepositoryTest {
             DefaultCategorizationRules.insertMissing(database.openHelper.writableDatabase)
             val rules = database.categorizationRuleDao().listRules()
 
-            assertEquals(7, rules.size)
+            assertEquals(9, rules.size)
             assertEquals("购物", rules.first { it.id == "default-food" }.category)
             assertEquals(99, rules.first { it.id == "default-food" }.updatedAtEpochMillis)
         }
@@ -288,7 +289,10 @@ class LocalPreferencesRepositoryTest {
             suggestedCategoryLabel = null
         )
 
-        val suggestedEntry = entry.applyCategorizationSuggestion(rules)
+        val suggestedEntry = entry.applyCategorizationSuggestion(
+            rules,
+            DefaultCategories.systemDefaults(createdAtEpochMillis = 0)
+        )
 
         assertEquals("food", suggestedEntry.suggestedCategoryId)
 

@@ -31,13 +31,26 @@ class BillPageParserTest {
     }
 
     @Test
-    fun repeatedSameAmountIsNotAmbiguous() {
-        assertEquals(
-            1,
-            parse(
-                "支付成功￥4.99\n支付成功\n4.99\n中国电信\n￥4.99\n交易方式\n花呗\n完成"
-            ).size
-        )
+    fun extractsStandaloneMerchantFromAlipayResult() {
+        val telecom = parse(
+            "回首页\n完成\n支付成功￥4.99\n支付成功\n4.99\n中国电信\n￥4.99\n交易方式\n花呗"
+        ).single()
+        val restaurant = parse(
+            "回首页\n完成\n支付成功￥49.98\n支付成功\n49.98\n珍友缘\n￥50.00\n" +
+                "点击给商家对账\n交易方式\n支付遇财神\n花呗\n-￥0.02"
+        ).single()
+
+        assertEquals("中国电信", telecom.merchantTitle)
+        assertEquals("珍友缘", restaurant.merchantTitle)
+        assertEquals(4_998L, restaurant.amountMinor)
+    }
+
+    @Test
+    fun standaloneAmountAndPaymentMethodDoNotBecomeMerchant() {
+        val entry = parse("支付成功￥5.99\n支付成功\n5.99\n交易方式\n花呗").single()
+
+        assertEquals(FALLBACK_MERCHANT_TITLE, entry.merchantTitle)
+        assertTrue(entry.merchantTitleFromFallback)
     }
 
     @Test

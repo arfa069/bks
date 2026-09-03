@@ -175,8 +175,12 @@ Charts and empty states:
 Rules:
 - Local categorization rules run before AI.
 - A new installation starts with visible, editable local rules for common high-confidence categories; these records are stored in the same local rules table as user-created rules.
+- The built-in high-confidence merchant rules include McDonald's -> Food and China Telecom -> Communication.
+- User-created or user-edited rules take precedence over unchanged built-in rules, regardless of the built-in numeric priority.
 - Users can save a correction as a rule when confirming a pending entry.
 - The app asks before saving a correction as a durable rule.
+- A correction learned from Review matches the normalized merchant and transaction kind without binding to the current payment source. Saving another correction with the same conditions replaces the earlier rule; users can still enter an explicit source constraint on the rule-management page.
+- A local suggestion is applied only when its category resolves to a current category ID, including a user-created category. Missing or deleted category targets remain uncategorized.
 - Rule management page includes rule list and simple rule form:
   merchant, title keyword, source, transaction kind -> category.
 

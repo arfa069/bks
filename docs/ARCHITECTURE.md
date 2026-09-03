@@ -62,7 +62,7 @@ View → ViewModel → Model Domain
 
 当前 Android 组件 FQCN 为 `com.bks.view.app.MainActivity`、`com.bks.model.platform.app.BksApplication`、`com.bks.model.platform.billsync.BillSyncAccessibilityService` 和 `com.bks.model.platform.sync.LedgerSyncWorker`。各构建变体的 `${applicationId}.wxapi.WXEntryActivity` 是微信 SDK 要求的唯一包结构例外。
 
-Room 数据库仍为 `bks.db`、schema 版本仍为 12；schema 历史位于 `apps/android/schemas/com.bks.model.data.local.database.BksDatabase/`。同步使用 v2 WorkManager 唯一名称，Runtime 启动时取消旧名称后再按 Session/eligibility gate 调度。
+Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/android/schemas/com.bks.model.data.local.database.BksDatabase/`。同步使用 v2 WorkManager 唯一名称，Runtime 启动时取消旧名称后再按 Session/eligibility gate 调度。
 
 `MvvmPackageArchitectureTest` 由 Gradle 注入主源码与测试源码根目录，检查路径/package 一致、三顶层约束、依赖方向、框架类型归属和旧包零残留。`src/test` 镜像被测生产层，测试替身只存在于测试源码。
 
@@ -178,7 +178,7 @@ Room 数据库仍为 `bks.db`、schema 版本仍为 12；schema 历史位于 `ap
 流水线阶段：
 1. `AssistsService.listeners` 接收窗口状态、内容或窗口集合变化事件。
 2. 500 ms 后通过 `AssistsCore.getAccessibilityRootNodes(ActiveWindow)` 复核包名与窗口，并受限采集可读节点文字。
-3. `BillPageParser` 在内存中执行通用完成态、金额、方向和上下文准入。
+3. `BillPageParser` 在内存中执行通用完成态、金额、方向和上下文准入；商户优先取显式标签值，标签缺失时只在独立完成状态之后、首个交易上下文字段之前跳过金额并提取首个有效独立文本，且统一折叠空白。
 4. `BillSyncPipeline` 生成经已验证采集根节点包名映射的支付来源（当前支付宝采集生成 `ALIPAY`，保留 `OTHER` 回退）/ `ACCESSIBILITY_AUTO` / `NEEDS_REVIEW` 候选并执行既有去重。
 5. 本地分类规则应用后，`ReviewQueuePersistence` 创建或合并待确认条目。
 6. 用户确认后才由 Repository 写入当前账本。
@@ -187,7 +187,10 @@ Room 数据库仍为 `bks.db`、schema 版本仍为 12；schema 历史位于 `ap
 - 捕获流水线**绝不直接写入**已确认的账本条目。
 - `BillSyncCaptureProcessor` 通过 `ReviewQueuePersistence` 进行持久化，应用 UI 从 Room Flow 实时刷新。
 - 原始页面文字不进入 Room、账本备份、同步或上传链路。诊断日志开启时，每个实际支付宝采集批次会按诊断契约在设备内保存完整采集正文；非支付宝批次只保存元数据。
-- 初始本地规则作为可编辑的 Room 记录预置；数据库迁移与首次安装回调不得覆盖用户后续的修改。
+- 初始本地规则作为可编辑的 Room 记录预置；Room v12 到 v13 仅补入新增的“麦当劳 -> 餐饮”和“中国电信 -> 通讯”规则，不恢复已删除的旧默认规则，也不覆盖用户后续的修改。
+- 用户创建或修改的规则优先于未修改内置规则；待确认页学习规则默认只绑定规范化商户和交易类型，不绑定支付来源。相同条件再次纠正会覆盖旧规则。
+- 历史上由待确认页为 `rule-bill-*` 自动学习、且来源为“其他应用”的规则按来源无关条件兼容；用户在规则页明确指定“其他应用”的规则仍保持精确来源匹配。
+- 分类建议写入待确认前必须解析到当前分类表中的真实 ID，系统分类和自定义分类采用同一约束；目标分类已不存在时不应用建议。
 
 ## 5. 去重匹配 (Deduplication)
 

@@ -36,7 +36,7 @@ import org.robolectric.annotation.Config
 class BksDatabaseMigrationTest {
     @Test
     fun schemaVersionIsCurrent() {
-        assertEquals(12, BksDatabase.SCHEMA_VERSION)
+        assertEquals(13, BksDatabase.SCHEMA_VERSION)
     }
 
     @Test
@@ -89,6 +89,7 @@ class BksDatabaseMigrationTest {
 
         val migrated = Room.databaseBuilder(context, BksDatabase::class.java, databaseName)
             .addMigrations(BksDatabase.MIGRATION_11_12)
+            .addMigrations(BksDatabase.MIGRATION_12_13)
             .allowMainThreadQueries()
             .build()
         val settings = runBlocking { migrated.localSettingsDao().getById() }
@@ -140,6 +141,7 @@ class BksDatabaseMigrationTest {
             .addMigrations(BksDatabase.MIGRATION_9_10)
             .addMigrations(BksDatabase.MIGRATION_10_11)
             .addMigrations(BksDatabase.MIGRATION_11_12)
+            .addMigrations(BksDatabase.MIGRATION_12_13)
             .allowMainThreadQueries()
             .build()
 
@@ -335,6 +337,7 @@ class BksDatabaseMigrationTest {
             .addMigrations(BksDatabase.MIGRATION_9_10)
             .addMigrations(BksDatabase.MIGRATION_10_11)
             .addMigrations(BksDatabase.MIGRATION_11_12)
+            .addMigrations(BksDatabase.MIGRATION_12_13)
             .allowMainThreadQueries()
             .build()
 
@@ -473,6 +476,7 @@ class BksDatabaseMigrationTest {
             .addMigrations(BksDatabase.MIGRATION_9_10)
             .addMigrations(BksDatabase.MIGRATION_10_11)
             .addMigrations(BksDatabase.MIGRATION_11_12)
+            .addMigrations(BksDatabase.MIGRATION_12_13)
             .allowMainThreadQueries()
             .build()
 

@@ -40,6 +40,29 @@ class ReviewQueueEditorTest {
     val composeRule = createComposeRule()
 
     @Test
+    fun learnedRuleUsesMerchantAndKindWithoutBindingPaymentSource() {
+        val request = PendingCategoryRuleSave(
+            entry = sampleEntry(),
+            edit = PendingReviewEdit(
+                title = " 中国电信 ",
+                amountText = "3.99",
+                timeText = "2026-07-08 12:20",
+                transactionKind = "支出",
+                categoryId = "communication",
+                category = "通讯",
+                fundingAccountId = null,
+                fundingAccount = "",
+                note = ""
+            )
+        ).toRuleRequest()
+
+        assertEquals("中国电信", request.merchantContains)
+        assertEquals("", request.sourceLabel)
+        assertEquals("支出", request.transactionKind)
+        assertEquals("通讯", request.category)
+    }
+
+    @Test
     fun sharedEditorConfirmsSelectedCategoryAndFundingAccount() {
         val nextCommand = AtomicReference<ReviewPersistenceCommand?>()
         composeRule.setContent {
@@ -154,6 +177,8 @@ class ReviewQueueEditorTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("保存为分类规则？").assertIsDisplayed()
+        composeRule.onNodeWithText("以后遇到相同商户和交易类型时，自动建议“购物”。")
+            .assertIsDisplayed()
         composeRule.onNodeWithText("这次不保存").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("已确认 午餐").assertIsDisplayed()
