@@ -10,11 +10,11 @@ import com.bks.model.data.local.database.LedgerSyncDao
 import com.bks.model.data.local.database.LocalSettingsDao
 import com.bks.model.data.local.database.LocalSettingsEntity
 import com.bks.model.data.local.sync.LocalSyncMutationRecorder
-import com.bks.model.domain.ledger.TransactionKind
 import androidx.room.withTransaction
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.categorization.CategorizationRulesUpdate
+import com.bks.model.domain.categorization.normalizeMerchantContains
 import com.bks.model.domain.settings.CachedDefaultFundingAccount
 import com.bks.model.domain.settings.PreferencesRepository
 import com.bks.model.domain.settings.UserPreferences
@@ -26,7 +26,7 @@ class LocalPreferencesRepository(
 ) : PreferencesRepository {
     override val categorizationRules: Flow<List<CategorizationRule>> =
         database.categorizationRuleDao().observeRules().map { rules ->
-            rules.map { it.toDomain() }
+            rules.mapNotNull { it.toDomainOrNull() }
         }
 
     override val userPreferences: Flow<UserPreferences> =
@@ -36,7 +36,7 @@ class LocalPreferencesRepository(
 
     override suspend fun updateCategorizationRules(update: CategorizationRulesUpdate) = database.withTransaction {
         val previous = database.categorizationRuleDao().listRules()
-        val rules = update(previous.map { it.toDomain() })
+        val rules = update(previous.mapNotNull { it.toDomainOrNull() })
         val recorder = LocalSyncMutationRecorder(database, System::currentTimeMillis)
         val entities = rules.map { it.toEntity() }
         database.categorizationRuleDao().deleteAll()
@@ -119,24 +119,25 @@ class LocalPreferencesRepository(
         )
 }
 
-private fun CategorizationRuleEntity.toDomain(): CategorizationRule = CategorizationRule(
-    id = id,
-    merchantContains = merchantContains,
-    titleContains = titleContains,
-    sourceLabel = sourceLabel,
-    transactionKind = transactionKind,
-    category = category,
-    priority = priority,
-    enabled = enabled,
-    updatedAtEpochMillis = updatedAtEpochMillis
-)
+private fun CategorizationRuleEntity.toDomainOrNull(): CategorizationRule? {
+    val normalizedMerchants = normalizeMerchantContains(merchantContains.ifBlank { titleContains })
+    if (normalizedMerchants.isBlank()) return null
+    return CategorizationRule(
+        id = id,
+        merchantContains = normalizedMerchants,
+        category = category,
+        priority = priority,
+        enabled = enabled,
+        updatedAtEpochMillis = updatedAtEpochMillis
+    )
+}
 
 private fun CategorizationRule.toEntity(): CategorizationRuleEntity = CategorizationRuleEntity(
     id = id,
-    merchantContains = merchantContains,
-    titleContains = titleContains,
-    sourceLabel = sourceLabel,
-    transactionKind = transactionKind,
+    merchantContains = normalizeMerchantContains(merchantContains),
+    titleContains = "",
+    sourceLabel = "",
+    transactionKind = "",
     category = category,
     priority = priority,
     enabled = enabled,

@@ -3,8 +3,6 @@ package com.bks.view.categorization
 import com.bks.model.application.account.settingsSyncInFlight
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.model.domain.categorization.CategorizationRule
-import com.bks.model.domain.ledger.Category
-import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.categorization.CategorizationAiUiState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
@@ -17,7 +15,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -26,7 +23,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.then
 import androidx.compose.ui.unit.DpSize
@@ -103,26 +99,29 @@ class CategorizationRulesScreenTest {
 
         composeRule.onNodeWithText("分类规则").assertIsDisplayed()
         composeRule.onNodeWithTag("create-rule").performScrollTo().performClick()
-        composeRule.onNodeWithText("商户包含").performTextInput("星巴克")
-        composeRule.onNodeWithText("标题关键词").performTextInput("拿铁")
-        composeRule.onNodeWithText("来源").performTextInput("微信")
-        composeRule.onNodeWithText("交易类型").performTextInput("支出")
-        composeRule.onNodeWithText("分类").performTextInput("餐饮")
+        composeRule.onNodeWithText("商户包含").performTextInput("星巴克, 瑞幸咖啡,星巴克")
+        composeRule.onNodeWithText("多个商户请用英文逗号分隔").assertIsDisplayed()
+        composeRule.onNodeWithText("标题关键词").assertDoesNotExist()
+        composeRule.onNodeWithText("来源").assertDoesNotExist()
+        composeRule.onNodeWithText("交易类型").assertDoesNotExist()
+        composeRule.onNodeWithTag("categorization-rule-category").performClick()
+        composeRule.onNodeWithText("餐饮").performClick()
         composeRule.onNodeWithText("保存规则").performClick()
 
-        composeRule.onNodeWithText("星巴克").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("星巴克,瑞幸咖啡").performScrollTo().assertIsDisplayed()
         composeRule.runOnIdle {
             assertEquals("餐饮", rules.single().category)
+            assertEquals("星巴克,瑞幸咖啡", rules.single().merchantContains)
         }
 
         composeRule.onNodeWithTag("rule-menu-rule-1").performScrollTo().performClick()
         composeRule.onNodeWithTag("edit-rule-rule-1").performClick()
-        composeRule.onNodeWithText("分类").performTextClearance()
-        composeRule.onNodeWithText("分类").performTextInput("工作餐")
+        composeRule.onNodeWithTag("categorization-rule-category").performClick()
+        composeRule.onNodeWithText("交通").performClick()
         composeRule.onNodeWithText("保存规则").performClick()
 
         composeRule.runOnIdle {
-            assertEquals("工作餐", rules.single().category)
+            assertEquals("交通", rules.single().category)
         }
     }
 
@@ -153,8 +152,8 @@ class CategorizationRulesScreenTest {
     fun newRuleIdDoesNotReuseAnExistingIdAfterDeletion() {
         var rules by mutableStateOf(
             listOf(
-                CategorizationRule(id = "rule-1", category = "餐饮"),
-                CategorizationRule(id = "rule-3", category = "交通")
+                CategorizationRule(id = "rule-1", merchantContains = "食堂", category = "餐饮"),
+                CategorizationRule(id = "rule-3", merchantContains = "地铁", category = "交通")
             )
         )
         composeRule.setContent {
@@ -165,7 +164,9 @@ class CategorizationRulesScreenTest {
         }
 
         composeRule.onNodeWithTag("create-rule").performScrollTo().performClick()
-        composeRule.onNodeWithText("分类").performTextInput("购物")
+        composeRule.onNodeWithText("商户包含").performTextInput("超市")
+        composeRule.onNodeWithTag("categorization-rule-category").performClick()
+        composeRule.onNodeWithText("购物").performClick()
         composeRule.onNodeWithText("保存规则").performClick()
 
         composeRule.runOnIdle {
@@ -210,50 +211,27 @@ class CategorizationRulesScreenTest {
     }
 
     @Test
-    fun ruleFiltersShowOnlyMatchingTransactionKinds() {
-        composeRule.setContent {
-            CategorizationRulesScreen(
-                rules = listOf(
-                    CategorizationRule(id = "expense", transactionKind = "支出", category = "餐饮"),
-                    CategorizationRule(id = "income", transactionKind = "收入", category = "工资"),
-                    CategorizationRule(id = "other", transactionKind = "退款", category = "退款")
-                ),
-                onRulesChange = {}
-            )
-        }
-
-        composeRule.onNodeWithTag("rule-filter-row").performScrollTo()
-        composeRule.onNodeWithTag("rule-filter-Expense").performClick()
-
-        composeRule.onNodeWithTag("rule-card-expense").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("rule-card-income").assertDoesNotExist()
-        composeRule.onNodeWithTag("rule-card-other").assertDoesNotExist()
-    }
-
-    @Test
-    fun ruleDraftAndFilterAreRestoredAfterRecreation() {
+    fun ruleDraftIsRestoredAfterRecreation() {
         val restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
             CategorizationRulesScreen(
                 rules = listOf(
-                    CategorizationRule(id = "expense", transactionKind = "支出", category = "餐饮"),
-                    CategorizationRule(id = "income", transactionKind = "收入", category = "工资")
+                    CategorizationRule(id = "expense", merchantContains = "食堂", category = "餐饮"),
+                    CategorizationRule(id = "income", merchantContains = "工资", category = "工资")
                 ),
                 onRulesChange = {}
             )
         }
 
-        composeRule.onNodeWithTag("rule-filter-row").performScrollTo()
-        composeRule.onNodeWithTag("rule-filter-Expense").performClick().assertIsSelected()
         composeRule.onNodeWithTag("create-rule").performScrollTo().performClick()
         composeRule.onNodeWithText("商户包含").performTextInput("星巴克")
-        composeRule.onNodeWithText("分类").performTextInput("餐饮")
+        composeRule.onNodeWithTag("categorization-rule-category").performClick()
+        composeRule.onNodeWithText("餐饮").performClick()
 
         restorationTester.emulateSavedInstanceStateRestore()
 
         composeRule.onNodeWithText("商户包含").assertTextContains("星巴克")
-        composeRule.onNodeWithText("分类").assertTextContains("餐饮")
-        composeRule.onNodeWithTag("rule-filter-Expense").assertIsSelected()
+        composeRule.onNodeWithTag("categorization-rule-category").assertTextContains("餐饮")
     }
 
     @Test
@@ -271,7 +249,6 @@ class CategorizationRulesScreenTest {
                         CategorizationRule(
                             id = "adaptive-rule",
                             merchantContains = "咖啡店",
-                            transactionKind = "支出",
                             category = "餐饮"
                         )
                     ),
@@ -308,10 +285,6 @@ class CategorizationRulesScreenTest {
                 .performScrollTo()
                 .assertIsDisplayed()
             composeRule.onNodeWithTag("create-rule")
-                .performScrollTo()
-                .assertIsDisplayed()
-            composeRule.onNodeWithTag("rule-filter-row").performScrollTo()
-            composeRule.onNodeWithTag("rule-filter-Other")
                 .performScrollTo()
                 .assertIsDisplayed()
             composeRule.onNodeWithTag("rule-card-adaptive-rule")

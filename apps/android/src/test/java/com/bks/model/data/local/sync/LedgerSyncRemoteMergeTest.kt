@@ -25,6 +25,7 @@ import com.bks.model.domain.sync.LedgerSyncMutationResult
 import com.bks.model.domain.sync.LedgerSyncPayload
 import com.bks.model.domain.sync.LedgerSyncRecord
 import com.bks.model.data.local.database.BksDatabase
+import com.bks.model.data.local.database.CategorizationRuleEntity
 import com.bks.model.data.local.database.CategoryEntity
 import com.bks.model.data.local.settings.DefaultCategorizationRules
 import com.bks.model.domain.ledger.DefaultCategories
@@ -143,6 +144,83 @@ class LedgerSyncRemoteMergeTest {
         assertTrue(store.listMutations(100).isEmpty())
         assertEquals(NOW, database.categoryDao().getCategory(localCategory.id)?.createdAtEpochMillis)
         assertEquals("云端保留分类", database.categorizationRuleDao().getById(localRule.id)?.category)
+    }
+
+    @Test
+    fun legacyPristineDefaultRulesAdoptCloudSnapshotWithoutConflictMutations() = runBlocking {
+        val legacyFoodRule = CategorizationRuleEntity(
+            id = "default-food",
+            merchantContains = "",
+            titleContains = "餐饮",
+            sourceLabel = "",
+            transactionKind = "支出",
+            category = "餐饮",
+            priority = 100,
+            enabled = true,
+            updatedAtEpochMillis = 0
+        )
+        val legacyRefundRule = CategorizationRuleEntity(
+            id = "default-refund",
+            merchantContains = "",
+            titleContains = "",
+            sourceLabel = "",
+            transactionKind = "退款",
+            category = "退款",
+            priority = 200,
+            enabled = true,
+            updatedAtEpochMillis = 0
+        )
+        database.categorizationRuleDao().upsert(legacyFoodRule)
+        database.categorizationRuleDao().upsert(legacyRefundRule)
+        store.enable("profile-a")
+
+        val cloudFoodRule = LedgerSyncPayload.CategorizationRule(
+            id = legacyFoodRule.id,
+            merchantContains = "餐饮",
+            titleContains = "",
+            sourceLabel = "",
+            transactionKind = "",
+            category = "云端餐饮",
+            priority = legacyFoodRule.priority,
+            enabled = true,
+            updatedAtMillis = NOW
+        )
+        val cloudRefundRule = LedgerSyncPayload.CategorizationRule(
+            id = legacyRefundRule.id,
+            merchantContains = "退款商户",
+            titleContains = "",
+            sourceLabel = "",
+            transactionKind = "",
+            category = "云端退款",
+            priority = legacyRefundRule.priority,
+            enabled = true,
+            updatedAtMillis = NOW
+        )
+
+        store.mergeSnapshot(
+            listOf(
+                LedgerSyncRecord(
+                    LedgerSyncEntityType.CATEGORIZATION_RULE,
+                    cloudFoodRule.id,
+                    2,
+                    1,
+                    false,
+                    cloudFoodRule
+                ),
+                LedgerSyncRecord(
+                    LedgerSyncEntityType.CATEGORIZATION_RULE,
+                    cloudRefundRule.id,
+                    3,
+                    2,
+                    false,
+                    cloudRefundRule
+                )
+            )
+        )
+
+        assertTrue(store.listMutations(100).isEmpty())
+        assertEquals("云端餐饮", database.categorizationRuleDao().getById(legacyFoodRule.id)?.category)
+        assertEquals("云端退款", database.categorizationRuleDao().getById(legacyRefundRule.id)?.category)
     }
 
     @Test

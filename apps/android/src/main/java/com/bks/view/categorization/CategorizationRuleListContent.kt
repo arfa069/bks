@@ -1,10 +1,7 @@
 package com.bks.view.categorization
 
-import com.bks.viewmodel.ledger.label
 import com.bks.model.domain.categorization.CategorizationRule
-import com.bks.model.domain.ledger.TransactionKind
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,13 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,27 +35,12 @@ import com.bks.view.common.components.TextButton
 @Composable
 internal fun CategorizationRuleListContent(
     rules: List<CategorizationRule>,
-    selectedFilter: RuleFilter,
-    onSelectedFilter: (RuleFilter) -> Unit,
     onEdit: (CategorizationRule) -> Unit,
     onDelete: (CategorizationRule) -> Unit
 ) {
-    val visibleRules = rules.filter(selectedFilter::matches)
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        RuleFilterRow(
-            rules = rules,
-            selected = selectedFilter,
-            onSelected = onSelectedFilter
-        )
-
         if (rules.isEmpty()) {
             EmptyRulesCard()
-        } else if (visibleRules.isEmpty()) {
-            EmptyRulesCard(
-                title = "这个分类下还没有规则",
-                description = "可以切换筛选，或者新建一条规则。"
-            )
         } else {
             Card(
                 modifier = Modifier
@@ -74,7 +54,7 @@ internal fun CategorizationRuleListContent(
                 ),
                 shape = RoundedCornerShape(20.dp)
             ) {
-                val sortedRules = visibleRules.sortedWith(
+                val sortedRules = rules.sortedWith(
                     compareByDescending<CategorizationRule> { it.priority }
                         .thenByDescending { it.updatedAtEpochMillis }
                 )
@@ -92,30 +72,6 @@ internal fun CategorizationRuleListContent(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun RuleFilterRow(
-    rules: List<CategorizationRule>,
-    selected: RuleFilter,
-    onSelected: (RuleFilter) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .testTag("rule-filter-row"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        RuleFilter.entries.forEach { filter ->
-            FilterChip(
-                selected = selected == filter,
-                onClick = { onSelected(filter) },
-                label = { Text("${filter.label} ${rules.count(filter::matches)}") },
-                modifier = Modifier.testTag("rule-filter-${filter.name}")
-            )
         }
     }
 }
@@ -246,35 +202,17 @@ private fun CategorizationRuleRow(
     }
 }
 
-private fun CategorizationRule.displayName(): String = when {
-    merchantContains.isNotBlank() -> merchantContains
-    titleContains.isNotBlank() -> titleContains
-    sourceLabel.isNotBlank() -> sourceLabel
-    transactionKind.isNotBlank() -> transactionKind
-    else -> "未命名规则"
-}
+private fun CategorizationRule.displayName(): String =
+    merchantContains.ifBlank { "需要补充商户" }
 
-private fun CategorizationRule.conditionSummary(): String {
-    val parts = listOf(
-        merchantContains.takeIf { it.isNotBlank() }?.let { "商户包含“$it”" },
-        titleContains.takeIf { it.isNotBlank() }?.let { "标题包含“$it”" },
-        sourceLabel.takeIf { it.isNotBlank() }?.let { "来源是“$it”" },
-        transactionKind.takeIf { it.isNotBlank() }?.let { kind ->
-            if (partsNeedTransactionLabel()) "交易类型是“$kind”" else kind
-        }
-    ).filterNotNull()
-    return if (parts.isEmpty()) "适用于所有交易" else parts.joinToString(" · ")
-}
+private fun CategorizationRule.conditionSummary(): String =
+    merchantContains.takeIf(String::isNotBlank)
+        ?.let { "商户包含“$it”" }
+        ?: "缺少商户关键词，当前规则不生效"
 
-private fun CategorizationRule.partsNeedTransactionLabel(): Boolean =
-    merchantContains.isBlank() && titleContains.isBlank() && sourceLabel.isBlank()
-
-private fun CategorizationRule.accentColor(): Color = when (transactionKind) {
-    "收入" -> Color(0xFF27877B)
+private fun CategorizationRule.accentColor(): Color = when (category) {
+    "餐饮" -> Color(0xFFC77A18)
+    "交通" -> Color(0xFF5555C2)
     "退款" -> Color(0xFFC64D5A)
-    else -> when (category) {
-        "餐饮" -> Color(0xFFC77A18)
-        "交通" -> Color(0xFF5555C2)
-        else -> Color(0xFF5B5BD6)
-    }
+    else -> Color(0xFF5B5BD6)
 }

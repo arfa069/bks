@@ -38,8 +38,6 @@ internal data class PendingCategoryRuleSave(
     fun toRuleRequest(): ReviewCategoryRuleRequest = ReviewCategoryRuleRequest(
         id = "rule-${entry.id}-${entry.capturedAtEpochMillis}",
         merchantContains = edit.title.trim(),
-        sourceLabel = "",
-        transactionKind = edit.transactionKind.trim(),
         category = edit.category.trim(),
         updatedAtEpochMillis = entry.capturedAtEpochMillis
     )
@@ -48,8 +46,6 @@ internal data class PendingCategoryRuleSave(
 internal data class ReviewCategoryRuleRequest(
     val id: String,
     val merchantContains: String,
-    val sourceLabel: String,
-    val transactionKind: String,
     val category: String,
     val updatedAtEpochMillis: Long
 )

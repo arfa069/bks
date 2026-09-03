@@ -1,11 +1,12 @@
 package com.bks.view.categorization
 
-import com.bks.viewmodel.ledger.label
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.categorization.CategorizationRulesUpdate
-import com.bks.model.domain.ledger.TransactionKind
+import com.bks.model.domain.categorization.upsert
 import com.bks.viewmodel.categorization.CategorizationAiUiState
+import com.bks.viewmodel.ledger.LedgerCategoryUiModel
+import com.bks.viewmodel.ledger.defaultLedgerCategoryUiModels
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -54,23 +55,10 @@ data class CategorizationRulesActions(
     val onBack: (() -> Unit)? = null
 )
 
-internal enum class RuleFilter(val label: String) {
-    All("全部"),
-    Expense("支出"),
-    Income("收入"),
-    Other("其他");
-
-    fun matches(rule: CategorizationRule): Boolean = when (this) {
-        All -> true
-        Expense -> rule.transactionKind.equals("支出", ignoreCase = true)
-        Income -> rule.transactionKind.equals("收入", ignoreCase = true)
-        Other -> !Expense.matches(rule) && !Income.matches(rule)
-    }
-}
-
 @Composable
 fun CategorizationRulesScreen(
     modifier: Modifier = Modifier,
+    categories: List<LedgerCategoryUiModel> = defaultLedgerCategoryUiModels(),
     aiUiState: CategorizationAiUiState = CategorizationAiUiState(),
     onAiSettingsChange: (AiCategorizationSettings) -> Unit = {},
     onBack: (() -> Unit)? = null
@@ -79,6 +67,7 @@ fun CategorizationRulesScreen(
     CategorizationRulesScreen(
         rules = rules,
         onRulesChange = { update -> rules = update(rules) },
+        categories = categories,
         modifier = modifier,
         aiUiState = aiUiState,
         actions = CategorizationRulesActions(
@@ -89,16 +78,17 @@ fun CategorizationRulesScreen(
 }
 
 @Composable
+@Suppress("LongParameterList")
 fun CategorizationRulesScreen(
     rules: List<CategorizationRule>,
     onRulesChange: (CategorizationRulesUpdate) -> Unit,
+    categories: List<LedgerCategoryUiModel> = defaultLedgerCategoryUiModels(),
     modifier: Modifier = Modifier,
     aiUiState: CategorizationAiUiState = CategorizationAiUiState(),
     actions: CategorizationRulesActions = CategorizationRulesActions()
 ) {
     var editingRuleId by rememberSaveable { mutableStateOf<String?>(null) }
     var isCreating by rememberSaveable { mutableStateOf(false) }
-    var selectedFilter by rememberSaveable { mutableStateOf(RuleFilter.All) }
     val editingRule = remember(rules, editingRuleId) {
         rules.firstOrNull { it.id == editingRuleId }
     }
@@ -150,8 +140,6 @@ fun CategorizationRulesScreen(
 
                 CategorizationRuleListContent(
                     rules = rules,
-                    selectedFilter = selectedFilter,
-                    onSelectedFilter = { selectedFilter = it },
                     onEdit = { rule ->
                         editingRuleId = rule.id
                         isCreating = false
@@ -169,26 +157,19 @@ fun CategorizationRulesScreen(
     if (isCreating || editingRule != null) {
         CategorizationRuleDialog(
             initialRule = editingRule,
+            categories = categories.ifEmpty { defaultLedgerCategoryUiModels() },
             onDismiss = {
                 isCreating = false
                 editingRuleId = null
             },
             onSave = { savedRule ->
                 onRulesChange { currentRules ->
-                    if (editingRule == null) {
-                        currentRules + savedRule.copy(
-                            id = currentRules.nextRuleId(),
+                    currentRules.upsert(
+                        savedRule.copy(
+                            id = editingRule?.id ?: currentRules.nextRuleId(),
                             updatedAtEpochMillis = currentRules.nextUpdatedAt()
                         )
-                    } else {
-                        currentRules.map { existing ->
-                            if (existing.id == savedRule.id) {
-                                savedRule.copy(updatedAtEpochMillis = currentRules.nextUpdatedAt())
-                            } else {
-                                existing
-                            }
-                        }
-                    }
+                    )
                 }
                 isCreating = false
                 editingRuleId = null

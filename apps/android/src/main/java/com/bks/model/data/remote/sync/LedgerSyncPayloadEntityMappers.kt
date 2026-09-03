@@ -31,7 +31,7 @@ private fun LedgerSyncPayloadContract.Category.matchesDefaultCategory(): Boolean
     }
 
 private fun LedgerSyncPayloadContract.CategorizationRule.matchesDefaultRule(): Boolean =
-    DefaultCategorizationRules.rules.any { default ->
+    DefaultCategorizationRules.pristineTemplates.any { default ->
         default.id == id &&
             default.merchantContains == merchantContains &&
             default.titleContains == titleContains &&

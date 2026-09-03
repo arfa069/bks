@@ -263,6 +263,7 @@ fun BksApp(
                                             )
                                         ProfileDestination.CategorizationRules -> BksCategorizationRoute(
                                             state = owners.categorizationUiState,
+                                            categories = owners.ledgerUiState.categories,
                                             viewModel = owners.categorizationViewModel,
                                             onBack = {
                                                 appState.profileDestination.value = null

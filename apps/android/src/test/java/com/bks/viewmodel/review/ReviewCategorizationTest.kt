@@ -45,8 +45,6 @@ class ReviewCategorizationTest {
             CategorizationRule(
                 id = "coffee",
                 merchantContains = "午餐",
-                sourceLabel = "微信",
-                transactionKind = "支出",
                 category = "餐饮"
             )
         )

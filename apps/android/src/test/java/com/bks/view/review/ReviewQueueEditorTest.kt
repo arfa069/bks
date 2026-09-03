@@ -40,7 +40,7 @@ class ReviewQueueEditorTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun learnedRuleUsesMerchantAndKindWithoutBindingPaymentSource() {
+    fun learnedRuleUsesOnlyMerchantAndCategory() {
         val request = PendingCategoryRuleSave(
             entry = sampleEntry(),
             edit = PendingReviewEdit(
@@ -57,8 +57,6 @@ class ReviewQueueEditorTest {
         ).toRuleRequest()
 
         assertEquals("中国电信", request.merchantContains)
-        assertEquals("", request.sourceLabel)
-        assertEquals("支出", request.transactionKind)
         assertEquals("通讯", request.category)
     }
 
@@ -177,7 +175,7 @@ class ReviewQueueEditorTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("保存为分类规则？").assertIsDisplayed()
-        composeRule.onNodeWithText("以后遇到相同商户和交易类型时，自动建议“购物”。")
+        composeRule.onNodeWithText("以后遇到相同商户时，自动建议“购物”。")
             .assertIsDisplayed()
         composeRule.onNodeWithText("这次不保存").performClick()
         composeRule.waitForIdle()

@@ -1,6 +1,7 @@
 package com.bks.model.data.local.settings
 
 import com.bks.model.data.local.database.BksDatabase
+import com.bks.model.data.local.database.CategorizationRuleEntity
 import com.bks.model.data.local.database.DEFAULT_CATEGORIZATION_RULES_CALLBACK
 import com.bks.model.data.local.settings.DefaultCategorizationRules
 import com.bks.model.data.local.settings.LocalPreferencesRepository
@@ -156,7 +157,7 @@ class LocalPreferencesRepositoryTest {
             DefaultCategorizationRules.insertMissing(database.openHelper.writableDatabase)
             val rules = database.categorizationRuleDao().listRules()
 
-            assertEquals(9, rules.size)
+            assertEquals(8, rules.size)
             assertEquals("购物", rules.first { it.id == "default-food" }.category)
             assertEquals(99, rules.first { it.id == "default-food" }.updatedAtEpochMillis)
         }
@@ -256,8 +257,6 @@ class LocalPreferencesRepositoryTest {
                     sampleRule(
                         id = "coffee",
                         merchantContains = "coffee",
-                        sourceLabel = "微信",
-                        transactionKind = "支出",
                         category = "餐饮"
                     )
                 )
@@ -298,6 +297,61 @@ class LocalPreferencesRepositoryTest {
 
         reopenedDatabase.close()
         context.deleteDatabase(databaseName)
+    }
+
+    @Test
+    fun legacyRulePromotesTitleAndClearsCompatibilityFieldsWhenSaved() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(), BksDatabase::class.java
+        ).allowMainThreadQueries().build()
+        database.categorizationRuleDao().upsert(
+            CategorizationRuleEntity(
+                id = "legacy-rule",
+                merchantContains = "",
+                titleContains = " 中国电信 ",
+                sourceLabel = "支付宝",
+                transactionKind = "支出",
+                category = "通讯",
+                priority = 0,
+                enabled = true,
+                updatedAtEpochMillis = 1
+            )
+        )
+        val repository = LocalPreferencesRepository(database)
+
+        val legacyRule = repository.categorizationRules.first().single()
+        assertEquals("中国电信", legacyRule.merchantContains)
+
+        repository.updateCategorizationRules { it }
+        val persisted = database.categorizationRuleDao().listRules().single()
+        assertEquals("中国电信", persisted.merchantContains)
+        assertEquals("", persisted.titleContains)
+        assertEquals("", persisted.sourceLabel)
+        assertEquals("", persisted.transactionKind)
+        database.close()
+    }
+
+    @Test
+    fun legacyRuleWithoutMerchantOrTitleIsNotExposed() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(), BksDatabase::class.java
+        ).allowMainThreadQueries().build()
+        database.categorizationRuleDao().upsert(
+            CategorizationRuleEntity(
+                id = "legacy-source-rule",
+                merchantContains = "",
+                titleContains = "",
+                sourceLabel = "支付宝",
+                transactionKind = "支出",
+                category = "通讯",
+                priority = 0,
+                enabled = true,
+                updatedAtEpochMillis = 1
+            )
+        )
+
+        assertTrue(LocalPreferencesRepository(database).categorizationRules.first().isEmpty())
+        database.close()
     }
 
     @Test
@@ -351,16 +405,12 @@ class LocalPreferencesRepositoryTest {
     private fun sampleRule(
         id: String = "rule-1",
         merchantContains: String = "merchant",
-        sourceLabel: String = "",
-        transactionKind: String = "",
         category: String = "food",
         priority: Int = 0,
         updatedAtEpochMillis: Long = 0
     ): CategorizationRule = CategorizationRule(
         id = id,
         merchantContains = merchantContains,
-        sourceLabel = sourceLabel,
-        transactionKind = transactionKind,
         category = category,
         priority = priority,
         updatedAtEpochMillis = updatedAtEpochMillis

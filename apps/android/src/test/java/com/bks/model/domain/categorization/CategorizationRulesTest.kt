@@ -6,6 +6,7 @@ import com.bks.model.domain.categorization.suggestCategory
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.ConfidenceState
+import com.bks.model.domain.ledger.DefaultCategories
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.PendingEntry
 import com.bks.model.domain.ledger.TransactionKind
@@ -15,29 +16,20 @@ import org.junit.Test
 
 class CategorizationRulesTest {
     @Test
-    fun merchantTitleSourceAndKindCanMatchRule() {
+    fun commaSeparatedMerchantsMatchAnyNormalizedKeyword() {
         val rules = listOf(
             sampleRule(
                 id = "coffee",
-                merchantContains = "星巴克",
-                titleContains = "拿铁",
-                sourceLabel = "微信",
-                transactionKind = "支出",
+                merchantContains = " 星巴克, 瑞幸咖啡,星巴克 ",
                 category = "餐饮"
             )
         )
 
-        val suggestion = suggestCategory(
-            rules = rules,
-            transaction = sampleTransaction(
-                merchantTitle = "星巴克拿铁",
-                sourceLabel = "微信",
-                transactionKind = "支出"
-            )
-        )
+        val suggestion = suggestCategory(rules, sampleTransaction("瑞幸咖啡深圳店"))
 
         assertEquals("餐饮", suggestion?.category)
         assertEquals("coffee", suggestion?.ruleId)
+        assertEquals("星巴克,瑞幸咖啡", normalizeMerchantContains(rules.single().merchantContains))
     }
 
     @Test
@@ -99,34 +91,25 @@ class CategorizationRulesTest {
     }
 
     @Test
-    fun legacyLearnedOtherSourceIsSourceNeutralButManualOtherSourceRemainsExact() {
-        val transaction = sampleTransaction(merchantTitle = "中国电信", sourceLabel = "支付宝")
-        val legacyLearned = sampleRule(
-            id = "rule-bill-123-456",
-            merchantContains = "中国电信",
-            sourceLabel = "其他应用",
-            category = "通讯"
+    fun emptyMerchantRuleNeverMatches() {
+        assertNull(
+            suggestCategory(
+                listOf(sampleRule(merchantContains = " ,  ,", category = "通讯")),
+                sampleTransaction("中国电信")
+            )
         )
-        val manual = legacyLearned.copy(id = "rule-1")
-
-        assertEquals("通讯", suggestCategory(listOf(legacyLearned), transaction)?.category)
-        assertNull(suggestCategory(listOf(manual), transaction))
     }
 
     @Test
-    fun upsertMergesSameNormalizedConditionsAndKeepsExistingId() {
+    fun upsertMergesSameMerchantSetAndKeepsExistingId() {
         val existing = sampleRule(
             id = "rule-bill-old-1",
-            merchantContains = "中国电信",
-            sourceLabel = "其他应用",
-            transactionKind = "支出",
+            merchantContains = "中国电信,麦当劳",
             category = "日用"
         )
         val correction = sampleRule(
             id = "rule-bill-new-2",
-            merchantContains = " 中国电信 ",
-            sourceLabel = "",
-            transactionKind = "支出",
+            merchantContains = " 麦当劳, 中国电信,麦当劳 ",
             category = "通讯",
             updatedAtEpochMillis = 2
         )
@@ -136,7 +119,7 @@ class CategorizationRulesTest {
         assertEquals(1, merged.size)
         assertEquals("rule-bill-old-1", merged.single().id)
         assertEquals("通讯", merged.single().category)
-        assertEquals("", merged.single().sourceLabel)
+        assertEquals("麦当劳,中国电信", merged.single().merchantContains)
     }
 
     @Test
@@ -153,7 +136,6 @@ class CategorizationRulesTest {
         val rules = listOf(
             sampleRule(
                 merchantContains = "中国电信",
-                transactionKind = "支出",
                 category = "固定支出"
             )
         )
@@ -176,12 +158,23 @@ class CategorizationRulesTest {
         assertNull(suggested.suggestedCategoryLabel)
     }
 
+    @Test
+    fun refundUsesDeterministicCategoryWhenNoMerchantRuleMatches() {
+        val refund = samplePendingEntry().copy(transactionKind = TransactionKind.REFUND)
+
+        val suggested = refund.applyCategorizationSuggestion(
+            rules = emptyList(),
+            categories = DefaultCategories.systemDefaults(createdAtEpochMillis = 0)
+        )
+
+        assertEquals("refund", suggested.suggestedCategoryId)
+        assertEquals("退款", suggested.suggestedCategoryLabel)
+    }
+
+    @Suppress("LongParameterList")
     private fun sampleRule(
         id: String = "rule-1",
         merchantContains: String = "",
-        titleContains: String = "",
-        sourceLabel: String = "",
-        transactionKind: String = "",
         category: String,
         priority: Int = 0,
         enabled: Boolean = true,
@@ -189,24 +182,14 @@ class CategorizationRulesTest {
     ): CategorizationRule = CategorizationRule(
         id = id,
         merchantContains = merchantContains,
-        titleContains = titleContains,
-        sourceLabel = sourceLabel,
-        transactionKind = transactionKind,
         category = category,
         priority = priority,
         enabled = enabled,
         updatedAtEpochMillis = updatedAtEpochMillis
     )
 
-    private fun sampleTransaction(
-        merchantTitle: String,
-        sourceLabel: String = "支付宝",
-        transactionKind: String = "支出"
-    ): CategorizationTransaction = CategorizationTransaction(
-        merchantTitle = merchantTitle,
-        sourceLabel = sourceLabel,
-        transactionKind = transactionKind
-    )
+    private fun sampleTransaction(merchantTitle: String): CategorizationTransaction =
+        CategorizationTransaction(merchantTitle = merchantTitle)
 
     private fun samplePendingEntry(): PendingEntry = PendingEntry(
         id = "bill-1",

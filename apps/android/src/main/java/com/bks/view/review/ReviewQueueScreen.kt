@@ -183,7 +183,7 @@ internal fun ReviewQueueScreen(
             onDismissRequest = { applyEdit(pending) },
             title = { Text("保存为分类规则？") },
             text = {
-                Text("以后遇到相同商户和交易类型时，自动建议“${pending.edit.category.trim()}”。")
+                Text("以后遇到相同商户时，自动建议“${pending.edit.category.trim()}”。")
             },
             confirmButton = {
                 Button(

@@ -50,8 +50,6 @@ internal fun BksReviewRoute(
                     CategorizationRule(
                         id = request.id,
                         merchantContains = request.merchantContains,
-                        sourceLabel = request.sourceLabel,
-                        transactionKind = request.transactionKind,
                         category = request.category,
                         updatedAtEpochMillis = request.updatedAtEpochMillis
                     )

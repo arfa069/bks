@@ -25,13 +25,12 @@ fun ReviewQueueEntry.applyCategorizationSuggestion(
     val suggestion = suggestCategory(
         rules = rules,
         transaction = CategorizationTransaction(
-            merchantTitle = title,
-            sourceLabel = sourceLabel,
-            transactionKind = kindLabel
+            merchantTitle = title
         )
-    ) ?: return this
+    )
+    val category = suggestion?.category ?: "退款".takeIf { kindLabel == "退款" } ?: return this
 
-    return copy(category = suggestion.category)
+    return copy(category = category)
 }
 
 private fun amountRangeLabel(amountMinor: Long): String {

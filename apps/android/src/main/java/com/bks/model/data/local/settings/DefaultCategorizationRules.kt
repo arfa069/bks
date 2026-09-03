@@ -8,69 +8,106 @@ object DefaultCategorizationRules {
         defaultMerchantRule(
             id = "default-mcdonalds",
             merchantContains = "麦当劳",
-            transactionKind = "支出",
             category = "餐饮",
             priority = 100
         ),
         defaultMerchantRule(
             id = "default-china-telecom",
             merchantContains = "中国电信",
-            transactionKind = "支出",
             category = "通讯",
             priority = 100
         )
     )
 
     val rules: List<CategorizationRuleEntity> = listOf(
-        defaultRule(
+        defaultMerchantRule(
+            id = "default-salary",
+            merchantContains = "工资",
+            category = "工资",
+            priority = 190
+        ),
+        defaultMerchantRule(
+            id = "default-food",
+            merchantContains = "餐饮",
+            category = "餐饮",
+            priority = 100
+        ),
+        defaultMerchantRule(
+            id = "default-transport",
+            merchantContains = "地铁",
+            category = "交通",
+            priority = 100
+        ),
+        defaultMerchantRule(
+            id = "default-shopping",
+            merchantContains = "超市",
+            category = "购物",
+            priority = 100
+        ),
+        defaultMerchantRule(
+            id = "default-housing",
+            merchantContains = "物业",
+            category = "住房",
+            priority = 100
+        ),
+        defaultMerchantRule(
+            id = "default-healthcare",
+            merchantContains = "医院",
+            category = "医疗",
+            priority = 100
+        )
+    ) + merchantRules
+
+    internal val pristineTemplates: List<CategorizationRuleEntity> = rules + listOf(
+        legacyDefaultRule(
             id = "default-refund",
             transactionKind = "退款",
             category = "退款",
             priority = 200
         ),
-        defaultRule(
+        legacyDefaultRule(
             id = "default-salary",
             titleContains = "工资",
             transactionKind = "收入",
             category = "工资",
             priority = 190
         ),
-        defaultRule(
+        legacyDefaultRule(
             id = "default-food",
             titleContains = "餐饮",
             transactionKind = "支出",
             category = "餐饮",
             priority = 100
         ),
-        defaultRule(
+        legacyDefaultRule(
             id = "default-transport",
             titleContains = "地铁",
             transactionKind = "支出",
             category = "交通",
             priority = 100
         ),
-        defaultRule(
+        legacyDefaultRule(
             id = "default-shopping",
             titleContains = "超市",
             transactionKind = "支出",
             category = "购物",
             priority = 100
         ),
-        defaultRule(
+        legacyDefaultRule(
             id = "default-housing",
             titleContains = "物业",
             transactionKind = "支出",
             category = "住房",
             priority = 100
         ),
-        defaultRule(
+        legacyDefaultRule(
             id = "default-healthcare",
             titleContains = "医院",
             transactionKind = "支出",
             category = "医疗",
             priority = 100
         )
-    ) + merchantRules
+    ) + merchantRules.map { rule -> rule.copy(transactionKind = "支出") }
 
     fun insertMissing(db: SupportSQLiteDatabase) {
         insertMissing(db, rules)
@@ -108,7 +145,24 @@ object DefaultCategorizationRules {
         }
     }
 
-    private fun defaultRule(
+    private fun defaultMerchantRule(
+        id: String,
+        merchantContains: String,
+        category: String,
+        priority: Int
+    ): CategorizationRuleEntity = CategorizationRuleEntity(
+        id = id,
+        merchantContains = merchantContains,
+        titleContains = "",
+        sourceLabel = "",
+        transactionKind = "",
+        category = category,
+        priority = priority,
+        enabled = true,
+        updatedAtEpochMillis = 0
+    )
+
+    private fun legacyDefaultRule(
         id: String,
         titleContains: String = "",
         transactionKind: String,
@@ -118,24 +172,6 @@ object DefaultCategorizationRules {
         id = id,
         merchantContains = "",
         titleContains = titleContains,
-        sourceLabel = "",
-        transactionKind = transactionKind,
-        category = category,
-        priority = priority,
-        enabled = true,
-        updatedAtEpochMillis = 0
-    )
-
-    private fun defaultMerchantRule(
-        id: String,
-        merchantContains: String,
-        transactionKind: String,
-        category: String,
-        priority: Int
-    ): CategorizationRuleEntity = CategorizationRuleEntity(
-        id = id,
-        merchantContains = merchantContains,
-        titleContains = "",
         sourceLabel = "",
         transactionKind = transactionKind,
         category = category,

@@ -163,7 +163,6 @@ class BillSyncCaptureProcessorTest {
                 CategorizationRule(
                     id = "rule-telecom",
                     merchantContains = "中国电信",
-                    transactionKind = "支出",
                     category = "固定支出"
                 )
             )

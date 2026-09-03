@@ -38,6 +38,7 @@ import com.bks.view.categorization.CategorizationRulesScreen
 import com.bks.view.compliance.ComplianceAndPrivacyScreen
 import com.bks.view.diagnostics.DiagnosticLogsScreen
 import com.bks.viewmodel.ledger.LedgerUiState
+import com.bks.viewmodel.ledger.LedgerCategoryUiModel
 import com.bks.viewmodel.monitoring.AutomaticBookkeepingFeatureState
 import com.bks.view.monitoring.AutomaticBookkeepingScreen
 import com.bks.viewmodel.monitoring.AutomaticBookkeepingUiState
@@ -173,6 +174,7 @@ internal fun BksAccountManagementRoute(
 @Suppress("LongParameterList")
 internal fun BksCategorizationRoute(
     state: CategorizationUiState,
+    categories: List<LedgerCategoryUiModel>,
     viewModel: CategorizationViewModel,
     onBack: () -> Unit,
     innerPadding: PaddingValues
@@ -180,6 +182,7 @@ internal fun BksCategorizationRoute(
     CategorizationRulesScreen(
         rules = state.rules,
         onRulesChange = viewModel::updateRules,
+        categories = categories,
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding),
