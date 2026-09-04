@@ -178,7 +178,7 @@ fun BksApp(
                                     reviewState = owners.reviewQueueState,
                                     reviewViewModel = owners.reviewQueueViewModel,
                                     ledgerState = owners.ledgerUiState,
-                                    onCategorizationRulesChange = owners.categorizationViewModel::updateRules,
+                                    onCategorizationRulesChange = owners.categorizationViewModel::updateRulesAndAwait,
                                     innerPadding = innerPadding,
                                     onNavigateHome = onNavigateHome
                                 )
@@ -428,7 +428,8 @@ private fun rememberBksFeatureOwners(
                 com.bks.viewmodel.categorization.CategorizationViewModel(
                     preferencesRepository = container.preferencesRepository,
                     accountSessionState = accountSessionCoordinator.state,
-                    cloudSettingsCoordinator = cloudSettingsCoordinator
+                    cloudSettingsCoordinator = cloudSettingsCoordinator,
+                    categorizationRulesCoordinator = container.categorizationRulesCoordinator
                 ) as T
         }
     )

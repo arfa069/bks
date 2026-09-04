@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import com.bks.model.domain.ledger.DEFAULT_LEDGER_ID
 import com.bks.viewmodel.ledger.FundingAccountUiModel
 import com.bks.viewmodel.ledger.LedgerCategoryUiModel
+import kotlinx.coroutines.launch
 @Composable
 @Suppress("LongParameterList")
 internal fun ReviewQueueScreen(
@@ -39,7 +41,7 @@ internal fun ReviewQueueScreen(
     fallbackCategories: List<LedgerCategoryUiModel> = emptyList(),
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
-    onCategorizationRuleRequested: (ReviewCategoryRuleRequest) -> Unit = {},
+    onCategorizationRuleRequested: suspend (ReviewCategoryRuleRequest) -> Unit = {},
     onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
         ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
     },
@@ -77,7 +79,7 @@ internal fun ReviewQueueScreen(
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
     modifier: Modifier = Modifier,
-    onCategorizationRuleRequested: (ReviewCategoryRuleRequest) -> Unit = {},
+    onCategorizationRuleRequested: suspend (ReviewCategoryRuleRequest) -> Unit = {},
     onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
         ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
     },
@@ -93,6 +95,7 @@ internal fun ReviewQueueScreen(
     var pendingRuleSave by remember { mutableStateOf<PendingCategoryRuleSave?>(null) }
     var showIgnoredList by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     fun confirmEdit(entry: ReviewQueueEntry, edit: PendingReviewEdit) {
         onCommand(
@@ -188,8 +191,10 @@ internal fun ReviewQueueScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onCategorizationRuleRequested(pending.toRuleRequest())
-                        applyEdit(pending)
+                        coroutineScope.launch {
+                            onCategorizationRuleRequested(pending.toRuleRequest())
+                            applyEdit(pending)
+                        }
                     }
                 ) {
                     Text("保存规则")

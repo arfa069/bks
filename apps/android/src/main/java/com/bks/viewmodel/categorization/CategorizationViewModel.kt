@@ -8,6 +8,7 @@ import com.bks.model.application.account.AccountSessionCoordinatorState
 import com.bks.model.application.account.cloudWritesPaused
 import com.bks.model.application.account.effectiveAiCategorizationSettings
 import com.bks.model.application.account.settingsSyncInFlight
+import com.bks.model.application.categorization.CategorizationRulesCoordinator
 import com.bks.model.domain.account.AccountSession
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.model.domain.categorization.CategorizationRulesUpdate
@@ -23,7 +24,8 @@ import kotlinx.coroutines.launch
 internal class CategorizationViewModel(
     private val preferencesRepository: PreferencesRepository,
     private val accountSessionState: StateFlow<AccountSessionCoordinatorState>,
-    private val cloudSettingsCoordinator: AccountCloudSettingsCoordinator
+    private val cloudSettingsCoordinator: AccountCloudSettingsCoordinator,
+    private val categorizationRulesCoordinator: CategorizationRulesCoordinator
 ) : ViewModel() {
     private val noticesChannel = Channel<String>(Channel.BUFFERED)
     val notices = noticesChannel.receiveAsFlow()
@@ -44,8 +46,18 @@ internal class CategorizationViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, CategorizationUiState())
 
+    init {
+        viewModelScope.launch {
+            categorizationRulesCoordinator.applyCurrentRulesToUnclassified()
+        }
+    }
+
     fun updateRules(update: CategorizationRulesUpdate) {
-        viewModelScope.launch { preferencesRepository.updateCategorizationRules(update) }
+        viewModelScope.launch { categorizationRulesCoordinator.updateRules(update) }
+    }
+
+    suspend fun updateRulesAndAwait(update: CategorizationRulesUpdate) {
+        categorizationRulesCoordinator.updateRules(update)
     }
 
     fun updateAiSettings(settings: AiCategorizationSettings) {

@@ -26,7 +26,7 @@ internal fun BksReviewRoute(
     reviewState: ReviewQueueState,
     reviewViewModel: ReviewQueueViewModel,
     ledgerState: LedgerUiState,
-    onCategorizationRulesChange: (CategorizationRulesUpdate) -> Unit,
+    onCategorizationRulesChange: suspend (CategorizationRulesUpdate) -> Unit,
     innerPadding: PaddingValues,
     onNavigateHome: () -> Unit
 ) {

@@ -2,6 +2,7 @@ package com.bks.viewmodel.categorization
 
 import com.bks.model.application.account.AccountCloudSettingsCoordinator
 import com.bks.model.application.account.AccountSessionCoordinatorState
+import com.bks.model.application.categorization.CategorizationRulesCoordinator
 import com.bks.model.domain.categorization.AiCategorizationFailureReason
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.model.domain.categorization.CategorizationRule
@@ -9,6 +10,12 @@ import com.bks.model.domain.categorization.CategorizationRulesUpdate
 import com.bks.model.domain.categorization.CloudAiSettingsGateway
 import com.bks.model.domain.categorization.CloudAiSettingsGatewayResult
 import com.bks.model.domain.ledger.FundingAccountSettingsRepository
+import com.bks.model.domain.ledger.Category
+import com.bks.model.domain.ledger.PendingEntry
+import com.bks.model.domain.review.ReviewPersistenceCommand
+import com.bks.model.domain.review.ReviewPersistenceResult
+import com.bks.model.domain.review.ReviewQueueRepository
+import com.bks.model.domain.review.ReviewQueueSnapshot
 import com.bks.model.domain.settings.CachedDefaultFundingAccount
 import com.bks.model.domain.settings.PreferencesRepository
 import com.bks.model.domain.settings.UserPreferences
@@ -32,7 +39,12 @@ class CategorizationViewModelTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
         try {
-            val preferences = FakePreferencesRepository()
+            val existingRule = CategorizationRule(
+                id = "existing",
+                merchantContains = "早餐",
+                category = "餐饮"
+            )
+            val preferences = FakePreferencesRepository(listOf(existingRule))
             val accountState = MutableStateFlow(
                 AccountSessionCoordinatorState(isRestoring = false)
             )
@@ -43,18 +55,27 @@ class CategorizationViewModelTest {
                 cloudGateway = FakeCloudSettingsGateway(),
                 applicationScope = this
             )
+            val reviewQueue = FakeReviewQueueRepository()
             val viewModel = CategorizationViewModel(
                 preferencesRepository = preferences,
                 accountSessionState = accountState,
-                cloudSettingsCoordinator = cloudCoordinator
+                cloudSettingsCoordinator = cloudCoordinator,
+                categorizationRulesCoordinator = CategorizationRulesCoordinator(
+                    preferencesRepository = preferences,
+                    reviewQueueRepository = reviewQueue
+                )
             )
             val rule = CategorizationRule(id = "lunch", merchantContains = "食堂", category = "餐饮")
 
             viewModel.updateRules { rules -> rules + rule }
             advanceUntilIdle()
 
-            val state = viewModel.uiState.first { it.rules.isNotEmpty() }
-            assertEquals(listOf(rule), state.rules)
+            val state = viewModel.uiState.first { it.rules.size == 2 }
+            assertEquals(listOf(existingRule, rule), state.rules)
+            assertEquals(
+                listOf(listOf(existingRule), listOf(existingRule, rule)),
+                reviewQueue.appliedRules
+            )
             assertFalse(state.ai.signedIn)
             assertEquals(AiCategorizationSettings(), state.ai.settings)
         } finally {
@@ -62,8 +83,34 @@ class CategorizationViewModelTest {
         }
     }
 
-    private class FakePreferencesRepository : PreferencesRepository {
-        private val mutableRules = MutableStateFlow<List<CategorizationRule>>(emptyList())
+    private class FakeReviewQueueRepository : ReviewQueueRepository {
+        val appliedRules = mutableListOf<List<CategorizationRule>>()
+
+        override fun observeSnapshot(): Flow<ReviewQueueSnapshot> =
+            MutableStateFlow(ReviewQueueSnapshot(nowEpochMillis = 0, todayStartEpochMillis = 0))
+
+        override suspend fun loadSnapshot(): ReviewQueueSnapshot =
+            ReviewQueueSnapshot(nowEpochMillis = 0, todayStartEpochMillis = 0)
+
+        override suspend fun ensureSystemCategories() = Unit
+        override suspend fun loadCategories(): List<Category> = emptyList()
+        override suspend fun insertCapturedEntries(entries: List<PendingEntry>): Int = 0
+
+        override suspend fun applyCategorizationRulesToUnclassified(
+            rules: List<CategorizationRule>
+        ): Int {
+            appliedRules += rules
+            return 0
+        }
+
+        override suspend fun execute(command: ReviewPersistenceCommand): ReviewPersistenceResult =
+            ReviewPersistenceResult.NotFound
+    }
+
+    private class FakePreferencesRepository(
+        initialRules: List<CategorizationRule> = emptyList()
+    ) : PreferencesRepository {
+        private val mutableRules = MutableStateFlow(initialRules)
         private val mutablePreferences = MutableStateFlow(UserPreferences())
         override val categorizationRules: Flow<List<CategorizationRule>> = mutableRules
         override val userPreferences: Flow<UserPreferences> = mutablePreferences

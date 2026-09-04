@@ -28,6 +28,7 @@ import com.bks.model.platform.account.WechatAuthGateway
 import com.bks.model.platform.billsync.BillSyncCaptureCoordinator
 import com.bks.model.platform.billsync.BillSyncCaptureOperations
 import com.bks.model.application.billsync.BillSyncCaptureProcessor
+import com.bks.model.application.categorization.CategorizationRulesCoordinator
 import com.bks.model.domain.billsync.BillSyncPipeline
 import com.bks.model.data.remote.categorization.HttpAiCategorizationGateway
 import com.bks.model.domain.categorization.CloudAiSettingsGateway
@@ -61,6 +62,9 @@ internal class BksAppContainer(context: Context) {
     val dataBackupRepository: DataBackupRepository by lazy { LocalDataBackupRepository(database) }
     val reviewQueuePersistence: ReviewQueueRepository by lazy {
         ReviewQueuePersistence(localLedgerRepository)
+    }
+    val categorizationRulesCoordinator: CategorizationRulesCoordinator by lazy {
+        CategorizationRulesCoordinator(preferencesRepository, reviewQueuePersistence)
     }
     val ledgerSyncLocalStore: com.bks.model.domain.sync.LedgerSyncLocalRepository by lazy {
         LedgerSyncLocalStore(database)

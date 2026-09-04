@@ -1,9 +1,10 @@
 package com.bks.model.domain.review
 
+import com.bks.model.domain.categorization.CategorizationRule
+import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.IgnoredEntry
 import com.bks.model.domain.ledger.LedgerEntry
 import com.bks.model.domain.ledger.PendingEntry
-import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.TransactionKind
 import kotlinx.coroutines.flow.Flow
 
@@ -75,6 +76,7 @@ interface ReviewQueueRepository {
     suspend fun ensureSystemCategories()
     suspend fun loadCategories(): List<Category>
     suspend fun insertCapturedEntries(entries: List<PendingEntry>): Int
+    suspend fun applyCategorizationRulesToUnclassified(rules: List<CategorizationRule>): Int
     suspend fun execute(command: ReviewPersistenceCommand): ReviewPersistenceResult
 }
 

@@ -1,5 +1,11 @@
 package com.bks.model.data.local.ledger
 
+import com.bks.model.data.local.database.LedgerEntryEntity
+import com.bks.model.data.local.database.PendingEntryEntity
+import com.bks.model.domain.categorization.CategorizationRule
+import com.bks.model.domain.ledger.Category
+import com.bks.model.domain.ledger.PendingEntry
+import com.bks.model.domain.ledger.TransactionKind
 import com.bks.model.domain.review.ReviewEntryEdit
 import com.bks.model.domain.review.ReviewConfirmationReceipt as DomainReviewConfirmationReceipt
 import com.bks.model.domain.review.ReviewPersistenceCommand
@@ -7,14 +13,6 @@ import com.bks.model.domain.review.ReviewPersistenceResult
 import com.bks.model.domain.review.ReviewPersistenceUndo
 import com.bks.model.domain.review.ReviewQueueRepository
 import com.bks.model.domain.review.ReviewQueueSnapshot
-import com.bks.model.domain.ledger.Category
-import com.bks.model.domain.ledger.PendingEntry
-import com.bks.model.data.local.database.LedgerEntryEntity
-import com.bks.model.data.local.database.PendingEntryEntity
-import com.bks.model.domain.ledger.TransactionKind
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.ledger.PendingEntryEdit
-import com.bks.model.data.local.ledger.ReviewMutationResult
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -58,6 +56,10 @@ class ReviewQueuePersistence(
         entries.count { entry ->
             repository.insertPendingIfAbsent(entry.toEntity())
         }
+
+    override suspend fun applyCategorizationRulesToUnclassified(
+        rules: List<CategorizationRule>
+    ): Int = repository.applyCategorizationRulesToUnclassified(rules)
 
     override suspend fun execute(command: ReviewPersistenceCommand): ReviewPersistenceResult =
         when (command) {

@@ -8,6 +8,7 @@ import com.bks.model.data.local.ledger.ReviewQueuePersistence
 import com.bks.model.data.local.ledger.toDomain
 import com.bks.model.data.remote.sync.entityId
 import com.bks.model.domain.ledger.Category
+import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.ledger.LedgerEntry
 import com.bks.model.domain.review.ReviewEntryEdit
 import com.bks.model.domain.review.ReviewPersistenceCommand
@@ -496,6 +497,43 @@ class ReviewQueuePersistenceTest {
 
         assertEquals(0, inserted)
         assertEquals("first", database.pendingEntryDao().getById("stable-capture")?.note)
+    }
+
+    @Test
+    fun categorizationBackfillUpdatesOnlyUnclassifiedMatchingPendingEntries() = runBlocking {
+        repository.seedSystemCategories()
+        repository.upsertPending(
+            samplePending(id = "matching-unclassified").copy(merchantTitle = "福*********公司")
+        )
+        repository.upsertPending(
+            samplePending(id = "matching-manual").copy(
+                merchantTitle = "福*********公司",
+                suggestedCategoryId = "shopping",
+                suggestedCategoryLabel = "购物"
+            )
+        )
+        repository.upsertPending(
+            samplePending(id = "unmatched").copy(merchantTitle = "其他商户")
+        )
+
+        val updated = persistence.applyCategorizationRulesToUnclassified(
+            listOf(
+                CategorizationRule(
+                    id = "vegetables-rule",
+                    merchantContains = "福*********公司",
+                    category = "蔬菜"
+                )
+            )
+        )
+
+        assertEquals(1, updated)
+        val categorized = database.pendingEntryDao().getById("matching-unclassified")
+        assertEquals("vegetables", categorized?.suggestedCategoryId)
+        assertEquals("蔬菜", categorized?.suggestedCategoryLabel)
+        val manual = database.pendingEntryDao().getById("matching-manual")
+        assertEquals("shopping", manual?.suggestedCategoryId)
+        assertEquals("购物", manual?.suggestedCategoryLabel)
+        assertNull(database.pendingEntryDao().getById("unmatched")?.suggestedCategoryId)
     }
 
     @Test

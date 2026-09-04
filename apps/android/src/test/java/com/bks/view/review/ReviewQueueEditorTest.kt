@@ -26,6 +26,8 @@ import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.ledger.FundingAccountUiModel
 import com.bks.viewmodel.ledger.LedgerCategoryUiModel
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -180,6 +182,40 @@ class ReviewQueueEditorTest {
         composeRule.onNodeWithText("这次不保存").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("已确认 午餐").assertIsDisplayed()
+    }
+
+    @Test
+    fun savingRuleFinishesBeforeConfirmation() {
+        val events = CopyOnWriteArrayList<String>()
+        val ruleSaved = CompletableDeferred<Unit>()
+        composeRule.setContent {
+            ReviewQueueScreen(
+                state = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
+                categories = listOf(
+                    category("food", "餐饮", TransactionKind.EXPENSE),
+                    category("shopping", "购物", TransactionKind.EXPENSE)
+                ),
+                onCategorizationRuleRequested = {
+                    events += "rule-started"
+                    ruleSaved.await()
+                    events += "rule-finished"
+                },
+                onCommand = { events += "confirmed" }
+            )
+        }
+        composeRule.waitForIdle()
+        scrollToFirstPendingEntry()
+        composeRule.onNodeWithTag("detail-pending-lunch").performClick()
+        composeRule.onNodeWithTag("manual-entry-category").performScrollTo().performClick()
+        composeRule.onNodeWithText("购物").performClick()
+        composeRule.onNodeWithText("确认入账").performClick()
+        composeRule.onNodeWithText("保存规则").performClick()
+
+        composeRule.waitUntil { events.contains("rule-started") }
+        assertEquals(listOf("rule-started"), events)
+        ruleSaved.complete(Unit)
+        composeRule.waitUntil { events.contains("confirmed") }
+        assertEquals(listOf("rule-started", "rule-finished", "confirmed"), events)
     }
 
     @Test

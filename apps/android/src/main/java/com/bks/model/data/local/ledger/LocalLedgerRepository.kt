@@ -23,6 +23,8 @@ import com.bks.model.data.local.database.PendingEntryDao
 import com.bks.model.data.local.database.PendingEntryEntity
 import com.bks.model.data.local.settings.DefaultCategorizationRules
 import com.bks.model.data.local.sync.LocalSyncMutationRecorder
+import com.bks.model.domain.categorization.CategorizationRule
+import com.bks.model.domain.categorization.applyCategorizationSuggestion
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.DefaultCategories
@@ -225,6 +227,30 @@ class LocalLedgerRepository private constructor(
         } else {
             database.pendingEntryDao().insertIgnore(entry) != -1L
         }
+    }
+
+    suspend fun applyCategorizationRulesToUnclassified(
+        rules: List<CategorizationRule>
+    ): Int = database.withTransaction {
+        val categories = database.categoryDao().getAllCategories().map { it.toDomain() }
+        val updates = database.pendingEntryDao().listPendingEntries().mapNotNull { entry ->
+            if (entry.suggestedCategoryId != null || entry.suggestedCategoryLabel != null) {
+                return@mapNotNull null
+            }
+            val categorized = entry.toDomain().applyCategorizationSuggestion(rules, categories)
+            if (categorized.suggestedCategoryId == null) {
+                null
+            } else {
+                entry.copy(
+                    suggestedCategoryId = categorized.suggestedCategoryId,
+                    suggestedCategoryLabel = categorized.suggestedCategoryLabel
+                )
+            }
+        }
+        if (updates.isNotEmpty()) {
+            database.pendingEntryDao().upsertAll(updates)
+        }
+        updates.size
     }
 
     suspend fun deletePending(pendingEntryId: String) {
