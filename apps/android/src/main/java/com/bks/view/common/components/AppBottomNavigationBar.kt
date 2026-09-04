@@ -119,6 +119,7 @@ fun AppBottomNavigationBar(
             )
         }
 
+        val addButtonIconColor = MaterialTheme.colorScheme.onPrimaryContainer
         FloatingActionButton(
             onClick = {
                 if (enabled) onAddEntry()
@@ -136,14 +137,14 @@ fun AppBottomNavigationBar(
                 val strokeWidth = 4.dp.toPx()
                 val inset = strokeWidth / 2f
                 drawLine(
-                    color = Color.White,
+                    color = addButtonIconColor,
                     start = Offset(center.x, inset),
                     end = Offset(center.x, size.height - inset),
                     strokeWidth = strokeWidth,
                     cap = StrokeCap.Round
                 )
                 drawLine(
-                    color = Color.White,
+                    color = addButtonIconColor,
                     start = Offset(inset, center.y),
                     end = Offset(size.width - inset, center.y),
                     strokeWidth = strokeWidth,

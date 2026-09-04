@@ -16,6 +16,7 @@ import androidx.compose.material3.Checkbox as MaterialCheckbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FloatingActionButton as MaterialFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton as MaterialOutlinedButton
 import androidx.compose.material3.OutlinedTextField as MaterialOutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -48,8 +49,8 @@ fun Button(
         shape = ControlShape,
         border = BorderStroke(1.5.dp, if (enabled) ControlInk else ControlInk.copy(alpha = 0.22f)),
         colors = ButtonDefaults.buttonColors(
-            containerColor = ControlPrimary,
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             disabledContainerColor = Color(0xFFE0DED9),
             disabledContentColor = ControlInk.copy(alpha = 0.38f)
         ),
@@ -227,8 +228,8 @@ fun FloatingActionButton(
         onClick = onClick,
         modifier = modifier.border(1.5.dp, ControlInk, CircleShape),
         shape = CircleShape,
-        containerColor = ControlPrimary,
-        contentColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         elevation = FloatingActionButtonDefaults.elevation(
             defaultElevation = 4.dp,
             pressedElevation = 1.dp
