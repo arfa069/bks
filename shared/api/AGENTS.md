@@ -22,4 +22,4 @@
 rg "ContractName|jsonFieldName" apps/android services/backend shared/api
 ```
 
-至少运行 `.\gradlew.bat :shared:api:build`。JSON 契约发生变化时，还需运行 Android 和 Backend 中对应的契约、路由或客户端测试；跨模块改动最终运行 `.\gradlew.bat build`。
+本模块代码变更至少运行 `.\gradlew.bat :shared:api:build`。JSON 契约发生变化时，还需运行 Android 和 Backend 中对应的契约、路由或客户端测试；跨模块代码改动最终运行 `.\gradlew.bat build`。纯文档或规则修改按根指南验证。

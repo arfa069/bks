@@ -13,7 +13,7 @@
 - 待确认确认/忽略/撤销必须使用稳定 ID；Screen 不得模拟持久化成功。账本报表只派生展示结果，不修改输入。
 - 自动记账页分别展示用户开关、系统授权、服务连接与可公开读取的系统状态；临时权限故障不反写用户开关。
 - 诊断入口和页面仅在 Debug 可见；页面全程 `FLAG_SECURE`，Release 在入口与路由两层都必须不可达。
-- 保持 Material 3、现有返回层级、Snackbar 生命周期和共享表单行为；可见变化同步更新 Compose/Robolectric 测试。
+- 保持 Material 3、现有返回层级、Snackbar 生命周期和共享表单行为；可见变化按 Android 模块指南维护受影响的 Compose/Robolectric 测试。
 
 ## 验证
 

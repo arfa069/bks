@@ -26,5 +26,5 @@
 ```
 
 - 同一轮连续改动期间，只运行与当前阶段改动直接相关的测试类或 package，不重复运行 Backend 全量测试；
-- 整轮 Backend 改动完成后，运行一次 `.\gradlew.bat :services:backend:test`；
+- 整轮代码改动涉及多条路由、共享服务或持久化链路时，运行一次 `.\gradlew.bat :services:backend:test`；局部改动的专项验证已覆盖风险时不默认扩大，纯文档或规则修改按根指南验证；
 - 涉及应用组装、环境配置或数据库迁移时，必须同时运行相关集成测试和 `SecretScannerTest`。

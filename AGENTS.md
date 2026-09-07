@@ -19,10 +19,10 @@
 
 在 PowerShell 中使用仓库自带的 Gradle Wrapper：
 
-- `.\gradlew.bat :apps:android:testDebugUnitTest --tests`：仅测试修改后的 Android JVM、Compose、Room 与 Robolectric 相关的单元测试。
+- `.\gradlew.bat :apps:android:testDebugUnitTest --tests "com.bks.<layer>.<area>.<TestClass>"`：运行指定 Android JVM、Compose、Room 或 Robolectric 测试；将占位符替换为真实测试类名。
 - `.\gradlew.bat :services:backend:test`：运行后端单元测试及 Ktor 集成测试。
 - `.\gradlew.bat coverageReport`：运行三个模块的测试并生成各模块 JaCoCo HTML/XML 覆盖率报告。
-- `.\gradlew.bat detekt`：运行 Kotlin 静态代码规范、复杂度及架构规则检查。增量检查：仅对 Git 暂存区的文件运行检查。跳过检查：在快速验证逻辑时使用 ./gradlew <task> -x detekt 跳过静态检查任务。
+- `.\gradlew.bat detekt`：运行 Kotlin 静态检查，检查范围由 Gradle 任务配置决定，不保证仅检查暂存文件；专项检查可使用对应模块的 Detekt 任务。快速验证时可用 `-x detekt` 跳过，但交付前仍需完成本次适用的检查。
 - `.\gradlew.bat :apps:android:assembleDebug`：构建调试版 APK。
 - `.\gradlew.bat :apps:android:assembleRelease`：构建 Release APK；只有本地 keystore 与三项签名凭据齐全时才会生成可分发的已签名产物。
 - `.\gradlew.bat :services:backend:run`：本地启动后端。
@@ -30,9 +30,11 @@
 - `.\gradlew.bat --stop`：停止 Gradle Daemon。
 
 - 先运行与改动最相关的最窄测试；
-- 跨模块或影响较大的改动在提交前再运行完整 `build`。
+- 代码跨模块或影响较大时，在提交前运行完整 `build`；纯文档、规则或 Skill 文本修改检查格式、引用与指令一致性，不因此运行 Android 全套构建。
 - 最终测试或构建完成后，运行 `.\gradlew.bat --stop` 释放 Gradle Daemon。
 - 真机账号验收使用本地安全保存的专用测试凭据；不得把账号、密码或其他认证秘密写入仓库、命令输出或验收记录。
+
+指定重构 Step 时只完成该 Step 及其实际适用的 Execution Record/README 更新，不推进后续 Step，也不为吻合旧计划强建类。其他任务只同步实际受影响的现行说明，不自动创建阶段记录。缺少真机或生产条件时，完成可独立推进的实现与本地检查，明确未验证的验收项；不能把这些项标成通过。
 
 ## CI 与 Termux 发布
 
@@ -59,7 +61,7 @@
 ## 测试规范
 
 - 测试框架为 JUnit 4。Android 测试可使用 Robolectric、Compose UI Test 与 Room Testing；后端测试使用 Ktor Test Host 和 H2；
-- 测试文件以 `*Test.kt` 结尾，并覆盖本次改动涉及的成功、失败、空值及持久化场景。数据库迁移改变 schema 时，必须同步提交更新后的 Room schema JSON。
+- 测试文件以 `*Test.kt` 结尾，覆盖本次实际受影响的行为和风险；成功、失败、空值及持久化场景按适用性选择，不要求每次改动重建全套场景。数据库迁移改变 schema 时，必须同步提交更新后的 Room schema JSON。
 - 对照验收条件检查界面文本、页面跳转、持久化结果和关键日志，报告实际结果与证据；未经用户明确许可，不修改系统授权、不清除应用数据、不卸载应用，也不执行验收用例之外的真机操作。
 
 ## Android 真机测试（ADB）
@@ -83,6 +85,7 @@
 
 ## 提交与 Pull Request
 
+- 修改与验证不自动授权 Git 提交、推送或发布。用户说“提交吧”授权当前已验证改动的一次本地提交；推送和发布须在用户请求中明确包含，已有授权不重复确认。暂存只选本次文件，保留无关改动。
 - 近期提交通常使用简短、祈使语气的标题，并优先采用 `feat:`、`fix:`、`refactor:`、`docs:`、`config:` 或 `chore:` 等前缀。每个提交只包含一个逻辑变更。
 - Pull Request 应说明行为变化、列出验证命令并关联对应 issue 或阶段文档。
 - Android 界面发生可见变化时附截图；
