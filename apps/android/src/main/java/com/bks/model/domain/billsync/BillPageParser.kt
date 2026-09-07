@@ -96,7 +96,9 @@ class BillPageParser {
     private fun extractMerchant(lines: List<String>): String? {
         lines.forEachIndexed { index, line ->
             val inline = MERCHANT_LABELS.firstNotNullOfOrNull { label ->
-                line.substringAfter(label, missingDelimiterValue = "")
+                line.takeIf { it.startsWith("$label：") || it.startsWith("$label:") || it.startsWith("$label ") }
+                    ?.removePrefix(label)
+                    .orEmpty()
                     .trimStart(' ', ':', '：')
                     .normalizeMerchantValue()
                     .takeIf(::isMerchantValue)
@@ -123,6 +125,10 @@ class BillPageParser {
     private fun isMerchantValue(value: String): Boolean =
         value.isNotBlank() &&
             value.length <= MAX_MERCHANT_LENGTH &&
+            !PAYMENT_METHOD_REGEX.matches(value) &&
+            MERCHANT_PROMOTION_TEXT.none(value::contains) &&
+            value !in MERCHANT_NAVIGATION_LABELS &&
+            value.trimEnd(' ', ':', '：') !in CONTEXT_LABELS &&
             !AMOUNT_REGEX.containsMatchIn(value) &&
             COMPLETED_STATUS.none(value::contains) &&
             REJECTED_STATUS.none(value::contains)
@@ -155,6 +161,13 @@ internal fun String.normalizedLines(): List<String> = lineSequence()
     .map { it.trim() }
     .filter(String::isNotBlank)
     .toList()
+
+// A failed/partial read is not evidence that a completed payment has ended.
+internal fun isNewPaymentFlow(pageText: String): Boolean {
+    val lines = pageText.normalizedLines()
+    return lines.none { line -> COMPLETED_STATUS.any(line::contains) } &&
+        lines.any { it in PAYMENT_INITIATION_LABELS }
+}
 
 private fun String.normalizeMerchantValue(): String =
     trim().replace(MERCHANT_WHITESPACE_REGEX, " ")
@@ -190,5 +203,14 @@ private val CONTEXT_LABELS = listOf(
     "商户", "收款方", "付款方", "交易对象", "对方", "商品", "订单", "交易单号", "付款方式",
     "支付方式", "交易时间", "创建时间", "账单", "交易方式"
 )
-private val MERCHANT_LABELS = listOf("商户", "收款方", "付款方", "交易对象", "对方", "商品")
+private val MERCHANT_LABELS = listOf("商户名称", "商户", "收款方", "付款方", "交易对象", "对方", "商品")
 private val MERCHANT_NAVIGATION_LABELS = setOf("回首页", "完成")
+private val PAYMENT_METHOD_REGEX = Regex(
+    "^(?:花呗(?:分期)?|余额宝|余额|支付宝余额|银行卡|信用卡|储蓄卡|借记卡|信用购|" +
+        ".{1,24}银行(?:信用购|信用卡|储蓄卡|借记卡|贷记卡))(?:\\s*[（(][^()（）]{1,24}[）)])?$"
+)
+private val MERCHANT_PROMOTION_TEXT = listOf("优惠券", "支付宝积分", "立即领", "免费领", "可兑换", "支付遇财神")
+private val PAYMENT_INITIATION_LABELS = setOf(
+    "确认付款", "立即付款", "立即支付", "继续支付", "待支付", "待付款",
+    "输入支付密码", "请输入支付密码", "请输入付款密码"
+)

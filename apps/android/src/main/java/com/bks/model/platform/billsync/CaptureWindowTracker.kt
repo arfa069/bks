@@ -9,7 +9,6 @@ internal class CaptureWindowTracker {
         val key = packageName to windowId
         val existing = accepted[key]
         if (existing != null) {
-            existing.releaseRequested = false
             return false
         }
         accepted[key] = AcceptedWindow(persistenceInFlight = true)
@@ -39,6 +38,13 @@ internal class CaptureWindowTracker {
             existing.releaseRequested = true
         } else {
             accepted.remove(key)
+        }
+    }
+
+    @Synchronized
+    fun releaseForNewPayment(packageName: String) {
+        accepted.keys.filter { it.first == packageName }.forEach { (_, windowId) ->
+            release(packageName, windowId)
         }
     }
 

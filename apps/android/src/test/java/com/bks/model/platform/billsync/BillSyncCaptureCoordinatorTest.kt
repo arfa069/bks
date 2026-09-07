@@ -631,7 +631,7 @@ class BillSyncCaptureCoordinatorTest {
     }
 
     @Test
-    fun deferredLatestPageIsCheckedAfterPersistenceAndReleasesWindow() = runTest {
+    fun deferredIncompletePageIsCheckedAfterPersistenceWithoutReleasingWindow() = runTest {
         val releasePersistence = CompletableDeferred<Unit>()
         var pageText = PAGE_TEXT
         var activeWindowLookups = 0
@@ -674,7 +674,7 @@ class BillSyncCaptureCoordinatorTest {
             coordinator.onAccessibilityEvent(event())
             runSettledCapture()
 
-            assertEquals(2, processor.persistedResults.size)
+            assertEquals(1, processor.persistedResults.size)
         } finally {
             coordinator.stop()
         }

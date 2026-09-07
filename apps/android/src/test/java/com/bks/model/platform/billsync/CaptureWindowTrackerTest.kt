@@ -33,6 +33,26 @@ class CaptureWindowTrackerTest {
     }
 
     @Test
+    fun newPaymentWhilePersistenceIsInFlightReleasesOnlyAfterCompletion() {
+        val tracker = CaptureWindowTracker()
+        assertTrue(tracker.acceptIfNew(PACKAGE_NAME, WINDOW_ID))
+        tracker.releaseForNewPayment(PACKAGE_NAME)
+        assertFalse(tracker.acceptIfNew(PACKAGE_NAME, WINDOW_ID))
+
+        tracker.persistenceSucceeded(PACKAGE_NAME, WINDOW_ID)
+        assertTrue(tracker.acceptIfNew(PACKAGE_NAME, WINDOW_ID))
+    }
+
+    @Test
+    fun newPaymentDoesNotReleaseAnotherPackage() {
+        val tracker = CaptureWindowTracker()
+        assertTrue(tracker.acceptIfNew(PACKAGE_NAME, WINDOW_ID))
+        tracker.persistenceSucceeded(PACKAGE_NAME, WINDOW_ID)
+        tracker.releaseForNewPayment("other.package")
+        assertFalse(tracker.acceptIfNew(PACKAGE_NAME, WINDOW_ID))
+    }
+
+    @Test
     fun latestDeferredCaptureIsMergedAndReturnedOnce() {
         val tracker = CaptureWindowTracker()
         assertTrue(tracker.acceptIfNew(PACKAGE_NAME, WINDOW_ID))

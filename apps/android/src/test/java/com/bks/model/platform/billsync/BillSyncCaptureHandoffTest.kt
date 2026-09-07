@@ -1,6 +1,7 @@
 package com.bks.model.platform.billsync
 
 import com.bks.model.domain.billsync.BillSyncFailureReason
+import com.bks.model.domain.billsync.BillSyncPipeline
 import com.bks.model.domain.billsync.BillSyncResult
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.platform.billsync.CaptureWindowTracker
@@ -44,7 +45,7 @@ class BillSyncCaptureHandoffTest {
     }
 
     @Test
-    fun unrecognizedCaptureReleasesPreviouslySuccessfulWindow() {
+    fun unrecognizedCaptureKeepsPreviouslySuccessfulWindow() {
         val windowTracker = CaptureWindowTracker()
         assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
         windowTracker.persistenceSucceeded(PAYMENT_PACKAGE, WINDOW_ID)
@@ -52,12 +53,12 @@ class BillSyncCaptureHandoffTest {
 
         handoff(capture(), windowTracker, coordinator)
 
-        assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertFalse(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
         assertTrue(coordinator.persistedResults.isEmpty())
     }
 
     @Test
-    fun unrecognizedCaptureDuringPersistenceReleasesAfterPersistenceCompletes() {
+    fun unrecognizedCaptureDuringPersistenceKeepsSuppressionAfterCompletion() {
         val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(recognized = true)
         var pendingPersistence: (suspend () -> Unit)? = null
@@ -74,7 +75,7 @@ class BillSyncCaptureHandoffTest {
 
         runBlocking { requireNotNull(pendingPersistence).invoke() }
 
-        assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertFalse(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
         assertEquals(1, coordinator.persistedResults.size)
     }
 
@@ -154,6 +155,57 @@ class BillSyncCaptureHandoffTest {
     }
 
     @Test
+    fun longStayWithPartialAndPromotionalCapturesPersistsOnlyOnce() {
+        val pages = listOf(
+            SUCCESS_PAGE, "", "处理中", "立即领\n优惠券", SUCCESS_PAGE,
+            "支付成功\n￥48.40\n确认付款\n交易方式", SUCCESS_PAGE,
+            SUCCESS_PAGE.replace("美团", "花呗"), SUCCESS_PAGE
+        )
+
+        assertEquals(1, persistPages(pages.map { it to WINDOW_ID }).size)
+    }
+
+    @Test
+    fun nextSameMerchantAndAmountPaymentCanUseTheSameWindow() {
+        val entries = persistPages(
+            listOf(SUCCESS_PAGE to WINDOW_ID, "确认付款" to WINDOW_ID, SUCCESS_PAGE to WINDOW_ID)
+        )
+        assertEquals(2, entries.size)
+        assertEquals(entries[0].createdEntries.single().merchantTitle, entries[1].createdEntries.single().merchantTitle)
+        assertEquals(entries[0].createdEntries.single().amountMinor, entries[1].createdEntries.single().amountMinor)
+    }
+
+    @Test
+    fun checkoutInAnotherWindowRearmsPreviousResultWindow() {
+        val entries = persistPages(
+            listOf(SUCCESS_PAGE to WINDOW_ID, "待支付\n确认付款" to 99, SUCCESS_PAGE to WINDOW_ID)
+        )
+        assertEquals(2, entries.size)
+    }
+
+    @Test
+    fun incompleteFirstCaptureStillAllowsImmediateFirstSuccess() {
+        val entries = persistPages(listOf("" to WINDOW_ID, SUCCESS_PAGE to WINDOW_ID))
+        assertEquals(1, entries.size)
+    }
+
+    private fun persistPages(pages: List<Pair<String, Int>>): List<BillSyncResult> {
+        val tracker = CaptureWindowTracker()
+        val pipeline = BillSyncPipeline()
+        val persisted = mutableListOf<BillSyncResult>()
+        pages.forEachIndexed { index, (text, windowId) ->
+            handoffSanitizedCapture(
+                capture = SanitizedBillSyncCapture(PAYMENT_PACKAGE, windowId, text),
+                windowTracker = tracker,
+                recognize = { page, source -> pipeline.sync(page, 1_000_000L + index * 60_000L, source) },
+                persist = { result -> result.copy(insertedCount = 1).also(persisted::add) },
+                launch = { block -> runBlocking { block() } }
+            )
+        }
+        return persisted
+    }
+
+    @Test
     fun packageNameMapsToKnownPaymentSourceWithOtherFallback() {
         assertEquals(PaymentSource.ALIPAY, paymentSourceForPackage(ALIPAY_PACKAGE_NAME))
         assertEquals(PaymentSource.WECHAT, paymentSourceForPackage(WECHAT_PACKAGE_NAME))
@@ -217,5 +269,6 @@ class BillSyncCaptureHandoffTest {
     private companion object {
         const val PAYMENT_PACKAGE = ALIPAY_PACKAGE_NAME
         const val WINDOW_ID = 7
+        const val SUCCESS_PAGE = "支付成功\n￥48.40\n美团\n交易方式\n花呗"
     }
 }

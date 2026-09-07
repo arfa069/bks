@@ -1,6 +1,7 @@
 package com.bks.model.platform.billsync
 
 import com.bks.model.domain.billsync.BillSyncResult
+import com.bks.model.domain.billsync.isNewPaymentFlow
 import com.bks.model.domain.ledger.PaymentSource
 import kotlinx.coroutines.CancellationException
 
@@ -26,7 +27,9 @@ internal fun handoffSanitizedCapture(
 ) {
     val recognized = recognize(capture.pageText, paymentSourceForPackage(capture.packageName))
     if (!recognized.recognized) {
-        windowTracker.release(capture.packageName, capture.windowId)
+        if (isNewPaymentFlow(capture.pageText)) {
+            windowTracker.releaseForNewPayment(capture.packageName)
+        }
         BillSyncCaptureLog.processed(recognized = false, insertedCount = 0)
         notifyCaptureOutcome(
             onOutcome,

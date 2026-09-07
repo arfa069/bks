@@ -54,6 +54,33 @@ class BillPageParserTest {
     }
 
     @Test
+    fun paymentMethodsAndPromotionsBeforeMerchantAreSkipped() {
+        listOf("花呗", "余额宝", "上海银行信用购", "招商银行储蓄卡(1234)").forEach { method ->
+            val entry = parse(
+                "支付成功\n￥48.40\n$method\n支付宝积分\n美团外卖专享优惠券\n立即领\n美团\n交易方式"
+            ).single()
+            assertEquals("美团", entry.merchantTitle)
+            assertEquals(4_840L, entry.amountMinor)
+        }
+    }
+
+    @Test
+    fun invalidMerchantDoesNotPreventFirstCapture() {
+        listOf("花呗", "上海银行信用购").forEach { method ->
+            val entry = parse("支付成功\n￥48.40\n商户：$method\n交易方式").single()
+            assertEquals(FALLBACK_MERCHANT_TITLE, entry.merchantTitle)
+            assertTrue(entry.merchantTitleFromFallback)
+        }
+    }
+
+    @Test
+    fun merchantLabelInsidePromotionIsNotAField() {
+        val entry = parse("支付成功\n￥48.40\n美团\n交易方式\n花呗\n商品优惠券").single()
+        assertEquals("美团", entry.merchantTitle)
+        assertEquals("花呗便利店", parse("支付成功\n￥1.00\n商户：花呗便利店").single().merchantTitle)
+    }
+
+    @Test
     fun usesFirstAmountWhenPageShowsDifferentAmounts() {
         assertEquals(880L, parse("支付成功\n¥8.80\n¥9.90\n订单 1").single().amountMinor)
     }
