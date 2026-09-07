@@ -42,7 +42,6 @@ import com.bks.model.application.account.settingsSyncInFlight
 import com.bks.model.domain.categorization.AiCategorizationGateway
 import com.bks.model.domain.categorization.CategorizationRulesUpdate
 import com.bks.model.domain.categorization.CloudAiSettingsGateway
-import com.bks.view.home.HomeScreen
 import com.bks.viewmodel.ledger.LedgerViewModel
 import com.bks.viewmodel.ledger.LedgerUiState
 import com.bks.viewmodel.monitoring.AutomaticBookkeepingFeatureState
@@ -171,7 +170,18 @@ fun BksApp(
                             )
                         } else {
                             when (targetRoute.tab) {
-                                null -> HomeScreen(modifier = Modifier.padding(innerPadding))
+                                null -> BksHomeRoute(
+                                    ledgerState = owners.ledgerUiState,
+                                    reviewState = owners.reviewQueueState,
+                                    automaticBookkeepingState = owners.automaticBookkeepingState,
+                                    ledgerSyncState = owners.ledgerSyncUiState,
+                                    accessibilityAccessGranted = bindings.billSyncAccessibilityAccessGranted,
+                                    accessibilityServiceConnected = bindings.billSyncAccessibilityServiceConnected,
+                                    batteryOptimizationIgnored = bindings.billSyncBatteryOptimizationIgnored,
+                                    ledgerViewModel = owners.ledgerViewModel,
+                                    appState = appState,
+                                    innerPadding = innerPadding
+                                )
                                 AppTab.Review -> BksReviewRoute(
                                     reviewState = owners.reviewQueueState,
                                     reviewViewModel = owners.reviewQueueViewModel,
@@ -186,6 +196,13 @@ fun BksApp(
                                     entryListState = appState.ledgerEntryListState,
                                     snackbarHostState = appState.snackbarHostState,
                                     innerPadding = innerPadding,
+                                    requestedEntryId = appState.ledgerEntryToOpenId.value,
+                                    onRequestedEntryHandled = appState::consumeLedgerEntryToOpen,
+                                    onRequestedEntryUnavailable = {
+                                        coroutineScope.launch {
+                                            appState.snackbarHostState.showSnackbar("这笔账目已不存在")
+                                        }
+                                    },
                                     onNavigateHome = onNavigateHome
                                 )
                                 AppTab.Reports -> BksReportsRoute(

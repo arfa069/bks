@@ -112,6 +112,9 @@ fun LedgerScreen(
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     ledgerBooks: List<LedgerBookUiModel> = emptyList(),
     activeLedgerName: String = "本地账本",
+    requestedEntryId: String? = null,
+    onRequestedEntryHandled: () -> Unit = {},
+    onRequestedEntryUnavailable: () -> Unit = {},
     onUpdateEntry: suspend (String, LedgerEntryFormSubmission) -> Unit = { _, _ -> },
     onDeleteEntry: suspend (String) -> Unit = {},
     onRestoreEntry: suspend (String) -> Unit = {},
@@ -132,14 +135,31 @@ fun LedgerScreen(
     onNavigateHome: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var view by rememberSaveable { mutableStateOf(LedgerView.LIST) }
-    var selectedEntryId by rememberSaveable { mutableStateOf<String?>(null) }
+    val initialPage = requestedLedgerPage(requestedEntryId, entries)
+    var view by rememberSaveable {
+        mutableStateOf(initialPage.view)
+    }
+    var selectedEntryId by rememberSaveable { mutableStateOf(initialPage.selectedEntryId) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val selectedEntry = remember(entries, selectedEntryId) {
         entries.firstOrNull { it.id == selectedEntryId }
     }
     val page = remember(view, selectedEntryId) { LedgerPage(view, selectedEntryId) }
+
+    RequestedLedgerEntryEffect(
+        requestedEntryId = requestedEntryId,
+        entries = entries,
+        currentPage = page,
+        onOpenEntry = { entryId ->
+            selectedEntryId = entryId
+            view = LedgerView.EDIT
+        },
+        actions = RequestedLedgerEntryActions(
+            onHandled = onRequestedEntryHandled,
+            onUnavailable = onRequestedEntryUnavailable
+        )
+    )
 
     BackHandler(
         enabled = view == LedgerView.DELETED ||
@@ -280,5 +300,44 @@ fun LedgerScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
+}
+
+private data class RequestedLedgerEntryActions(
+    val onHandled: () -> Unit,
+    val onUnavailable: () -> Unit
+)
+
+@Composable
+private fun RequestedLedgerEntryEffect(
+    requestedEntryId: String?,
+    entries: List<LedgerEntryUiModel>,
+    currentPage: LedgerPage,
+    onOpenEntry: (String) -> Unit,
+    actions: RequestedLedgerEntryActions
+) {
+    LaunchedEffect(requestedEntryId, entries) {
+        val entryId = requestedEntryId ?: return@LaunchedEffect
+        val available = entries.any { it.id == entryId && it.deletedAtEpochMillis == null }
+        if (available && currentPage != LedgerPage(LedgerView.EDIT, entryId)) {
+            onOpenEntry(entryId)
+        } else if (!available) {
+            actions.onUnavailable()
+        }
+        actions.onHandled()
+    }
+}
+
+private fun requestedLedgerPage(
+    requestedEntryId: String?,
+    entries: List<LedgerEntryUiModel>
+): LedgerPage {
+    val availableId = requestedEntryId?.takeIf { requestedId ->
+        entries.any { it.id == requestedId && it.deletedAtEpochMillis == null }
+    }
+    return if (availableId == null) {
+        LedgerPage(LedgerView.LIST, null)
+    } else {
+        LedgerPage(LedgerView.EDIT, availableId)
     }
 }

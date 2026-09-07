@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -43,6 +44,7 @@ import com.bks.model.domain.account.AccountSession
 import com.bks.model.data.local.account.LocalModeSessionStore
 import com.bks.model.data.local.account.SecureAccountSessionStore
 import com.bks.view.ledger.LedgerTestTags
+import com.bks.view.home.HomeTestTags
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
@@ -83,6 +85,57 @@ class MainActivityTest {
 
         composeRule.onNodeWithTag("home-screen").assertIsDisplayed()
         composeRule.onNodeWithText("主页").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeOverviewAndViewAllOpenExistingDestinations() {
+        composeRule.setContent { BksApp() }
+
+        composeRule.onNodeWithTag(HomeTestTags.OVERVIEW).performClick()
+        composeRule.onNodeWithText("报表").assertIsDisplayed()
+        composeRule.onNodeWithTag("return-home").performClick()
+
+        composeRule.onNodeWithTag(HomeTestTags.VIEW_ALL).performScrollTo().performClick()
+        composeRule.onNodeWithText("账本").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeRecentEntryOpensTheExistingLedgerEditor() {
+        val repository = TestLedgerRepository(BksDatabaseProvider.get(context))
+        val createdEntryId = runBlocking {
+            repository.clearLocalData()
+            val ledger = repository.ensureDefaultLedgerBook()
+            repository.seedSystemCategories()
+            repository.createManualEntry(
+                ledger.id,
+                reportEntryInput(amountMinor = 2_800, merchantTitle = "主页直达午餐")
+            ).id
+        }
+
+        try {
+            composeRule.setContent { BksApp() }
+            composeRule.onNodeWithTag(HomeTestTags.SCREEN).performScrollToIndex(3)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag(
+                    HomeTestTags.recentEntry(createdEntryId),
+                    useUnmergedTree = true
+                )
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+            composeRule.onNodeWithTag(HomeTestTags.recentEntry(createdEntryId))
+                .performScrollTo()
+                .performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                runCatching {
+                    composeRule.onNodeWithText("编辑账目").assertIsDisplayed()
+                }.isSuccess
+            }
+            composeRule.onNodeWithTag("manual-entry-merchant").assertTextContains("主页直达午餐")
+        } finally {
+            runBlocking { repository.clearLocalData() }
+        }
     }
 
     @Test

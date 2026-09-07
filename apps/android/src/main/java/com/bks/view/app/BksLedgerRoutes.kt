@@ -69,6 +69,9 @@ internal fun BksLedgerRoute(
     entryListState: LazyListState,
     snackbarHostState: SnackbarHostState,
     innerPadding: PaddingValues,
+    requestedEntryId: String?,
+    onRequestedEntryHandled: () -> Unit,
+    onRequestedEntryUnavailable: () -> Unit,
     onNavigateHome: () -> Unit
 ) {
     LedgerScreen(
@@ -80,6 +83,9 @@ internal fun BksLedgerRoute(
         defaultFundingAccountSyncId = state.defaultFundingAccountSyncId,
         ledgerBooks = state.ledgerBooks,
         activeLedgerName = state.activeLedgerName,
+        requestedEntryId = requestedEntryId,
+        onRequestedEntryHandled = onRequestedEntryHandled,
+        onRequestedEntryUnavailable = onRequestedEntryUnavailable,
         onUpdateEntry = viewModel::updateEntry,
         onDeleteEntry = viewModel::deleteEntry,
         onRestoreEntry = viewModel::restoreEntry,

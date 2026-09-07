@@ -25,6 +25,7 @@ import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.ledger.LedgerEntryFormSubmission
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -40,6 +41,47 @@ import org.robolectric.annotation.Config
 class LedgerEntryEditorScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun externalEntryRequestOpensEditorAndIsHandledOnce() {
+        val handledCount = AtomicInteger()
+        val unavailableCount = AtomicInteger()
+        composeRule.setContent {
+            LedgerScreen(
+                entries = listOf(sampleEntries().first()),
+                requestedEntryId = "food",
+                onRequestedEntryHandled = handledCount::incrementAndGet,
+                onRequestedEntryUnavailable = unavailableCount::incrementAndGet
+            )
+        }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("编辑账目").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("编辑账目").assertIsDisplayed()
+        composeRule.onNodeWithTag("manual-entry-merchant").assertTextContains("午餐")
+        assertEquals(1, handledCount.get())
+        assertEquals(0, unavailableCount.get())
+    }
+
+    @Test
+    fun unavailableExternalEntryRequestFallsBackToLedgerList() {
+        val handledCount = AtomicInteger()
+        val unavailableCount = AtomicInteger()
+        composeRule.setContent {
+            LedgerScreen(
+                entries = listOf(sampleEntries().first()),
+                requestedEntryId = "missing",
+                onRequestedEntryHandled = handledCount::incrementAndGet,
+                onRequestedEntryUnavailable = unavailableCount::incrementAndGet
+            )
+        }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) { handledCount.get() == 1 }
+        composeRule.onNodeWithText("账本").assertIsDisplayed()
+        composeRule.onNodeWithText("编辑账目").assertDoesNotExist()
+        assertEquals(1, unavailableCount.get())
+    }
 
     @Test
     fun manualEntryFormSavesValidatedInput() {

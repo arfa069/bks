@@ -28,6 +28,7 @@ internal class BksAppState(
     val tabs: List<AppTab>,
     val selectedTab: MutableState<AppTab?>,
     val manualEntryOpen: MutableState<Boolean>,
+    val ledgerEntryToOpenId: MutableState<String?>,
     val profileDestination: MutableState<ProfileDestination?>,
     val accountEntryMode: MutableState<AccountEntryMode?>,
     val accountEntryReturnTarget: MutableState<AccountEntryReturnTarget?>
@@ -50,6 +51,16 @@ internal class BksAppState(
         accountEntryMode.value = null
         accountEntryReturnTarget.value = null
     }
+
+    fun openLedgerEntry(id: String) {
+        ledgerEntryToOpenId.value = id
+        selectedTab.value = AppTab.Ledger
+        profileDestination.value = null
+    }
+
+    fun consumeLedgerEntryToOpen() {
+        ledgerEntryToOpenId.value = null
+    }
 }
 
 internal enum class AccountEntryMode {
@@ -71,6 +82,7 @@ internal fun rememberBksAppState(
         stateSaver = nullableEnumStateSaver(AppTab::valueOf)
     ) { mutableStateOf(null) }
     val manualEntryOpen = rememberSaveable { mutableStateOf(false) }
+    val ledgerEntryToOpenId = remember { mutableStateOf<String?>(null) }
     val profileDestination = rememberSaveable(
         stateSaver = nullableEnumStateSaver(ProfileDestination::valueOf)
     ) { mutableStateOf(null) }
@@ -87,6 +99,7 @@ internal fun rememberBksAppState(
         tabs,
         selectedTab,
         manualEntryOpen,
+        ledgerEntryToOpenId,
         profileDestination,
         accountEntryMode,
         accountEntryReturnTarget
@@ -98,6 +111,7 @@ internal fun rememberBksAppState(
             tabs = tabs,
             selectedTab = selectedTab,
             manualEntryOpen = manualEntryOpen,
+            ledgerEntryToOpenId = ledgerEntryToOpenId,
             profileDestination = profileDestination,
             accountEntryMode = accountEntryMode,
             accountEntryReturnTarget = accountEntryReturnTarget

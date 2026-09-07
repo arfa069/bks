@@ -63,7 +63,7 @@ Admission and output:
 
 ### 5.2 Review Queue
 
-Homepage:
+Review destination:
 - The review queue is the first tab and primary workflow.
 - The header shows the target ledger-book name and an ignored-records action.
 - One summary card shows pending total, duplicate suspect count, and today's pending count.
@@ -286,6 +286,13 @@ Main navigation:
 - A raised centered add action opens manual ledger-entry creation; it is an action, not a fifth destination.
 - Destination screens hide the bottom navigation and expose an explicit return-to-home action.
 - Ledger Management and Funding Accounts are secondary pages opened from the ledger overflow menu, not additional bottom-navigation destinations.
+
+Home dashboard:
+- Shows the persisted current ledger-book name. When multiple ledger books exist, the user can switch the current ledger book from the header; replacement of local data temporarily disables this action.
+- The primary card shows the latest reportable month for the current ledger book, with net amount, expense, and income. It always labels the actual month instead of implying that historical data belongs to the current calendar month, and opens Reports when selected.
+- An attention section appears only when action is required: pending review entries, an enabled automatic-bookkeeping setup/runtime problem, or an enabled account-sync conflict/error. Normal automatic-bookkeeping and sync states do not occupy the dashboard.
+- Shows the three newest active entries in the current ledger book. Selecting one opens its existing ledger editor; a concurrently removed entry safely falls back to the ledger list. "View all" opens Ledger.
+- Empty report and recent-entry states use existing illustrations and retain the existing centered manual-entry action as the only creation shortcut.
 
 Onboarding:
 - Progressive onboarding.
