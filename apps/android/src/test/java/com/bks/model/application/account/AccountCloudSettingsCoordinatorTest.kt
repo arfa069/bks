@@ -5,7 +5,7 @@ import com.bks.model.application.account.AccountCloudSettingsCoordinator
 import com.bks.model.application.account.AccountCloudSettingsOperationResult
 import com.bks.model.application.account.AccountSessionCoordinatorState
 import com.bks.model.application.account.settingsSyncInFlight
-import com.bks.model.data.local.ledger.FundingAccountRepository
+import com.bks.model.domain.ledger.FundingAccountRepository
 import com.bks.model.domain.account.AccountRuntimeState
 import com.bks.model.domain.account.AccountRuntimeStatus
 import com.bks.model.domain.account.AccountSession
@@ -17,8 +17,8 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.bks.model.data.local.database.BksDatabase
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
+import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.domain.categorization.AiCategorizationFailureReason
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.model.domain.categorization.CloudAiSettingsGateway
@@ -48,8 +48,8 @@ import org.robolectric.annotation.Config
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountCloudSettingsCoordinatorTest {
     private lateinit var database: BksDatabase
-    private lateinit var preferencesRepository: LocalPreferencesRepository
-    private lateinit var ledgerRepository: LocalLedgerRepository
+    private lateinit var preferencesRepository: RoomPreferencesRepository
+    private lateinit var ledgerRepository: TestLedgerRepository
     private lateinit var sessionState: MutableStateFlow<AccountSessionCoordinatorState>
     private lateinit var gateway: TestCloudSettingsGateway
 
@@ -59,8 +59,8 @@ class AccountCloudSettingsCoordinatorTest {
         database = Room.inMemoryDatabaseBuilder(context, BksDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        preferencesRepository = LocalPreferencesRepository(database)
-        ledgerRepository = LocalLedgerRepository(database, idGenerator = { "funding-sync-id" })
+        preferencesRepository = RoomPreferencesRepository(database)
+        ledgerRepository = TestLedgerRepository(database, idGenerator = { "funding-sync-id" })
         sessionState = MutableStateFlow(AccountSessionCoordinatorState(isRestoring = false))
         gateway = TestCloudSettingsGateway()
     }
@@ -296,7 +296,7 @@ class AccountCloudSettingsCoordinatorTest {
     private fun kotlinx.coroutines.test.TestScope.coordinator() = AccountCloudSettingsCoordinator(
         accountSessionState = sessionState,
         preferencesRepository = preferencesRepository,
-        fundingAccountRepository = ledgerRepository,
+        fundingAccountRepository = ledgerRepository.domainRepository,
         cloudGateway = gateway,
         applicationScope = backgroundScope
     )

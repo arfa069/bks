@@ -2,7 +2,7 @@ package com.bks.view.ledger
 
 import com.bks.model.domain.ledger.Category
 import com.bks.viewmodel.ledger.LedgerFlowType
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.getValue
@@ -38,7 +38,7 @@ class ReportsScreenLayoutTest {
     @Test
     fun fullCategoryRankingScrollsAndRestoresItsPosition() {
         val entries = List(16) { index ->
-            LedgerUiEntry(
+            LedgerEntryUiModel(
                 id = "category-$index",
                 title = "账目 $index",
                 amountMinor = 2_000L - index,
@@ -145,8 +145,8 @@ class ReportsScreenLayoutTest {
         }
     }
 
-    private fun adaptiveEntries(): List<LedgerUiEntry> = listOf(
-        LedgerUiEntry(
+    private fun adaptiveEntries(): List<LedgerEntryUiModel> = listOf(
+        LedgerEntryUiModel(
             id = "adaptive-food",
             title = "午餐",
             amountMinor = 3_590,
@@ -157,7 +157,7 @@ class ReportsScreenLayoutTest {
             kindLabel = "支出",
             flowType = LedgerFlowType.EXPENSE
         ),
-        LedgerUiEntry(
+        LedgerEntryUiModel(
             id = "adaptive-ride",
             title = "地铁",
             amountMinor = 600,

@@ -1,9 +1,9 @@
 package com.bks.view.review
 
 import com.bks.viewmodel.review.toTransactionKind
-import com.bks.viewmodel.review.formatAmount
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.ledger.formatMoney
+import com.bks.viewmodel.review.ReviewEntryUiModel
+import com.bks.viewmodel.review.ReviewQueueUiState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,7 +59,7 @@ private val ReviewContentMaxWidth = 880.dp
 
 @Composable
 internal fun ReviewQueueListContent(
-    state: ReviewQueueState,
+    state: ReviewQueueUiState,
     targetLedgerName: String,
     actions: ReviewQueueListActions,
     modifier: Modifier = Modifier
@@ -201,7 +201,7 @@ private fun LabelPill(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReviewEntryRow(
-    entry: ReviewQueueEntry,
+    entry: ReviewEntryUiModel,
     onConfirm: () -> Unit,
     onIgnore: () -> Unit,
     onEdit: () -> Unit
@@ -250,7 +250,7 @@ private fun ReviewEntryRow(
 
 @Composable
 private fun ReviewEntryCard(
-    entry: ReviewQueueEntry,
+    entry: ReviewEntryUiModel,
     onConfirm: () -> Unit,
     onIgnore: () -> Unit,
     onEdit: () -> Unit
@@ -317,7 +317,7 @@ private fun ReviewEntryCard(
                     }
                 }
                 Text(
-                    text = formatAmount(entry.amountMinor),
+                    text = formatMoney(entry.amountMinor),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )

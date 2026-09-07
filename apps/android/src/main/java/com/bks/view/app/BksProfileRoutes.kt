@@ -1,6 +1,5 @@
 package com.bks.view.app
 
-import com.bks.model.application.sync.LedgerSyncInitialMode
 import com.bks.model.application.account.cloudWritesPaused
 import com.bks.model.application.account.settingsSyncInFlight
 import com.bks.BuildConfig
@@ -16,17 +15,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.model.domain.account.AccountDeletionState
 import com.bks.view.account.AccountManagementScreen
 import com.bks.view.account.AccountManagementScreenActions
-import com.bks.view.account.AccountManagementScreenDependencies
+import com.bks.view.account.AccountManagementScreenPlatform
 import com.bks.view.account.AccountManagementScreenState
+import com.bks.view.account.WechatAccountManagementActions
 import com.bks.viewmodel.account.AccountManagementViewModel
+import com.bks.model.domain.account.WechatAuthPurpose
+import com.bks.viewmodel.account.toProfileAccountSummaryUiModel
 import com.bks.model.domain.account.AccountRuntimeState
 import com.bks.model.domain.account.AccountSession
-import com.bks.model.domain.sync.LedgerSyncConflictChoice
-import com.bks.model.platform.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthCallback
 import com.bks.view.account.WechatAvatarCache
 import com.bks.model.domain.categorization.AiCategorizationSettings
 import com.bks.viewmodel.categorization.CategorizationUiState
@@ -36,7 +38,6 @@ import com.bks.model.domain.categorization.CategorizationRulesUpdate
 import com.bks.view.categorization.CategorizationRulesActions
 import com.bks.view.categorization.CategorizationRulesScreen
 import com.bks.view.compliance.ComplianceAndPrivacyScreen
-import com.bks.view.diagnostics.DiagnosticLogsScreen
 import com.bks.viewmodel.ledger.LedgerUiState
 import com.bks.viewmodel.ledger.LedgerCategoryUiModel
 import com.bks.viewmodel.monitoring.AutomaticBookkeepingFeatureState
@@ -46,13 +47,11 @@ import com.bks.viewmodel.monitoring.AutomaticBookkeepingViewModel
 import com.bks.view.profile.ProfileDestination
 import com.bks.view.profile.ProfileOverviewScreen
 import com.bks.viewmodel.settings.DataAndBackupActions
-import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
+import com.bks.viewmodel.settings.LedgerCsvEntryUiModel
 import com.bks.view.settings.DataAndBackupScreen
 import com.bks.viewmodel.settings.DataAndBackupUiState
 import com.bks.viewmodel.settings.DataAndBackupViewModel
-import com.bks.viewmodel.settings.LedgerSyncSectionActions
-import com.bks.viewmodel.settings.LedgerSyncSettingsConflictChoice
-import com.bks.viewmodel.settings.LedgerSyncSettingsInitialMode
+import com.bks.viewmodel.sync.LedgerSyncSectionActions
 import com.bks.viewmodel.sync.LedgerSyncUiState
 import com.bks.viewmodel.sync.LedgerSyncViewModel
 @Composable
@@ -148,27 +147,78 @@ internal fun BksAccountManagementRoute(
     onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
+    val operationState by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(session) {
+        viewModel.activate(session)
+    }
+    LaunchedEffect(wechatAuthCallback, session) {
+        val signedIn = session as? AccountSession.SignedIn ?: return@LaunchedEffect
+        val callback = wechatAuthCallback ?: return@LaunchedEffect
+        if (callback.purpose != WechatAuthPurpose.LinkCurrentAccount) return@LaunchedEffect
+        onWechatAuthCallbackConsumed()
+        viewModel.handleWechatCallback(signedIn, callback)
+    }
+    val signedIn = session as? AccountSession.SignedIn
     AccountManagementScreen(
         screenState = AccountManagementScreenState(
             session = session,
             runtimeState = runtimeState,
-            deletionState = deletionState
+            deletionState = deletionState,
+            operationState = operationState,
+            wechatAvailable = viewModel.wechatAvailable
         ),
-        dependencies = AccountManagementScreenDependencies(
-            viewModel = viewModel,
-            wechatAuthCallback = wechatAuthCallback,
-            onWechatAuthCallbackConsumed = onWechatAuthCallbackConsumed,
+        platform = AccountManagementScreenPlatform(
             avatarCacheOverride = avatarCache
         ),
         actions = AccountManagementScreenActions(
             onSignInOrRegister = onSignInOrRegister,
-            onBack = onBack
+            onBack = {
+                viewModel.closeManagement()
+                onBack()
+            },
+            onRetryVerification = {
+                signedIn?.let { viewModel.retryVerification(it, deletionState) }
+            },
+            onSignOut = {
+                signedIn?.let(viewModel::signOut)
+            },
+            onRequestDeletion = {
+                signedIn?.let(viewModel::requestDeletion)
+            },
+            onCancelDeletion = {
+                signedIn?.let(viewModel::cancelDeletion)
+            },
+            wechat = accountManagementWechatActions(viewModel, signedIn, deletionState)
         ),
         modifier = Modifier
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)
     )
 }
+
+private fun accountManagementWechatActions(
+    viewModel: AccountManagementViewModel,
+    session: AccountSession.SignedIn?,
+    deletionState: AccountDeletionState
+) = WechatAccountManagementActions(
+    onStartWechatLink = { session?.let(viewModel::startWechatLink) },
+    onBeginAvatarRead = viewModel::beginAvatarRead,
+    onCancelAvatarRead = viewModel::cancelAvatarRead,
+    onAvatarDataReady = { data -> session?.let { viewModel.updateAvatar(it, deletionState, data) } },
+    onAvatarReadFailure = viewModel::reportAvatarReadFailure,
+    onIdentityFailure = viewModel::reportIdentityFailure,
+    onOpenIdentityPage = viewModel::openIdentityPage,
+    onCloseIdentityPage = viewModel::closeIdentityPage,
+    onIdentityContextChanged = { viewModel.identityContextChanged() },
+    onClearIdentityError = viewModel::clearIdentityError,
+    onUpdateNickname = { nickname -> session?.let { viewModel.updateNickname(it, deletionState, nickname) } },
+    onPrepareIdentifierLink = { state -> session?.let { viewModel.prepareIdentifierLink(it, state) } },
+    onConfirmIdentifier = { state -> session?.let { viewModel.confirmIdentifier(it, state) } },
+    onConfirmPhonePassword = { state -> session?.let { viewModel.confirmPhonePassword(it, state) } },
+    onConfirmMerge = { text -> session?.let { viewModel.confirmMerge(it, text) } },
+    onRequestUnlinkCode = { identifier -> session?.let { viewModel.requestUnlinkCode(it, identifier) } },
+    onUnlinkWechat = { state -> session?.let { viewModel.unlinkWechat(it, state) } }
+)
 
 @Composable
 @Suppress("LongParameterList")
@@ -208,7 +258,7 @@ internal fun BksDataAndBackupRoute(
 ) {
     val backupLedgerEntries = remember(ledgerState.entries) {
         ledgerState.entries.map { entry ->
-            BackupLedgerEntryUiModel(
+            LedgerCsvEntryUiModel(
                 id = entry.id,
                 transactionTimeText = entry.transactionTimeText,
                 title = entry.title,
@@ -239,40 +289,14 @@ internal fun BksDataAndBackupRoute(
         ),
         onBack = onBack,
         snackbarHostState = snackbarHostState,
-        ledgerSyncState = ledgerSyncState.toSettingsUiState(),
+        ledgerSyncState = ledgerSyncState,
         ledgerSyncActions = LedgerSyncSectionActions(
-            onPreview = {
-                ledgerSyncViewModel.preview().toSettingsActionResult { preview ->
-                    preview.toSettingsPreview()
-                }
-            },
+            onPreview = ledgerSyncViewModel::preview,
             onDismissPreview = ledgerSyncViewModel::dismissPreview,
-            onEnable = { mode ->
-                ledgerSyncViewModel.enable(
-                    when (mode) {
-                        LedgerSyncSettingsInitialMode.MERGE ->
-                            com.bks.model.application.sync.LedgerSyncInitialMode.MERGE
-                        LedgerSyncSettingsInitialMode.REPLACE_LOCAL ->
-                            com.bks.model.application.sync.LedgerSyncInitialMode.REPLACE_LOCAL
-                    }
-                ).toSettingsActionResult { Unit }
-            },
-            onSyncNow = {
-                ledgerSyncViewModel.synchronize().toSettingsActionResult { Unit }
-            },
+            onEnable = ledgerSyncViewModel::enable,
+            onSyncNow = ledgerSyncViewModel::synchronize,
             onDisable = ledgerSyncViewModel::disable,
-            onResolveConflict = { conflictId, canonicalVersion, choice ->
-                ledgerSyncViewModel.resolveConflict(
-                    conflictId = conflictId,
-                    expectedVersion = canonicalVersion,
-                    choice = when (choice) {
-                        LedgerSyncSettingsConflictChoice.CANONICAL ->
-                            LedgerSyncConflictChoice.CANONICAL
-                        LedgerSyncSettingsConflictChoice.CANDIDATE ->
-                            LedgerSyncConflictChoice.CANDIDATE
-                    }
-                ).toSettingsActionResult { Unit }
-            }
+            onResolveConflict = ledgerSyncViewModel::resolveConflict
         ),
         modifier = Modifier
             .padding(innerPadding)
@@ -292,23 +316,4 @@ internal fun BksComplianceRoute(
             .padding(innerPadding)
             .consumeWindowInsets(innerPadding)
     )
-}
-
-@Composable
-internal fun BksDiagnosticLogsRoute(
-    viewModel: com.bks.viewmodel.diagnostics.DiagnosticLogsViewModel,
-    onBack: () -> Unit,
-    innerPadding: PaddingValues,
-    isDebugBuild: Boolean = BuildConfig.DEBUG
-) {
-    if (isDebugBuild) {
-        DiagnosticLogsScreen(
-            isDebugBuild = isDebugBuild,
-            onBack = onBack,
-            injectedViewModel = viewModel,
-            modifier = Modifier
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
-        )
-    }
 }

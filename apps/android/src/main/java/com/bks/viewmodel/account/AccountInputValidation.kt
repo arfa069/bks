@@ -10,7 +10,7 @@ private fun parseIdentifierOrNull(identifier: String) =
         null
     }
 
-val AccountUiState.identifierType: AccountIdentifierType
+val AccountFormState.identifierType: AccountIdentifierType
     get() = parseIdentifierOrNull(phone)?.type
         ?: if (phone.contains("@")) {
             AccountIdentifierType.EMAIL
@@ -20,7 +20,7 @@ val AccountUiState.identifierType: AccountIdentifierType
             AccountIdentifierType.USERNAME
         }
 
-val AccountUiState.requiresVerificationCode: Boolean
+val AccountFormState.requiresVerificationCode: Boolean
     get() = identifierType != AccountIdentifierType.USERNAME
 
 internal fun validateIdentifier(identifier: String, flow: AccountFlow = AccountFlow.Landing): String? {

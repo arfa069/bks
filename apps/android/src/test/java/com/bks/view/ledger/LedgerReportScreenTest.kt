@@ -2,7 +2,7 @@ package com.bks.view.ledger
 
 import com.bks.model.domain.ledger.Category
 import com.bks.viewmodel.ledger.LedgerFlowType
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -139,8 +139,8 @@ class LedgerReportScreenTest {
         composeRule.onNodeWithText("7 个月收支").assertDoesNotExist()
     }
 
-    private fun sampleEntries(): List<LedgerUiEntry> = listOf(
-        LedgerUiEntry(
+    private fun sampleEntries(): List<LedgerEntryUiModel> = listOf(
+        LedgerEntryUiModel(
             id = "food",
             title = "午餐",
             amountMinor = 3590,
@@ -152,7 +152,7 @@ class LedgerReportScreenTest {
             flowType = LedgerFlowType.EXPENSE,
             note = "客户会议"
         ),
-        LedgerUiEntry(
+        LedgerEntryUiModel(
             id = "ride",
             title = "地铁出行",
             amountMinor = 600,
@@ -163,7 +163,7 @@ class LedgerReportScreenTest {
             kindLabel = "支出",
             flowType = LedgerFlowType.EXPENSE
         ),
-        LedgerUiEntry(
+        LedgerEntryUiModel(
             id = "refund",
             title = "退款到账",
             amountMinor = 1290,
@@ -181,7 +181,7 @@ class LedgerReportScreenTest {
         category: String,
         amountMinor: Long,
         flowType: LedgerFlowType = LedgerFlowType.EXPENSE
-    ): LedgerUiEntry = LedgerUiEntry(
+    ): LedgerEntryUiModel = LedgerEntryUiModel(
         id = id,
         title = id,
         amountMinor = amountMinor,

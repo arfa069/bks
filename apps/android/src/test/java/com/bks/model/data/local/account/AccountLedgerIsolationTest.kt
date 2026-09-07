@@ -8,8 +8,8 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.bks.model.data.local.database.BksDatabaseProvider
 import com.bks.model.domain.ledger.FlowDirection
-import com.bks.model.data.local.ledger.LedgerEntryInput
-import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.domain.ledger.LedgerEntryCommand
+import com.bks.model.data.local.ledger.TestLedgerRepository
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
 import kotlinx.coroutines.runBlocking
@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config
 class AccountLedgerIsolationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val ledgerRepository by lazy {
-        LocalLedgerRepository(BksDatabaseProvider.get(context))
+        TestLedgerRepository(BksDatabaseProvider.get(context))
     }
 
     @Before
@@ -48,7 +48,7 @@ class AccountLedgerIsolationTest {
         val ledger = ledgerRepository.ensureDefaultLedgerBook()
         ledgerRepository.createManualEntry(
             ledger.id,
-            LedgerEntryInput(
+            LedgerEntryCommand(
                 flowDirection = FlowDirection.OUTFLOW,
                 transactionKind = TransactionKind.EXPENSE,
                 amountMinor = 1_200,

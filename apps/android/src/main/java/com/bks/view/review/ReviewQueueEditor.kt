@@ -6,10 +6,10 @@ import com.bks.viewmodel.review.toTransactionKind
 import com.bks.viewmodel.review.ReviewAiSuggestionResult
 import com.bks.model.domain.review.ReviewEntryEdit
 import com.bks.viewmodel.ledger.label
-import com.bks.viewmodel.review.amountMinorToText
+import com.bks.viewmodel.ledger.amountMinorToText
 import com.bks.model.domain.ledger.TransactionKind
-import com.bks.viewmodel.review.parseReviewAmountMinor
-import com.bks.viewmodel.review.ReviewQueueEntry
+import com.bks.viewmodel.ledger.parseAmountMinor
+import com.bks.viewmodel.review.ReviewEntryUiModel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -32,7 +32,7 @@ import com.bks.viewmodel.ledger.LedgerEntryFormState
 import com.bks.viewmodel.ledger.LedgerEntryFormSubmission
 import com.bks.view.common.entry.SharedLedgerEntryForm
 internal data class PendingCategoryRuleSave(
-    val entry: ReviewQueueEntry,
+    val entry: ReviewEntryUiModel,
     val edit: PendingReviewEdit
 ) {
     fun toRuleRequest(): ReviewCategoryRuleRequest = ReviewCategoryRuleRequest(
@@ -64,7 +64,7 @@ internal data class PendingReviewEdit(
 ) {
     fun toEntryEdit(): ReviewEntryEdit = ReviewEntryEdit(
         title = title,
-        amountMinor = requireNotNull(parseReviewAmountMinor(amountText)) {
+        amountMinor = requireNotNull(parseAmountMinor(amountText)) {
             "Review amount is invalid"
         },
         transactionTimeEpochMillis = requireNotNull(
@@ -107,16 +107,16 @@ internal data class ReviewPendingEntryEditorConfig(
     val modifier: Modifier,
     val snackbarHostState: SnackbarHostState,
     val onExit: () -> Unit,
-    val onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult,
+    val onAiSuggest: suspend (ReviewEntryUiModel, List<String>) -> ReviewAiSuggestionResult,
     val onConfirm: (PendingReviewEdit) -> Unit
 )
 
 internal data class ReviewEditorToolActions(
     val onDraftChange: (LedgerEntryFormState) -> Unit,
-    val onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult
+    val onAiSuggest: suspend (ReviewEntryUiModel, List<String>) -> ReviewAiSuggestionResult
 )
 
-internal fun ReviewQueueEntry.hasCategoryCorrection(category: String): Boolean {
+internal fun ReviewEntryUiModel.hasCategoryCorrection(category: String): Boolean {
     return category.trim().isNotBlank() && category.trim() != this.category
 }
 
@@ -125,7 +125,7 @@ internal fun LedgerCategoryUiModel.reviewDisplayName(): String =
 
 @Composable
 internal fun ReviewPendingEntryEditor(
-    entry: ReviewQueueEntry,
+    entry: ReviewEntryUiModel,
     availableCategories: List<LedgerCategoryUiModel>,
     fundingAccounts: List<FundingAccountUiModel>,
     defaultFundingAccountSyncId: String?,

@@ -4,8 +4,7 @@ import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.FundingAccount
 import com.bks.model.domain.review.ReviewPersistenceCommand
 import com.bks.viewmodel.ledger.label
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewEntryUiModel
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
@@ -67,7 +66,7 @@ class ReviewQueueEditorTest {
         val nextCommand = AtomicReference<ReviewPersistenceCommand?>()
         composeRule.setContent {
             ReviewQueueScreen(
-                state = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
+                state = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())),
                 onCommand = { nextCommand.set(it) },
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
@@ -125,7 +124,7 @@ class ReviewQueueEditorTest {
     @Test
     fun invalidAmountKeepsDialogOpenAndDoesNotSilentlyUpdateRow() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            ReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -157,7 +156,7 @@ class ReviewQueueEditorTest {
     fun categoryCorrectionAsksBeforeSavingRule() {
         composeRule.setContent {
             TestReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())),
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("shopping", "购物", TransactionKind.EXPENSE)
@@ -190,7 +189,7 @@ class ReviewQueueEditorTest {
         val ruleSaved = CompletableDeferred<Unit>()
         composeRule.setContent {
             ReviewQueueScreen(
-                state = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
+                state = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())),
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("shopping", "购物", TransactionKind.EXPENSE)
@@ -222,7 +221,7 @@ class ReviewQueueEditorTest {
     fun duplicateReviewUsesCategoryPickerAndStartsWithEmptyNote() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(
+                initialState = testReviewQueueUiState(
                     pendingEntries = listOf(
                         sampleEntry(confidence = ConfidenceState.DUPLICATE_SUSPECT)
                     )
@@ -248,7 +247,7 @@ class ReviewQueueEditorTest {
     fun sharedEditorListsExistingFundingAccounts() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())),
                 fundingAccounts = listOf(
                     fundingAccount(42, "微信零钱", PaymentSource.WECHAT),
                     fundingAccount(84, "支付宝余额", PaymentSource.ALIPAY)
@@ -272,7 +271,7 @@ class ReviewQueueEditorTest {
     fun sharedEditorSelectsDefaultFundingAccount() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())),
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())),
                 fundingAccounts = listOf(
                     fundingAccount(42, "微信零钱", PaymentSource.WECHAT),
                     fundingAccount(84, "支付宝余额", PaymentSource.ALIPAY)
@@ -294,7 +293,7 @@ class ReviewQueueEditorTest {
         val restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry()))
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry()))
             )
         }
         composeRule.waitForIdle()
@@ -338,7 +337,7 @@ class ReviewQueueEditorTest {
     private fun sampleEntry(
         id: String = "pending-lunch",
         confidence: ConfidenceState = ConfidenceState.NEEDS_REVIEW
-    ): ReviewQueueEntry = ReviewQueueEntry(
+    ): ReviewEntryUiModel = ReviewEntryUiModel(
         id = id,
         title = "午餐",
         amountMinor = 3590,

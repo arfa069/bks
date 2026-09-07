@@ -157,6 +157,51 @@ internal data class BillSyncWaveDiagnostic(
     val maxCoordinatorDelayMillis: Long
 )
 
+internal class BillSyncWaveAccumulator(
+    val timestampEpochMillis: Long,
+    val sessionId: Long
+) {
+    var allCallbacks: Int = 0
+    var eligibleCallbacks: Int = 0
+    var filteredCallbacks: Int = 0
+    val uniqueWindows = mutableSetOf<CaptureTrigger>()
+    var captures: Int = 0
+    var leadingCaptures: Int = 0
+    var trailingCaptures: Int = 0
+    var deadlineCaptures: Int = 0
+    var deferredCaptures: Int = 0
+    var rootMissing: Int = 0
+    var ownPackage: Int = 0
+    var nodesVisited: Int = 0
+    var totalLookupMillis: Long = 0L
+    var maxQueueMillis: Long = 0L
+    var maxFrameworkDeliveryMillis: Long = 0L
+    var maxSuperDurationMillis: Long = 0L
+    var maxCoordinatorDelayMillis: Long = 0L
+
+    fun toDiagnostic(): BillSyncWaveDiagnostic = BillSyncWaveDiagnostic(
+        timestampEpochMillis = timestampEpochMillis,
+        sessionId = sessionId,
+        allCallbacks = allCallbacks,
+        eligibleCallbacks = eligibleCallbacks,
+        filteredCallbacks = filteredCallbacks,
+        uniqueWindows = uniqueWindows.size,
+        captures = captures,
+        leadingCaptures = leadingCaptures,
+        trailingCaptures = trailingCaptures,
+        deadlineCaptures = deadlineCaptures,
+        deferredCaptures = deferredCaptures,
+        rootMissing = rootMissing,
+        ownPackage = ownPackage,
+        nodesVisited = nodesVisited,
+        totalLookupMillis = totalLookupMillis,
+        maxQueueMillis = maxQueueMillis,
+        maxFrameworkDeliveryMillis = maxFrameworkDeliveryMillis,
+        maxSuperDurationMillis = maxSuperDurationMillis,
+        maxCoordinatorDelayMillis = maxCoordinatorDelayMillis
+    )
+}
+
 internal data class BillSyncDispatchProbeDiagnostic(
     val timestampEpochMillis: Long,
     val sessionId: Long?,

@@ -4,7 +4,7 @@ import com.bks.viewmodel.ledger.monthlySummary
 import com.bks.viewmodel.ledger.formatMoney
 import com.bks.viewmodel.ledger.latestMonthKey
 import com.bks.viewmodel.ledger.LedgerFlowType
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.clickable
@@ -66,7 +66,7 @@ private val LedgerContentMaxWidth = 880.dp
 @Composable
 @Suppress("LongMethod")
 internal fun LedgerList(
-    entries: List<LedgerUiEntry>,
+    entries: List<LedgerEntryUiModel>,
     entryListState: LazyListState,
     activeLedgerName: String,
     onEntryClick: (String) -> Unit,
@@ -194,13 +194,13 @@ internal fun LedgerList(
     }
 }
 
-internal fun List<LedgerUiEntry>.filterLedgerEntries(
+internal fun List<LedgerEntryUiModel>.filterLedgerEntries(
     monthKey: String,
     searchText: String,
     sourceFilter: String,
     categoryFilter: String,
     kindFilter: String
-): List<LedgerUiEntry> {
+): List<LedgerEntryUiModel> {
     val searchQuery = searchText.trim()
     val sourceQuery = sourceFilter.trim()
     val categoryQuery = categoryFilter.trim()
@@ -355,7 +355,7 @@ private fun LedgerMonthNavigation(
 }
 
 private fun LazyListScope.ledgerEntryItems(
-    entries: List<LedgerUiEntry>,
+    entries: List<LedgerEntryUiModel>,
     hasCurrentMonthEntries: Boolean,
     hasActiveFilters: Boolean,
     onEntryClick: (String) -> Unit
@@ -435,7 +435,7 @@ private fun LedgerFilterField(
 }
 
 @Composable
-private fun LedgerEntryRow(entry: LedgerUiEntry, onClick: () -> Unit) {
+private fun LedgerEntryRow(entry: LedgerEntryUiModel, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressedOverlayColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     val pressIndication = remember(pressedOverlayColor) {

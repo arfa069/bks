@@ -340,7 +340,7 @@ class LedgerManagementScreenTest {
                 DeviceConfigurationOverride.ForcedSize(forcedSize) then
                     DeviceConfigurationOverride.FontScale(fontScale)
             ) {
-                FundingAccountManagementContent(
+                FundingAccountManagementScreen(
                     fundingAccounts = accounts,
                     defaultFundingAccountSyncId = "funding-7",
                     snackbarHostState = remember { SnackbarHostState() },

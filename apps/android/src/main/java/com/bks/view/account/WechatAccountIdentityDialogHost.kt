@@ -1,25 +1,21 @@
 package com.bks.view.account
 
 import com.bks.model.domain.account.AccountSession
-import com.bks.model.domain.account.AccountDeletionState
 import com.bks.model.domain.account.AccountIdentifierType
 import com.bks.viewmodel.account.AccountIdentityPage
-import com.bks.viewmodel.account.AccountIdentityUiState
-import com.bks.viewmodel.account.AccountManagementViewModel
+import com.bks.viewmodel.account.AccountIdentityFormState
 import androidx.compose.runtime.Composable
 
 @Composable
 internal fun WechatAccountIdentityDialogHost(
     session: AccountSession.SignedIn,
-    deletionState: AccountDeletionState,
-    viewModel: AccountManagementViewModel,
-    state: AccountIdentityUiState,
-    onStateChange: (AccountIdentityUiState) -> Unit
+    actions: WechatAccountManagementActions,
+    state: AccountIdentityFormState,
+    onStateChange: (AccountIdentityFormState) -> Unit
 ) {
     val operation = WechatAccountIdentityDialogOperations(
         session = session,
-        deletionState = deletionState,
-        viewModel = viewModel,
+        managementActions = actions,
         actions = WechatAccountIdentityActions(onStateChange)
     )
     when (state.page) {
@@ -34,20 +30,20 @@ internal fun WechatAccountIdentityDialogHost(
 
 @Composable
 private fun WechatEditNicknameDialog(
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     operation: WechatAccountIdentityDialogOperations
 ) {
     EditNicknameDialog(
         initialValue = state.editNicknameInput,
         operationInProgress = state.operationInProgress,
-        onDismiss = { operation.actions.onStateChange(AccountIdentityUiState()) },
+        onDismiss = { operation.actions.onStateChange(AccountIdentityFormState()) },
         onConfirm = operation::launchNicknameUpdate
     )
 }
 
 @Composable
 private fun WechatAttachIdentifierDialog(
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     operation: WechatAccountIdentityDialogOperations
 ) {
     val session = operation.session
@@ -68,7 +64,7 @@ private fun WechatAttachIdentifierDialog(
 
 @Composable
 private fun WechatSetPhonePasswordDialog(
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     operation: WechatAccountIdentityDialogOperations
 ) {
     SimplePasswordDialog(
@@ -80,7 +76,7 @@ private fun WechatSetPhonePasswordDialog(
             operation.actions.onStateChange(state.copy(password = it, errorMessage = null))
         },
         onDismiss = {
-            if (!state.operationInProgress) operation.actions.onStateChange(AccountIdentityUiState())
+            if (!state.operationInProgress) operation.actions.onStateChange(AccountIdentityFormState())
         },
         onConfirm = { operation.launchPhonePasswordConfirmation(state) }
     )
@@ -88,7 +84,7 @@ private fun WechatSetPhonePasswordDialog(
 
 @Composable
 private fun WechatMergeDialog(
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     operation: WechatAccountIdentityDialogOperations
 ) {
     MergeConfirmationDialog(
@@ -98,7 +94,7 @@ private fun WechatMergeDialog(
             operation.actions.onStateChange(state.copy(confirmText = it, errorMessage = null))
         },
         onDismiss = {
-            if (!state.operationInProgress) operation.actions.onStateChange(AccountIdentityUiState())
+            if (!state.operationInProgress) operation.actions.onStateChange(AccountIdentityFormState())
         },
         onConfirm = { operation.launchMergeConfirmation(state) }
     )
@@ -106,7 +102,7 @@ private fun WechatMergeDialog(
 
 @Composable
 private fun WechatUnlinkDialog(
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     operation: WechatAccountIdentityDialogOperations
 ) {
     UnlinkWechatDialog(
@@ -121,5 +117,5 @@ private fun WechatUnlinkDialog(
 }
 
 internal data class WechatAccountIdentityActions(
-    val onStateChange: (AccountIdentityUiState) -> Unit
+    val onStateChange: (AccountIdentityFormState) -> Unit
 )

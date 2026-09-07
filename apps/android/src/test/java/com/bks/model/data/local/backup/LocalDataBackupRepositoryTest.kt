@@ -44,13 +44,13 @@ import com.bks.model.domain.ledger.IgnoreReason
 import com.bks.model.data.local.database.IgnoredEntryEntity
 import com.bks.model.data.local.database.LedgerBookEntity
 import com.bks.model.data.local.database.LedgerEntryEntity
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
+import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.data.local.database.LocalSettingsEntity
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.data.local.database.PendingEntryEntity
 import com.bks.model.domain.ledger.TransactionKind
-import com.bks.model.data.local.ledger.ReviewQueuePersistence
+import com.bks.model.data.local.review.RoomReviewQueueRepository
 import java.time.ZoneId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -105,16 +105,16 @@ class LocalDataBackupRepositoryTest {
                 .automaticBookkeepingEnabled
         )
 
-        LocalLedgerRepository(database).clearLocalData()
-        LocalPreferencesRepository(database).clearLocalData()
+        TestLedgerRepository(database).clearLocalData()
+        RoomPreferencesRepository(database).clearLocalData()
         backupRepository.importEncryptedBackup(backup, PASSPHRASE)
 
         assertEquals(expected, readSnapshot())
 
-        val ledgerRepository = LocalLedgerRepository(database)
-        val preferencesRepository = LocalPreferencesRepository(database)
-        val reviewState = ReviewQueuePersistence(
-            repository = ledgerRepository,
+        val ledgerRepository = TestLedgerRepository(database)
+        val preferencesRepository = RoomPreferencesRepository(database)
+        val reviewState = RoomReviewQueueRepository(
+            database = database,
             nowProvider = { NOW },
             zoneId = ZoneId.of("UTC")
         ).observeSnapshot().first()

@@ -2,7 +2,7 @@ package com.bks.view.ledger
 
 import com.bks.model.domain.ledger.Category
 import com.bks.viewmodel.ledger.LedgerFlowType
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -299,8 +299,8 @@ class LedgerEntryEditorScreenTest {
         assertEquals("food", permanentlyDeletedId.get())
     }
 
-    private fun sampleEntries(): List<LedgerUiEntry> = listOf(
-        LedgerUiEntry(
+    private fun sampleEntries(): List<LedgerEntryUiModel> = listOf(
+        LedgerEntryUiModel(
             id = "food",
             title = "午餐",
             amountMinor = 3590,
@@ -312,7 +312,7 @@ class LedgerEntryEditorScreenTest {
             flowType = LedgerFlowType.EXPENSE,
             note = "客户会议"
         ),
-        LedgerUiEntry(
+        LedgerEntryUiModel(
             id = "ride",
             title = "地铁出行",
             amountMinor = 600,
@@ -323,7 +323,7 @@ class LedgerEntryEditorScreenTest {
             kindLabel = "支出",
             flowType = LedgerFlowType.EXPENSE
         ),
-        LedgerUiEntry(
+        LedgerEntryUiModel(
             id = "refund",
             title = "退款到账",
             amountMinor = 1290,

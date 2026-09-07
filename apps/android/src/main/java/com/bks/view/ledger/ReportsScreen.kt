@@ -4,7 +4,7 @@ import com.bks.viewmodel.ledger.buildLedgerReportUiModel
 import com.bks.viewmodel.ledger.formatMoney
 import com.bks.viewmodel.ledger.formatSignedMoney
 import com.bks.viewmodel.ledger.LedgerReportUiModel
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import com.bks.viewmodel.ledger.MonthlySummary
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -53,7 +53,7 @@ private val ReportsContentMaxWidth = 880.dp
 
 @Composable
 fun ReportsScreen(
-    entries: List<LedgerUiEntry>,
+    entries: List<LedgerEntryUiModel>,
     reportUiModel: LedgerReportUiModel? = null,
     categoryRankingListState: LazyListState = rememberLazyListState(),
     onNavigateHome: () -> Unit = {},

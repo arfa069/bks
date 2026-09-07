@@ -1,7 +1,9 @@
 package com.bks.viewmodel.ledger
 
+import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.DefaultCategories
 import com.bks.model.domain.ledger.FlowDirection
+import com.bks.model.domain.ledger.FundingAccount
 import com.bks.model.domain.ledger.LedgerEntry
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
@@ -9,9 +11,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-fun LedgerEntry.toLedgerUiEntry(zoneId: ZoneId = ZoneId.systemDefault()): LedgerUiEntry {
+fun LedgerEntry.toLedgerEntryUiModel(zoneId: ZoneId = ZoneId.systemDefault()): LedgerEntryUiModel {
     val transactionTimeText = formatLedgerDateTime(transactionTimeEpochMillis, zoneId)
-    return LedgerUiEntry(
+    return LedgerEntryUiModel(
         id = id,
         title = merchantTitle,
         amountMinor = amountMinor,
@@ -42,6 +44,19 @@ fun LedgerEntry.toLedgerUiEntry(zoneId: ZoneId = ZoneId.systemDefault()): Ledger
         deletedAtEpochMillis = deletedAtEpochMillis
     )
 }
+
+internal fun Category.toLedgerCategoryUiModel() = LedgerCategoryUiModel(
+    id = id,
+    name = name,
+    kind = kind
+)
+
+internal fun FundingAccount.toFundingAccountUiModel() = FundingAccountUiModel(
+    id = id,
+    syncId = syncId,
+    paymentSource = paymentSource,
+    label = label
+)
 
 private fun PaymentSource.toLabel(): String = when (this) {
     PaymentSource.WECHAT -> "微信"

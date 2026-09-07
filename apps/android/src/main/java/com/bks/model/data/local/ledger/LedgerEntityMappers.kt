@@ -42,7 +42,11 @@ internal fun FundingAccountEntity.toDomain() = FundingAccount(
     createdAtEpochMillis = createdAtEpochMillis
 )
 
-internal fun LedgerBookEntity.toDomain() = LedgerBook(id, name, createdAtEpochMillis)
+internal fun LedgerBookEntity.toDomain() = LedgerBook(
+    id = id,
+    name = name,
+    createdAtEpochMillis = createdAtEpochMillis
+)
 
 internal fun LedgerBookEntryCounts.toDomain() = LedgerBookSummary(
     id = id,
@@ -75,15 +79,88 @@ internal fun LedgerEntryEntity.toDomain() = LedgerEntry(
 )
 
 internal fun PendingEntryEntity.toDomain() = PendingEntry(
-    id, source, captureReason, confidence, transactionKind, amountMinor, currency,
-    merchantTitle, transactionTimeEpochMillis, capturedAtEpochMillis, suggestedCategoryId,
-    fundingAccountId, fundingAccountLabel, note, evidenceSummary, parsedFieldsText,
-    suggestedCategoryLabel
+    id = id,
+    source = source,
+    captureReason = captureReason,
+    confidence = confidence,
+    transactionKind = transactionKind,
+    amountMinor = amountMinor,
+    currency = currency,
+    merchantTitle = merchantTitle,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    capturedAtEpochMillis = capturedAtEpochMillis,
+    suggestedCategoryId = suggestedCategoryId,
+    fundingAccountId = fundingAccountId,
+    fundingAccountLabel = fundingAccountLabel,
+    note = note,
+    evidenceSummary = evidenceSummary,
+    parsedFieldsText = parsedFieldsText,
+    suggestedCategoryLabel = suggestedCategoryLabel
 )
 
 internal fun IgnoredEntryEntity.toDomain() = IgnoredEntry(
-    id, originalPendingEntryId, source, captureReason, confidence, transactionKind,
-    amountMinor, currency, merchantTitle, transactionTimeEpochMillis, capturedAtEpochMillis,
-    suggestedCategoryId, fundingAccountId, fundingAccountLabel, note, evidenceSummary,
-    parsedFieldsText, ignoredAtEpochMillis, expiresAtEpochMillis, reason, suggestedCategoryLabel
+    id = id,
+    originalPendingEntryId = originalPendingEntryId,
+    source = source,
+    captureReason = captureReason,
+    confidence = confidence,
+    transactionKind = transactionKind,
+    amountMinor = amountMinor,
+    currency = currency,
+    merchantTitle = merchantTitle,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    capturedAtEpochMillis = capturedAtEpochMillis,
+    suggestedCategoryId = suggestedCategoryId,
+    fundingAccountId = fundingAccountId,
+    fundingAccountLabel = fundingAccountLabel,
+    note = note,
+    evidenceSummary = evidenceSummary,
+    parsedFieldsText = parsedFieldsText,
+    ignoredAtEpochMillis = ignoredAtEpochMillis,
+    expiresAtEpochMillis = expiresAtEpochMillis,
+    reason = reason,
+    suggestedCategoryLabel = suggestedCategoryLabel
+)
+
+internal fun PendingEntry.toEntity() = PendingEntryEntity(
+    id = id,
+    source = source,
+    captureReason = captureReason,
+    confidence = confidence,
+    transactionKind = transactionKind,
+    amountMinor = amountMinor,
+    currency = currency,
+    merchantTitle = merchantTitle,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    capturedAtEpochMillis = capturedAtEpochMillis,
+    suggestedCategoryId = suggestedCategoryId,
+    fundingAccountId = fundingAccountId,
+    fundingAccountLabel = fundingAccountLabel,
+    note = note,
+    evidenceSummary = evidenceSummary,
+    parsedFieldsText = parsedFieldsText,
+    suggestedCategoryLabel = suggestedCategoryLabel
+)
+
+internal fun LedgerEntry.toEntity() = LedgerEntryEntity(
+    id = id,
+    ledgerBookId = ledgerBookId,
+    paymentSource = paymentSource,
+    originalCaptureSource = originalCaptureSource,
+    entryOrigin = entryOrigin,
+    originPendingEntryId = originPendingEntryId,
+    flowDirection = flowDirection,
+    transactionKind = transactionKind,
+    amountMinor = amountMinor,
+    currency = currency,
+    merchantTitle = merchantTitle,
+    transactionTimeEpochMillis = transactionTimeEpochMillis,
+    categoryId = categoryId,
+    fundingAccountId = fundingAccountId,
+    note = note,
+    evidenceSummary = evidenceSummary,
+    parsedFieldsText = parsedFieldsText,
+    confirmedAtEpochMillis = confirmedAtEpochMillis,
+    updatedAtEpochMillis = updatedAtEpochMillis,
+    deletedAtEpochMillis = deletedAtEpochMillis
 )

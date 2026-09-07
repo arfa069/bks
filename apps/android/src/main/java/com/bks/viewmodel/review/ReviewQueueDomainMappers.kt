@@ -12,14 +12,14 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-internal fun ReviewQueueSnapshot.toUiState(zoneId: ZoneId): ReviewQueueState = ReviewQueueState(
+internal fun ReviewQueueSnapshot.toUiState(zoneId: ZoneId): ReviewQueueUiState = ReviewQueueUiState(
     pendingEntries = pendingEntries.map { it.toUiModel(zoneId) },
     ignoredEntries = ignoredEntries.map { it.toUiModel(zoneId) },
     nowEpochMillis = nowEpochMillis,
     todayStartEpochMillis = todayStartEpochMillis
 )
 
-internal fun PendingEntry.toUiModel(zoneId: ZoneId): ReviewQueueEntry = ReviewQueueEntry(
+internal fun PendingEntry.toUiModel(zoneId: ZoneId): ReviewEntryUiModel = ReviewEntryUiModel(
     id = id,
     title = merchantTitle,
     amountMinor = amountMinor,
@@ -41,7 +41,7 @@ internal fun PendingEntry.toUiModel(zoneId: ZoneId): ReviewQueueEntry = ReviewQu
     parsedFields = parsedFieldsText?.takeIf(String::isNotBlank)?.split("\n").orEmpty()
 )
 
-internal fun IgnoredEntry.toUiModel(zoneId: ZoneId) = ReviewQueueIgnoredEntry(
+internal fun IgnoredEntry.toUiModel(zoneId: ZoneId) = IgnoredReviewEntryUiModel(
     id = id,
     originalPendingId = originalPendingEntryId,
     entry = PendingEntry(

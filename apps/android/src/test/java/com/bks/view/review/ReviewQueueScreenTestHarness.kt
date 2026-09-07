@@ -6,9 +6,9 @@ import com.bks.model.domain.ledger.TransactionKind
 import com.bks.model.domain.review.ReviewEntryEdit
 import com.bks.model.domain.review.ReviewPersistenceCommand
 import com.bks.viewmodel.review.formatReviewDateTime
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueIgnoredEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewEntryUiModel
+import com.bks.viewmodel.review.IgnoredReviewEntryUiModel
+import com.bks.viewmodel.review.ReviewQueueUiState
 import com.bks.viewmodel.review.ReviewQueueUndoEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,7 +23,7 @@ import java.time.ZoneId
 
 @Composable
 internal fun TestReviewQueueScreen(
-    initialState: ReviewQueueState = ReviewQueueState(),
+    initialState: ReviewQueueUiState = testReviewQueueUiState(),
     categories: List<LedgerCategoryUiModel> = emptyList()
 ) {
     var state by remember { mutableStateOf(initialState) }
@@ -60,6 +60,18 @@ internal fun TestReviewQueueScreen(
     )
 }
 
+internal fun testReviewQueueUiState(
+    pendingEntries: List<ReviewEntryUiModel> = emptyList(),
+    todayStartEpochMillis: Long = TEST_TODAY_START_EPOCH_MILLIS
+): ReviewQueueUiState = ReviewQueueUiState(
+    pendingEntries = pendingEntries,
+    nowEpochMillis = TEST_NOW_EPOCH_MILLIS,
+    todayStartEpochMillis = todayStartEpochMillis
+)
+
+private const val TEST_NOW_EPOCH_MILLIS = 1_783_468_800_000L
+private const val TEST_TODAY_START_EPOCH_MILLIS = 1_783_425_600_000L
+
 private fun testDefaultCategories(): List<LedgerCategoryUiModel> =
     DefaultCategories.systemDefaults(0).map { category ->
         LedgerCategoryUiModel(
@@ -70,29 +82,29 @@ private fun testDefaultCategories(): List<LedgerCategoryUiModel> =
     }
 
 private data class TestStateChange(
-    val state: ReviewQueueState,
+    val state: ReviewQueueUiState,
     val undo: TestUndo? = null
 )
 
 private sealed interface TestUndo {
-    val entry: ReviewQueueEntry
+    val entry: ReviewEntryUiModel
     val message: String
-    fun restore(state: ReviewQueueState): ReviewQueueState
+    fun restore(state: ReviewQueueUiState): ReviewQueueUiState
 
-    data class Confirmed(override val entry: ReviewQueueEntry) : TestUndo {
+    data class Confirmed(override val entry: ReviewEntryUiModel) : TestUndo {
         override val message: String = "已确认 ${entry.title}"
-        override fun restore(state: ReviewQueueState): ReviewQueueState = state.copy(
+        override fun restore(state: ReviewQueueUiState): ReviewQueueUiState = state.copy(
             pendingEntries = listOf(entry) + state.pendingEntries,
             undoEvent = null
         )
     }
 
     data class Ignored(
-        override val entry: ReviewQueueEntry,
-        val ignoredEntry: ReviewQueueIgnoredEntry
+        override val entry: ReviewEntryUiModel,
+        val ignoredEntry: IgnoredReviewEntryUiModel
     ) : TestUndo {
         override val message: String = "已忽略 ${entry.title}"
-        override fun restore(state: ReviewQueueState): ReviewQueueState = state.copy(
+        override fun restore(state: ReviewQueueUiState): ReviewQueueUiState = state.copy(
             pendingEntries = listOf(entry) + state.pendingEntries,
             ignoredEntries = state.ignoredEntries.filterNot { it.id == ignoredEntry.id },
             undoEvent = null
@@ -100,7 +112,7 @@ private sealed interface TestUndo {
     }
 }
 
-private fun ReviewQueueState.applyForScreenTest(
+private fun ReviewQueueUiState.applyForScreenTest(
     command: ReviewPersistenceCommand
 ): TestStateChange? = when (command) {
     is ReviewPersistenceCommand.Confirm -> pendingEntries
@@ -116,7 +128,7 @@ private fun ReviewQueueState.applyForScreenTest(
     is ReviewPersistenceCommand.Ignore -> pendingEntries
         .firstOrNull { it.id == command.stableId }
         ?.let { current ->
-            val ignored = ReviewQueueIgnoredEntry.fromPending(
+            val ignored = IgnoredReviewEntryUiModel.fromPending(
                 entry = current,
                 ignoredAtEpochMillis = nowEpochMillis
             )
@@ -157,7 +169,7 @@ private fun ReviewQueueState.applyForScreenTest(
     is ReviewPersistenceCommand.UndoIgnore -> null
 }
 
-private fun ReviewQueueEntry.applyForScreenTest(edit: ReviewEntryEdit): ReviewQueueEntry = copy(
+private fun ReviewEntryUiModel.applyForScreenTest(edit: ReviewEntryEdit): ReviewEntryUiModel = copy(
     title = edit.title.trim().ifBlank { title },
     amountMinor = edit.amountMinor,
     transactionTimeText = formatReviewDateTime(edit.transactionTimeEpochMillis, ZoneId.systemDefault()),

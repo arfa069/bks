@@ -2,19 +2,19 @@ package com.bks.view.settings
 
 import com.bks.model.data.local.backup.validated
 import com.bks.model.domain.ledger.LedgerBook
-import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
+import com.bks.viewmodel.settings.LedgerCsvEntryUiModel
 import com.bks.viewmodel.settings.DataAndBackupActions
 import com.bks.viewmodel.settings.DataAndBackupNotice
 import com.bks.viewmodel.settings.DataAndBackupOperation
 import com.bks.viewmodel.settings.DataAndBackupUiState
 import com.bks.viewmodel.settings.DataAndBackupValidationResult
-import com.bks.viewmodel.settings.LedgerSyncSectionActions
-import com.bks.viewmodel.settings.LedgerSyncSettingsActionResult
-import com.bks.viewmodel.settings.LedgerSyncSettingsConflictChoice
-import com.bks.viewmodel.settings.LedgerSyncSettingsConflictUiModel
-import com.bks.viewmodel.settings.LedgerSyncSettingsInitialMode
-import com.bks.viewmodel.settings.LedgerSyncSettingsPreviewUiModel
-import com.bks.viewmodel.settings.LedgerSyncSettingsUiState
+import com.bks.viewmodel.sync.LedgerSyncSectionActions
+import com.bks.viewmodel.sync.LedgerSyncActionResult
+import com.bks.model.domain.sync.LedgerSyncConflictChoice
+import com.bks.viewmodel.sync.LedgerSyncConflictUiModel
+import com.bks.viewmodel.sync.LedgerSyncEnableMode
+import com.bks.viewmodel.sync.LedgerSyncPreviewUiModel
+import com.bks.viewmodel.sync.LedgerSyncUiState
 import android.net.Uri
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -73,8 +73,8 @@ class DataAndBackupScreenTest {
 
     @Test
     fun firstEnableExplainsReadableStorageTransportAndDeletionBeforeMerge() {
-        var enabledMode: LedgerSyncSettingsInitialMode? = null
-        var syncState by mutableStateOf(LedgerSyncSettingsUiState(signedIn = true))
+        var enabledMode: LedgerSyncEnableMode? = null
+        var syncState by mutableStateOf(LedgerSyncUiState(signedIn = true))
         composeRule.setContent {
             TestDataAndBackupScreen(
                 ledgerEntries = emptyList(),
@@ -86,8 +86,8 @@ class DataAndBackupScreenTest {
                 ledgerSyncState = syncState,
                 ledgerSyncActions = LedgerSyncSectionActions(
                     onPreview = {
-                        val result = LedgerSyncSettingsActionResult.Success(
-                            LedgerSyncSettingsPreviewUiModel(
+                        val result = LedgerSyncActionResult.Success(
+                            LedgerSyncPreviewUiModel(
                                 localRecordCount = 2,
                                 cloudRecordCount = 3,
                                 insecureHttpTestMode = false
@@ -99,7 +99,7 @@ class DataAndBackupScreenTest {
                     onDismissPreview = { syncState = syncState.copy(preview = null) },
                     onEnable = { mode ->
                         enabledMode = mode
-                        LedgerSyncSettingsActionResult.Success(Unit)
+                        LedgerSyncActionResult.Success(Unit)
                     }
                 )
             )
@@ -115,12 +115,12 @@ class DataAndBackupScreenTest {
         composeRule.onNodeWithText("确认并合并").performClick()
         composeRule.waitUntil(5_000) { enabledMode != null }
 
-        assertEquals(LedgerSyncSettingsInitialMode.MERGE, enabledMode)
+        assertEquals(LedgerSyncEnableMode.MERGE, enabledMode)
     }
 
     @Test
     fun enabledTestModeShowsHttpRiskAndConflictChoices() {
-        var resolvedChoice: LedgerSyncSettingsConflictChoice? = null
+        var resolvedChoice: LedgerSyncConflictChoice? = null
         val canonical = LedgerSyncPayloadContract.LedgerBook("book-a", "云端账本", 1)
         val candidate = LedgerSyncPayloadContract.LedgerBook("book-a", "本机账本", 1)
         composeRule.setContent {
@@ -131,12 +131,12 @@ class DataAndBackupScreenTest {
                 onImportEncryptedBackup = { _, _ -> },
                 onDeleteLocalData = {},
                 onBack = {},
-                ledgerSyncState = LedgerSyncSettingsUiState(
+                ledgerSyncState = LedgerSyncUiState(
                     signedIn = true,
                     enabled = true,
                     insecureHttpTestMode = true,
                     conflicts = listOf(
-                        LedgerSyncSettingsConflictUiModel(
+                        LedgerSyncConflictUiModel(
                             conflictId = "conflict-a",
                             canonicalVersion = 2,
                             title = "账本冲突",
@@ -148,7 +148,7 @@ class DataAndBackupScreenTest {
                 ledgerSyncActions = LedgerSyncSectionActions(
                     onResolveConflict = { _, _, choice ->
                         resolvedChoice = choice
-                        LedgerSyncSettingsActionResult.Success(Unit)
+                        LedgerSyncActionResult.Success(Unit)
                     }
                 )
             )
@@ -160,7 +160,7 @@ class DataAndBackupScreenTest {
         composeRule.onNodeWithText("保留本机").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { resolvedChoice != null }
 
-        assertEquals(LedgerSyncSettingsConflictChoice.CANDIDATE, resolvedChoice)
+        assertEquals(LedgerSyncConflictChoice.CANDIDATE, resolvedChoice)
     }
 
     @Test
@@ -179,7 +179,7 @@ class DataAndBackupScreenTest {
                     onImportEncryptedBackup = { _, _ -> },
                     onDeleteLocalData = {},
                     onBack = {},
-                    ledgerSyncState = LedgerSyncSettingsUiState(signedIn = true, enabled = true)
+                    ledgerSyncState = LedgerSyncUiState(signedIn = true, enabled = true)
                 )
             }
         }
@@ -480,7 +480,7 @@ class DataAndBackupScreenTest {
 @Composable
 @Suppress("LongParameterList")
 private fun TestDataAndBackupScreen(
-    ledgerEntries: List<BackupLedgerEntryUiModel>,
+    ledgerEntries: List<LedgerCsvEntryUiModel>,
     currentLedgerName: String = "默认账本",
     onExportEncryptedBackup: suspend (String) -> String,
     onValidateEncryptedBackup: suspend (String, String) -> Unit,
@@ -489,7 +489,7 @@ private fun TestDataAndBackupScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = SnackbarHostState(),
-    ledgerSyncState: LedgerSyncSettingsUiState = LedgerSyncSettingsUiState(),
+    ledgerSyncState: LedgerSyncUiState = LedgerSyncUiState(),
     ledgerSyncActions: LedgerSyncSectionActions = LedgerSyncSectionActions()
 ) {
     var state by remember { mutableStateOf(DataAndBackupUiState()) }

@@ -4,8 +4,7 @@ import com.bks.model.domain.ledger.Category
 import com.bks.model.domain.ledger.DEFAULT_CATEGORY_ID
 import com.bks.view.common.components.Button
 import com.bks.viewmodel.review.ReviewAiSuggestionResult
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewEntryUiModel
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -18,7 +17,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import com.bks.model.domain.ledger.ConfidenceState
 import com.bks.model.domain.ledger.DefaultCategories
-import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
 import com.bks.model.domain.ledger.TransactionKind
 import com.bks.viewmodel.ledger.LedgerCategoryUiModel
 import java.util.concurrent.atomic.AtomicInteger
@@ -42,7 +41,7 @@ class ReviewQueueAiSuggestionTest {
     fun signedInConsentedUserCanRequestAiCategorySuggestion() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("transport", "交通", TransactionKind.EXPENSE)
@@ -70,7 +69,7 @@ class ReviewQueueAiSuggestionTest {
         val action = CapturingAiSuggestionAction()
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(
+                initialState = testReviewQueueUiState(
                     pendingEntries = listOf(sampleEntry().copy(category = ""))
                 ),
                 categories = emptyList(),
@@ -91,7 +90,7 @@ class ReviewQueueAiSuggestionTest {
         val expected = DefaultCategories.systemDefaults(0)
             .filter { category ->
                 category.kind == TransactionKind.EXPENSE &&
-                    category.id != LocalLedgerRepository.DEFAULT_CATEGORY_ID
+                    category.id != com.bks.model.domain.ledger.DEFAULT_CATEGORY_ID
             }
             .map { category -> DefaultCategories.nameForId(category.id) ?: category.name }
             .distinct()
@@ -105,14 +104,14 @@ class ReviewQueueAiSuggestionTest {
         val action = CapturingAiSuggestionAction()
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(
+                initialState = testReviewQueueUiState(
                     pendingEntries = listOf(sampleEntry().copy(category = ""))
                 ),
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("salary", "工资", TransactionKind.INCOME),
                     LedgerCategoryUiModel(
-                        id = LocalLedgerRepository.DEFAULT_CATEGORY_ID,
+                        id = com.bks.model.domain.ledger.DEFAULT_CATEGORY_ID,
                         name = "未分类",
                         kind = null
                     )
@@ -140,7 +139,7 @@ class ReviewQueueAiSuggestionTest {
         val action = DeferredAiSuggestionAction(deferred)
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(
                     category("food", "餐饮", TransactionKind.EXPENSE),
                     category("transport", "交通", TransactionKind.EXPENSE)
@@ -173,7 +172,7 @@ class ReviewQueueAiSuggestionTest {
     fun aiFailureShowsStableMessage() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
+                initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry().copy(category = ""))),
                 categories = listOf(category("food", "餐饮", TransactionKind.EXPENSE)),
                 onAiSuggest = { _, _ ->
                     ReviewAiSuggestionResult(message = "AI 请求过于频繁，请稍后重试")
@@ -209,7 +208,7 @@ class ReviewQueueAiSuggestionTest {
     private fun sampleEntry(
         id: String = "pending-lunch",
         confidence: ConfidenceState = ConfidenceState.NEEDS_REVIEW
-    ): ReviewQueueEntry = ReviewQueueEntry(
+    ): ReviewEntryUiModel = ReviewEntryUiModel(
         id = id,
         title = "午餐",
         amountMinor = 3590,
@@ -237,7 +236,7 @@ class ReviewQueueAiSuggestionTest {
         val categoryCandidates = AtomicReference<List<String>?>()
 
         suspend fun invoke(
-            entry: ReviewQueueEntry,
+            entry: ReviewEntryUiModel,
             categoryCandidates: List<String>
         ): ReviewAiSuggestionResult {
             check(entry.id.isNotBlank())
@@ -255,7 +254,7 @@ class ReviewQueueAiSuggestionTest {
         val calls = AtomicInteger(0)
 
         suspend fun invoke(
-            entry: ReviewQueueEntry,
+            entry: ReviewEntryUiModel,
             categoryCandidates: List<String>
         ): ReviewAiSuggestionResult {
             check(entry.id.isNotBlank())

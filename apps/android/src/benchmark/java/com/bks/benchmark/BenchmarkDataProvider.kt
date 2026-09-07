@@ -13,8 +13,7 @@ import com.bks.model.data.local.account.SecureAccountSessionStore
 import com.bks.model.data.local.backup.LocalDataBackupRepository
 import com.bks.model.data.local.database.BksDatabaseProvider
 import com.bks.model.data.local.database.LedgerEntryEntity
-import com.bks.model.data.local.ledger.toDomain
-import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.data.local.ledger.RoomLedgerRepository
 import com.bks.model.data.remote.account.AccountHttpObserver
 import com.bks.model.data.remote.account.AccountHttpStage
 import com.bks.model.data.remote.account.HttpUrlConnectionAccountTransport
@@ -23,8 +22,8 @@ import com.bks.model.domain.ledger.EntryOrigin
 import com.bks.model.domain.ledger.FlowDirection
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
-import com.bks.viewmodel.ledger.toLedgerUiEntry
-import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
+import com.bks.viewmodel.ledger.toLedgerEntryUiModel
+import com.bks.viewmodel.settings.LedgerCsvEntryUiModel
 import com.bks.viewmodel.settings.exportLedgerCsv
 import java.time.Instant
 import java.time.ZoneId
@@ -36,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
@@ -62,10 +62,10 @@ class BenchmarkDataProvider : ContentProvider() {
             val appContext = requireNotNull(context).applicationContext
             check(LocalModeSessionStore(appContext).confirmLocalMode())
             val database = BksDatabaseProvider.get(appContext)
-            val repository = LocalLedgerRepository(database)
+            val repository = RoomLedgerRepository(database)
             repository.seedSystemCategories()
             val ledgerBook = repository.ensureDefaultLedgerBook()
-            if (repository.listLedgerEntries().none { it.merchantTitle.startsWith(ENTRY_PREFIX) }) {
+            if (repository.snapshot.first().ledgerEntries.none { it.merchantTitle.startsWith(ENTRY_PREFIX) }) {
                 val now = System.currentTimeMillis()
                 database.withTransaction {
                     database.ledgerEntryDao().upsertAll(
@@ -77,7 +77,7 @@ class BenchmarkDataProvider : ContentProvider() {
                     )
                 }
             }
-            repository.listLedgerEntries().size
+            repository.snapshot.first().ledgerEntries.size
         }
         return Bundle().apply {
             putBoolean(RESULT_SEEDED, true)
@@ -105,8 +105,8 @@ class BenchmarkDataProvider : ContentProvider() {
         val result = runBlocking(Dispatchers.IO) {
             val appContext = requireNotNull(context).applicationContext
             val database = BksDatabaseProvider.get(appContext)
-            val repository = LocalLedgerRepository(database)
-            val entries = repository.listLedgerEntries()
+            val repository = RoomLedgerRepository(database)
+            val entries = repository.snapshot.first().ledgerEntries
 
             val csvStart = System.nanoTime()
             val csvTraceName = "Batch9.exportCsv.$requestedEntryCount"
@@ -115,9 +115,9 @@ class BenchmarkDataProvider : ContentProvider() {
             val csv = try {
                 withContext(Dispatchers.Default) {
                     exportLedgerCsv(
-                        entries.map { entity ->
-                            val entry = entity.toDomain().toLedgerUiEntry()
-                            BackupLedgerEntryUiModel(
+                        entries.map { domainEntry ->
+                            val entry = domainEntry.toLedgerEntryUiModel()
+                            LedgerCsvEntryUiModel(
                                 id = entry.id,
                                 transactionTimeText = entry.transactionTimeText,
                                 title = entry.title,

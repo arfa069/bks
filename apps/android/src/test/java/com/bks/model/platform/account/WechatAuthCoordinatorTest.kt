@@ -1,17 +1,17 @@
 package com.bks.model.platform.account
 
-import com.bks.model.platform.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthCallback
 import com.bks.model.platform.account.WechatAuthCallbackDelivery
 import com.bks.model.platform.account.WechatAuthCallbackIntent
 import com.bks.model.platform.account.WechatAuthCallbackProcessor
-import com.bks.model.platform.account.WechatAuthCoordinator
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthLaunchResult
-import com.bks.model.platform.account.WechatAuthPurpose
+import com.bks.model.application.account.WechatAuthCoordinator
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthLaunchResult
+import com.bks.model.domain.account.WechatAuthPurpose
 import com.bks.model.platform.account.WechatAuthStateStore
 import com.bks.model.platform.account.WechatSdkAuthError
 import com.bks.model.platform.account.WechatSdkAuthResponse
-import com.bks.model.platform.account.wechatSessionFingerprint
+import com.bks.model.domain.account.wechatSessionFingerprint
 import android.content.ComponentName
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
@@ -40,32 +40,6 @@ class WechatAuthCoordinatorTest {
             .edit()
             .clear()
             .commit()
-    }
-
-    @Test
-    fun coordinatorDoesNotInvokeGatewayUntilAgreementIsAccepted() {
-        var starts = 0
-        val gateway = object : WechatAuthGateway {
-            override fun startAuthorization(
-                purpose: WechatAuthPurpose,
-                sessionFingerprint: String?
-            ): WechatAuthLaunchResult {
-                starts += 1
-                return WechatAuthLaunchResult.Started
-            }
-        }
-        val coordinator = WechatAuthCoordinator(gateway)
-
-        assertEquals(
-            WechatAuthLaunchResult.AgreementRequired,
-            coordinator.startAuthorization(false, WechatAuthPurpose.SignInOrRegister)
-        )
-        assertEquals(0, starts)
-        assertEquals(
-            WechatAuthLaunchResult.Started,
-            coordinator.startAuthorization(true, WechatAuthPurpose.SignInOrRegister)
-        )
-        assertEquals(1, starts)
     }
 
     @Test

@@ -5,10 +5,10 @@ import com.bks.model.domain.account.AccountFailureKind
 import com.bks.model.domain.account.AccountRepository
 import com.bks.model.domain.account.AccountRepositoryResult
 import com.bks.model.domain.account.AccountWechatAuthResult
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthLaunchResult
-import com.bks.model.platform.account.WechatAuthPurpose
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthLaunchResult
+import com.bks.model.domain.account.WechatAuthPurpose
 import com.bks.model.domain.account.TestAccountRepository
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -67,7 +67,7 @@ class AccountEntryViewModelTest {
     @Test
     fun registerAndRecoverySuccessUseTheSameSessionCommitBoundary() = runTest {
         withViewModel { viewModel, repository, commits, _ ->
-            val register = AccountUiState(
+            val register = AccountFormState(
                 flow = AccountFlow.Register,
                 phone = "13800138000",
                 verificationCode = "123456",
@@ -109,7 +109,7 @@ class AccountEntryViewModelTest {
     @Test
     fun smsSuccessOwnsCountdownAndChangingIdentifierCancelsIt() = runTest {
         withViewModel { viewModel, repository, _, _ ->
-            val form = AccountUiState(flow = AccountFlow.Register, phone = "13800138000")
+            val form = AccountFormState(flow = AccountFlow.Register, phone = "13800138000")
 
             viewModel.submit(AccountAction.RequestSmsCode, form)
             runCurrent()
@@ -154,7 +154,7 @@ class AccountEntryViewModelTest {
         ) { viewModel, repository, _, _ ->
             viewModel.submit(
                 AccountAction.RequestSmsCode,
-                AccountUiState(flow = AccountFlow.Register, phone = "13800138000")
+                AccountFormState(flow = AccountFlow.Register, phone = "13800138000")
             )
             runCurrent()
 
@@ -301,7 +301,7 @@ class AccountEntryViewModelTest {
         }
     }
 
-    private fun validLogin(password: String = "Aa123456!") = AccountUiState(
+    private fun validLogin(password: String = "Aa123456!") = AccountFormState(
         flow = AccountFlow.Login,
         phone = "13800138000",
         password = password,

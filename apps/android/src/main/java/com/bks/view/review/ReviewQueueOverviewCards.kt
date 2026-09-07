@@ -27,10 +27,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bks.R
 import com.bks.view.common.visual.CachedResourceImage
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewQueueUiState
 
 @Composable
-internal fun ReviewSummaryCard(state: ReviewQueueState) {
+internal fun ReviewSummaryCard(state: ReviewQueueUiState) {
     Card(
         modifier = Modifier
             .fillMaxWidth()

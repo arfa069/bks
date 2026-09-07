@@ -2,7 +2,7 @@ package com.bks.view.ledger
 
 import com.bks.model.domain.ledger.Category
 import com.bks.viewmodel.ledger.LedgerFlowType
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -140,7 +140,7 @@ class LedgerListFilterTest {
         amountMinor: Long,
         category: String,
         sourceLabel: String
-    ): LedgerUiEntry = LedgerUiEntry(
+    ): LedgerEntryUiModel = LedgerEntryUiModel(
         id = id,
         title = title,
         amountMinor = amountMinor,

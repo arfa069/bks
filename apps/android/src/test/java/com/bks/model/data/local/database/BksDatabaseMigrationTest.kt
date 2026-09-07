@@ -1,6 +1,6 @@
 package com.bks.model.data.local.database
 
-import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
 import com.bks.model.data.local.ledger.toDomain
 import com.bks.model.data.local.settings.DefaultCategorizationRules
 import com.bks.model.domain.ledger.CaptureReason
@@ -19,7 +19,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.bks.viewmodel.ledger.categoryExpenseTotals
 import com.bks.viewmodel.ledger.monthlySummary
-import com.bks.viewmodel.ledger.toLedgerUiEntry
+import com.bks.viewmodel.ledger.toLedgerEntryUiModel
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -284,7 +284,7 @@ class BksDatabaseMigrationTest {
             ) VALUES (
                 'ignored-legacy', 'pending-legacy', 'WECHAT', 'EXPENSE', 1590, 'CNY',
                 '便利店', ${NOW - 60_000}, NULL, NULL, $NOW,
-                ${NOW + LocalLedgerRepository.IGNORED_RETENTION_MILLIS}, 'USER_IGNORED'
+                ${NOW + com.bks.model.domain.review.IGNORED_ENTRY_RETENTION_MILLIS}, 'USER_IGNORED'
             )
             """.trimIndent()
         )
@@ -484,7 +484,7 @@ class BksDatabaseMigrationTest {
         val ledgerBooks = migrated.ledgerBookDao().getAll()
         val fundingAccounts = migrated.fundingAccountDao().getAllFundingAccounts().sortedBy { it.id }
         val byId = ledgerEntries.associateBy { it.id }
-        val reportEntries = ledgerEntries.map { it.toDomain().toLedgerUiEntry(ZoneOffset.UTC) }
+        val reportEntries = ledgerEntries.map { it.toDomain().toLedgerEntryUiModel(ZoneOffset.UTC) }
         val summary = monthlySummary(reportEntries, "2024-12")
 
         assertEquals(setOf("legacy-income", "legacy-refund", "legacy-expense", "legacy-transfer"), byId.keys)

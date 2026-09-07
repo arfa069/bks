@@ -54,7 +54,7 @@ class ReviewCategorizationTest {
         assertEquals("餐饮", suggestedEntry.category)
     }
 
-    private fun sampleEntry(): ReviewQueueEntry = ReviewQueueEntry(
+    private fun sampleEntry(): ReviewEntryUiModel = ReviewEntryUiModel(
         id = "pending-lunch",
         title = "午餐",
         amountMinor = 3590,

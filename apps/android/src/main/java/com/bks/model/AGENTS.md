@@ -2,7 +2,7 @@
 
 ## 子层职责
 
-- `domain/` 只保存纯 Kotlin 领域模型、规则、验证、命令、结果和 Repository/Gateway 接口；禁止依赖 Android、AndroidX、Compose、Room、ViewModel、View 和 `com.bks.api` wire DTO。
+- `domain/` 只保存纯 Kotlin 领域模型、规则、验证、命令、结果和 Repository/Gateway 接口；禁止依赖 Android、AndroidX、Compose、Room、ViewModel、View、`com.bks.api` wire DTO，也不得通过 `java.io`、`java.nio.file` 或 `kotlin.io.path` 执行实际文件 I/O。
 - `application/` 保存 Session、Cloud Settings、Bill Sync、Review、Ledger Sync 等跨数据源协调器；只能面向领域接口，不直接依赖具体 Room/HTTP 实现、平台 SDK、View 或 ViewModel。
 - `data/` 保存 Room、Repository/Gateway 实现、HTTP/Shared API 映射、备份、文件与加密实现；Entity/DTO 必须显式映射为领域类型后向上返回。
 - `platform/` 保存 Application/容器、无障碍 Service、Worker 和微信 SDK 等非界面 Android 入口；通过领域接口或 application coordinator 连接业务，不得依赖 View/ViewModel。

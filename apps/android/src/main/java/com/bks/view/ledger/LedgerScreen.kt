@@ -3,10 +3,8 @@ package com.bks.view.ledger
 import com.bks.viewmodel.ledger.FundingAccountDeleteResult
 import com.bks.viewmodel.ledger.LedgerBookDeleteResult
 import com.bks.viewmodel.ledger.LedgerBookUiModel
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import com.bks.viewmodel.ledger.toLedgerEntryFormState
-import com.bks.viewmodel.ledger.LedgerPage
-import com.bks.viewmodel.ledger.LedgerUiEntry
-import com.bks.viewmodel.ledger.LedgerView
 import com.bks.viewmodel.ledger.userMessage
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
@@ -91,12 +89,25 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import kotlinx.coroutines.launch
 
+private enum class LedgerView {
+    LIST,
+    EDIT,
+    DELETED,
+    LEDGER_BOOKS,
+    FUNDING_ACCOUNTS
+}
+
+private data class LedgerPage(
+    val view: LedgerView,
+    val selectedEntryId: String?
+)
+
 @Composable
 @Suppress("LongParameterList", "LongMethod")
 fun LedgerScreen(
-    entries: List<LedgerUiEntry>,
+    entries: List<LedgerEntryUiModel>,
     entryListState: LazyListState = rememberLazyListState(),
-    deletedEntries: List<LedgerUiEntry> = emptyList(),
+    deletedEntries: List<LedgerEntryUiModel> = emptyList(),
     categories: List<LedgerCategoryUiModel> = emptyList(),
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     ledgerBooks: List<LedgerBookUiModel> = emptyList(),

@@ -25,7 +25,7 @@ interface LedgerEntryRepository {
     suspend fun permanentlyDeleteLedgerEntry(ledgerEntryId: String)
 }
 
-interface FundingAccountRepository {
+interface FundingAccountRepository : FundingAccountSettingsRepository {
     suspend fun createFundingAccount(label: String, paymentSource: PaymentSource?): FundingAccount
     suspend fun updateFundingAccount(
         fundingAccountId: Long,

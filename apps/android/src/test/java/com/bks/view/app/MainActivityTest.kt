@@ -31,9 +31,9 @@ import com.bks.model.data.local.database.BksDatabaseProvider
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.ConfidenceState
 import com.bks.model.domain.ledger.FlowDirection
-import com.bks.model.data.local.ledger.LedgerEntryInput
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.domain.ledger.LedgerEntryCommand
+import com.bks.model.data.local.ledger.TestLedgerRepository
+import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.data.local.database.PendingEntryEntity
 import com.bks.model.domain.ledger.TransactionKind
@@ -207,7 +207,7 @@ class MainActivityTest {
 
     @Test
     fun reportsFollowTheSelectedLedgerBook() {
-        val repository = LocalLedgerRepository(BksDatabaseProvider.get(context))
+        val repository = TestLedgerRepository(BksDatabaseProvider.get(context))
         val travelLedgerId = runBlocking {
             repository.clearLocalData()
             val defaultLedger = repository.ensureDefaultLedgerBook()
@@ -259,7 +259,7 @@ class MainActivityTest {
 
     @Test
     fun editedReviewMerchantAndCategoryReachLedger() {
-        val repository = LocalLedgerRepository(BksDatabaseProvider.get(context))
+        val repository = TestLedgerRepository(BksDatabaseProvider.get(context))
         val now = System.currentTimeMillis()
         runBlocking {
             repository.clearLocalData()
@@ -267,7 +267,7 @@ class MainActivityTest {
             repository.seedSystemCategories()
             repository.createManualEntry(
                 defaultLedger.id,
-                LedgerEntryInput(
+                LedgerEntryCommand(
                     flowDirection = FlowDirection.OUTFLOW,
                     transactionKind = TransactionKind.EXPENSE,
                     amountMinor = 3_590,
@@ -405,7 +405,7 @@ class MainActivityTest {
 
     @Test
     fun automaticBookkeepingTogglePersistsThroughRouteAndRoomFlow() {
-        val repository = LocalPreferencesRepository(BksDatabaseProvider.get(context))
+        val repository = RoomPreferencesRepository(BksDatabaseProvider.get(context))
         runBlocking { repository.setAutomaticBookkeepingEnabled(false) }
         try {
             composeRule.setContent { BksApp() }
@@ -573,7 +573,7 @@ class MainActivityTest {
     private fun reportEntryInput(
         amountMinor: Long,
         merchantTitle: String
-    ): LedgerEntryInput = LedgerEntryInput(
+    ): LedgerEntryCommand = LedgerEntryCommand(
         flowDirection = FlowDirection.OUTFLOW,
         transactionKind = TransactionKind.EXPENSE,
         amountMinor = amountMinor,

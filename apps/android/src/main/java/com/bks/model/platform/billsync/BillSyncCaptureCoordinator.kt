@@ -5,7 +5,6 @@ package com.bks.model.platform.billsync
 import com.bks.model.domain.billsync.BillSyncResult
 import com.bks.model.domain.ledger.PaymentSource
 import android.content.Context
-import android.os.Build
 import android.os.Process
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
@@ -13,8 +12,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.bks.model.domain.diagnostics.DiagnosticRecorder
 import com.bks.model.domain.diagnostics.NoOpDiagnosticRecorder
 import com.ven.assists.AssistsCore
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -22,7 +19,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -52,7 +48,8 @@ internal class BillSyncCaptureCoordinator(
 ) {
     private val applicationContext = context.applicationContext
     private val processStartElapsedMillis = runCatching(processStartElapsedProvider).getOrNull()
-    private val acceptedWindows = AcceptedWindowMemory()
+    private val windowTracker = CaptureWindowTracker()
+    private val pageReader = AccessibilityPageReader(rootsProvider, uptimeClock)
     private val pendingCaptures = mutableMapOf<CaptureTrigger, PendingCapture>()
     private var enabledObserver: Job? = null
     private var captureSession: BillSyncCaptureSession? = null
@@ -110,12 +107,22 @@ internal class BillSyncCaptureCoordinator(
     fun onServiceConnected() {
         endCaptureSession("service_reconnected")
         sessionGeneration += 1
-        val runtimeProbe = runCatching { runtimeProbeHandleFactory().toSession() }.getOrNull()
-        captureSession = BillSyncCaptureSession(
+        val runtimeProbe = runCatching {
+            runtimeProbeHandleFactory().toSession(
+                BillSyncRuntimeProbeEnvironment(
+                    uptimeClock = uptimeClock,
+                    elapsedRealtimeClock = elapsedRealtimeClock,
+                    clock = clock,
+                    diagnosticRecorder = diagnosticRecorder
+                )
+            )
+        }.getOrNull()
+        val session = BillSyncCaptureSession(
             id = sessionGeneration,
             scope = applicationScope.childScope(),
             runtimeProbe = runtimeProbe
         )
+        captureSession = session
         BillSyncServiceHealth.markServiceConnected(true)
         diagnosticRecorder.recordBillSyncServiceEvent(
             eventName = "CONNECTED",
@@ -133,7 +140,13 @@ internal class BillSyncCaptureCoordinator(
             enabled = automaticBookkeepingEnabled,
             processStartElapsedMillis = processStartElapsedMillis
         )
-        startDispatchDelayProbe(requireNotNull(captureSession))
+        runtimeProbe?.start(
+            sessionId = session.id,
+            mainScope = session.scope,
+            isSessionActive = {
+                synchronized(this@BillSyncCaptureCoordinator) { captureSession === session }
+            }
+        )
     }
 
     fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -344,7 +357,7 @@ internal class BillSyncCaptureCoordinator(
         val session = synchronized(this) {
             captureSession?.takeIf { batch.sessionId == null || it.id == batch.sessionId }
         } ?: return
-        if (acceptedWindows.deferIfPersistenceInFlight(batch)) {
+        if (windowTracker.deferIfPersistenceInFlight(batch)) {
             BillSyncCaptureLog.ignored(
                 "capture_deferred",
                 "package=${trigger.packageName} window=${trigger.windowId}"
@@ -412,7 +425,7 @@ internal class BillSyncCaptureCoordinator(
         }
 
         try {
-            val lookup = lookupCaptureRoot(trigger, eventSnapshot)
+            val lookup = pageReader.lookup(trigger, eventSnapshot)
             val selection = lookup.selection
             lookupMillis = lookup.durationMillis
             activeRootCount = selection.activeRoots.size
@@ -433,7 +446,7 @@ internal class BillSyncCaptureCoordinator(
             }
 
             val collectStartedAt = uptimeClock()
-            readableCapture = root.collectReadablePageCapture()
+            readableCapture = pageReader.read(root)
             collectMillis = (uptimeClock() - collectStartedAt).coerceAtLeast(0L)
             val captured = requireNotNull(readableCapture)
             BillSyncCaptureLog.collected(activePackage, root.windowId, captured.pageText)
@@ -442,7 +455,7 @@ internal class BillSyncCaptureCoordinator(
                 if (captureSession !== session) return@synchronized false
                 handoffSanitizedCapture(
                     capture = SanitizedBillSyncCapture(activePackage, root.windowId, captured.pageText),
-                    acceptedWindows = acceptedWindows,
+                    windowTracker = windowTracker,
                     recognize = { pageText, paymentSource ->
                         recognizeWithTiming(pageText, paymentSource) { recognizeMillis = it }
                     },
@@ -452,7 +465,7 @@ internal class BillSyncCaptureCoordinator(
                     launch = { block ->
                         session.scope.launch {
                             block()
-                            acceptedWindows
+                            windowTracker
                                 .takeDeferredCapture(activePackage, root.windowId)
                                 ?.asDeferred(uptimeClock())
                                 ?.let { deferred ->
@@ -478,28 +491,6 @@ internal class BillSyncCaptureCoordinator(
             recordOutcome(BillSyncCaptureOutcome.Failed("capture_failed"))
             BillSyncCaptureLog.failed(trigger.packageName, trigger.windowId, error)
         }
-    }
-
-    private fun lookupCaptureRoot(
-        trigger: CaptureTrigger,
-        eventSnapshot: AccessibilityEvent?
-    ): TimedCaptureRootLookup {
-        val startedAt = uptimeClock()
-        val eventRoot = runCatching { eventSnapshot?.source }.getOrNull()
-        val selection = selectCaptureRoot(eventRoot, trigger.windowId) {
-            rootsProvider(AssistsCore.NodeLookupScope.ActiveWindow)
-        }
-        BillSyncCaptureLog.roots(
-            emptyList(),
-            selection.activeRoots,
-            selection.root,
-            trigger.packageName,
-            trigger.windowId
-        )
-        return TimedCaptureRootLookup(
-            selection = selection,
-            durationMillis = (uptimeClock() - startedAt).coerceAtLeast(0L)
-        )
     }
 
     private fun recognizeWithTiming(
@@ -627,75 +618,6 @@ internal class BillSyncCaptureCoordinator(
         diagnosticRecorder.recordBillSyncWave(wave.toDiagnostic())
     }
 
-    private fun startDispatchDelayProbe(session: BillSyncCaptureSession) {
-        val runtimeProbe = session.runtimeProbe ?: return
-        runtimeProbe.scope.launch {
-            var expectedUptimeMillis = uptimeClock() + MAIN_PROBE_INTERVAL_MILLIS
-            var expectedElapsedRealtimeMillis = elapsedRealtimeClock() + MAIN_PROBE_INTERVAL_MILLIS
-            var expectedAtEpochMillis = clock() + MAIN_PROBE_INTERVAL_MILLIS
-            while (true) {
-                delay(MAIN_PROBE_INTERVAL_MILLIS)
-                if (synchronized(this@BillSyncCaptureCoordinator) { captureSession !== session }) return@launch
-                val workerAtUptimeMillis = uptimeClock()
-                val workerAtElapsedRealtimeMillis = elapsedRealtimeClock()
-                val workerDelayMillis = (workerAtUptimeMillis - expectedUptimeMillis).coerceAtLeast(0L)
-                val workerElapsedDelayMillis =
-                    (workerAtElapsedRealtimeMillis - expectedElapsedRealtimeMillis).coerceAtLeast(0L)
-                val ticket = BillSyncDispatchProbeTicket(
-                    expectedAtEpochMillis = expectedAtEpochMillis,
-                    expectedUptimeMillis = expectedUptimeMillis,
-                    workerAtUptimeMillis = workerAtUptimeMillis,
-                    workerDelayMillis = workerDelayMillis,
-                    workerElapsedDelayMillis = workerElapsedDelayMillis
-                )
-                if (runtimeProbe.mainProbeInFlight.compareAndSet(false, true)) {
-                    session.scope.launch {
-                        try {
-                            val sessionEnded = synchronized(this@BillSyncCaptureCoordinator) {
-                                captureSession !== session
-                            }
-                            if (sessionEnded) return@launch
-                            recordDispatchDelayIfNeeded(session.id, ticket)
-                        } finally {
-                            runtimeProbe.mainProbeInFlight.set(false)
-                        }
-                    }
-                }
-                expectedUptimeMillis = workerAtUptimeMillis + MAIN_PROBE_INTERVAL_MILLIS
-                expectedElapsedRealtimeMillis =
-                    workerAtElapsedRealtimeMillis + MAIN_PROBE_INTERVAL_MILLIS
-                expectedAtEpochMillis = clock() + MAIN_PROBE_INTERVAL_MILLIS
-            }
-        }
-    }
-
-    private fun recordDispatchDelayIfNeeded(
-        sessionId: Long,
-        ticket: BillSyncDispatchProbeTicket
-    ) {
-        val mainAtUptimeMillis = uptimeClock()
-        val mainPostDelayMillis =
-            (mainAtUptimeMillis - ticket.workerAtUptimeMillis).coerceAtLeast(0L)
-        val outcome = classifyBillSyncDispatchDelay(
-            workerDelayMillis = ticket.workerDelayMillis,
-            workerElapsedDelayMillis = ticket.workerElapsedDelayMillis,
-            mainPostDelayMillis = mainPostDelayMillis
-        ) ?: return
-        diagnosticRecorder.recordBillSyncDispatchDelay(
-            BillSyncDispatchProbeDiagnostic(
-                timestampEpochMillis = clock(),
-                sessionId = sessionId,
-                expectedAtEpochMillis = ticket.expectedAtEpochMillis,
-                workerDelayMillis = ticket.workerDelayMillis,
-                workerElapsedDelayMillis = ticket.workerElapsedDelayMillis,
-                mainPostDelayMillis = mainPostDelayMillis,
-                mainTotalDelayMillis =
-                    (mainAtUptimeMillis - ticket.expectedUptimeMillis).coerceAtLeast(0L),
-                outcome = outcome
-            )
-        )
-    }
-
     @Synchronized
     private fun endCaptureSession(reason: String) {
         flushCurrentWave()
@@ -704,7 +626,7 @@ internal class BillSyncCaptureCoordinator(
         endingSession?.runtimeProbe?.close()
         captureSession = null
         pendingCaptures.clear()
-        acceptedWindows.clear()
+        windowTracker.clear()
         endingSession?.let { session ->
             diagnosticRecorder.recordBillSyncServiceEvent(
                 eventName = "SESSION_ENDED",
@@ -784,57 +706,10 @@ private data class BillSyncCaptureSession(
     val runtimeProbe: BillSyncRuntimeProbeSession?
 )
 
-internal class BillSyncRuntimeProbeHandle(
-    val dispatcher: CoroutineDispatcher,
-    private val closeDispatcher: () -> Unit = {}
-) {
-    fun close() = closeDispatcher()
-}
-
-private class BillSyncRuntimeProbeSession(
-    val scope: CoroutineScope,
-    private val handle: BillSyncRuntimeProbeHandle,
-    val mainProbeInFlight: AtomicBoolean = AtomicBoolean(false)
-) {
-    fun close() {
-        scope.cancel()
-        handle.close()
-    }
-}
-
-private fun BillSyncRuntimeProbeHandle.toSession(): BillSyncRuntimeProbeSession =
-    BillSyncRuntimeProbeSession(
-        scope = CoroutineScope(SupervisorJob() + dispatcher),
-        handle = this
-    )
-
-private fun createBillSyncRuntimeProbeHandle(): BillSyncRuntimeProbeHandle {
-    val dispatcher = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, RUNTIME_PROBE_THREAD_NAME).apply { isDaemon = true }
-    }.asCoroutineDispatcher()
-    return BillSyncRuntimeProbeHandle(
-        dispatcher = dispatcher,
-        closeDispatcher = dispatcher::close
-    )
-}
-
-private data class BillSyncDispatchProbeTicket(
-    val expectedAtEpochMillis: Long,
-    val expectedUptimeMillis: Long,
-    val workerAtUptimeMillis: Long,
-    val workerDelayMillis: Long,
-    val workerElapsedDelayMillis: Long
-)
-
 private data class ImmediateCapture(
     val session: BillSyncCaptureSession,
     val batch: BillSyncCaptureBatch,
     val eventSnapshot: AccessibilityEvent? = null
-)
-
-private data class TimedCaptureRootLookup(
-    val selection: CaptureRootSelection,
-    val durationMillis: Long
 )
 
 private class PendingCapture(
@@ -895,68 +770,12 @@ private class PendingCapture(
     )
 }
 
-private class BillSyncWaveAccumulator(
-    val timestampEpochMillis: Long,
-    val sessionId: Long
-) {
-    var allCallbacks: Int = 0
-    var eligibleCallbacks: Int = 0
-    var filteredCallbacks: Int = 0
-    val uniqueWindows = mutableSetOf<CaptureTrigger>()
-    var captures: Int = 0
-    var leadingCaptures: Int = 0
-    var trailingCaptures: Int = 0
-    var deadlineCaptures: Int = 0
-    var deferredCaptures: Int = 0
-    var rootMissing: Int = 0
-    var ownPackage: Int = 0
-    var nodesVisited: Int = 0
-    var totalLookupMillis: Long = 0L
-    var maxQueueMillis: Long = 0L
-    var maxFrameworkDeliveryMillis: Long = 0L
-    var maxSuperDurationMillis: Long = 0L
-    var maxCoordinatorDelayMillis: Long = 0L
-
-    fun toDiagnostic(): BillSyncWaveDiagnostic = BillSyncWaveDiagnostic(
-        timestampEpochMillis = timestampEpochMillis,
-        sessionId = sessionId,
-        allCallbacks = allCallbacks,
-        eligibleCallbacks = eligibleCallbacks,
-        filteredCallbacks = filteredCallbacks,
-        uniqueWindows = uniqueWindows.size,
-        captures = captures,
-        leadingCaptures = leadingCaptures,
-        trailingCaptures = trailingCaptures,
-        deadlineCaptures = deadlineCaptures,
-        deferredCaptures = deferredCaptures,
-        rootMissing = rootMissing,
-        ownPackage = ownPackage,
-        nodesVisited = nodesVisited,
-        totalLookupMillis = totalLookupMillis,
-        maxQueueMillis = maxQueueMillis,
-        maxFrameworkDeliveryMillis = maxFrameworkDeliveryMillis,
-        maxSuperDurationMillis = maxSuperDurationMillis,
-        maxCoordinatorDelayMillis = maxCoordinatorDelayMillis
-    )
-}
-
-internal class BillSyncCaptureOperations(
-    val recognize: (String, PaymentSource) -> BillSyncResult,
-    val persist: suspend (BillSyncResult) -> BillSyncResult
-)
-
 private fun CoroutineScope.childScope(): CoroutineScope {
     val parentContext = coroutineContext
     val childJob = SupervisorJob(parentContext[Job])
     val childContext: CoroutineContext = parentContext.minusKey(Job) + childJob
     return CoroutineScope(childContext)
 }
-
-internal data class SanitizedBillSyncCapture(
-    val packageName: String,
-    val windowId: Int,
-    val pageText: String
-)
 
 internal fun shouldCaptureEvent(
     captureEnabled: Boolean,
@@ -968,256 +787,10 @@ internal fun shouldCaptureEvent(
         (candidatePackage == null && eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
 }
 
-@Suppress("LongParameterList")
-internal fun handoffSanitizedCapture(
-    capture: SanitizedBillSyncCapture,
-    acceptedWindows: AcceptedWindowMemory,
-    recognize: (String, PaymentSource) -> BillSyncResult,
-    persist: suspend (BillSyncResult) -> BillSyncResult,
-    launch: (suspend () -> Unit) -> Unit,
-    onOutcome: (BillSyncCaptureOutcome) -> Unit = {}
-) {
-    val recognized = recognize(capture.pageText, paymentSourceForPackage(capture.packageName))
-    if (!recognized.recognized) {
-        acceptedWindows.release(capture.packageName, capture.windowId)
-        BillSyncCaptureLog.processed(recognized = false, insertedCount = 0)
-        notifyCaptureOutcome(
-            onOutcome,
-            BillSyncCaptureOutcome.Failed(
-                recognized.failureReason?.code ?: "page_not_recognized"
-            )
-        )
-        return
-    }
-    if (!acceptedWindows.acceptIfNew(capture.packageName, capture.windowId)) {
-        BillSyncCaptureLog.ignored(
-            "already_captured_window",
-            "package=${capture.packageName} window=${capture.windowId}"
-        )
-        notifyCaptureOutcome(
-            onOutcome,
-            BillSyncCaptureOutcome.NotInserted("already_captured_window")
-        )
-        return
-    }
-    launch {
-        try {
-            val result = persist(recognized)
-            acceptedWindows.persistenceSucceeded(capture.packageName, capture.windowId)
-            BillSyncCaptureLog.processed(recognized = true, insertedCount = result.insertedCount)
-            notifyCaptureOutcome(
-                onOutcome,
-                if (result.insertedCount > 0) {
-                    BillSyncCaptureOutcome.Inserted(result.insertedCount)
-                } else {
-                    BillSyncCaptureOutcome.NotInserted("duplicate_not_inserted")
-                }
-            )
-        } catch (error: CancellationException) {
-            acceptedWindows.persistenceCancelled(capture.packageName, capture.windowId)
-            notifyCaptureOutcome(onOutcome, BillSyncCaptureOutcome.Failed("session_ended"))
-            throw error
-        } catch (error: Throwable) {
-            acceptedWindows.persistenceFailed(capture.packageName, capture.windowId)
-            BillSyncCaptureLog.failed(capture.packageName, capture.windowId, error)
-            notifyCaptureOutcome(onOutcome, BillSyncCaptureOutcome.Failed("persistence_failed"))
-        }
-    }
-}
-
-internal fun paymentSourceForPackage(packageName: String): PaymentSource = when (packageName) {
-    ALIPAY_PACKAGE_NAME -> PaymentSource.ALIPAY
-    WECHAT_PACKAGE_NAME -> PaymentSource.WECHAT
-    else -> PaymentSource.OTHER
-}
-
-private fun notifyCaptureOutcome(
-    onOutcome: (BillSyncCaptureOutcome) -> Unit,
-    outcome: BillSyncCaptureOutcome
-) {
-    runCatching { onOutcome(outcome) }
-}
-
-internal data class CaptureRootSelection(
-    val activeRoots: List<AccessibilityNodeInfo>,
-    val root: AccessibilityNodeInfo?,
-    val source: CaptureRootSource
-)
-
-internal enum class CaptureRootSource(val logValue: String) {
-    Event("event"),
-    Active("active"),
-    None("none")
-}
-
-internal fun selectCaptureRoot(
-    eventRoot: AccessibilityNodeInfo?,
-    eventWindowId: Int,
-    activeRootsProvider: () -> List<AccessibilityNodeInfo>
-): CaptureRootSelection {
-    val matchingEventRoot = eventRoot?.takeIf { root ->
-        root.packageName?.toString() == ALIPAY_PACKAGE_NAME &&
-            (eventWindowId < 0 || root.windowId == eventWindowId)
-    }
-    val activeRoots = if (matchingEventRoot == null) activeRootsProvider() else emptyList()
-    val alipayActiveRoots = activeRoots.filter { root ->
-        root.packageName?.toString() == ALIPAY_PACKAGE_NAME
-    }
-    val activeRoot = alipayActiveRoots.firstOrNull { root ->
-        eventWindowId >= 0 && root.windowId == eventWindowId
-    } ?: alipayActiveRoots.firstOrNull()
-    return CaptureRootSelection(
-        activeRoots = activeRoots,
-        root = matchingEventRoot ?: activeRoot,
-        source = when {
-            matchingEventRoot != null -> CaptureRootSource.Event
-            activeRoot != null -> CaptureRootSource.Active
-            else -> CaptureRootSource.None
-        }
-    )
-}
-
-internal class AcceptedWindowMemory {
-    private val accepted = mutableMapOf<Pair<String, Int>, AcceptedWindow>()
-    private val deferredCaptures = mutableMapOf<Pair<String, Int>, BillSyncCaptureBatch>()
-
-    @Synchronized
-    fun acceptIfNew(packageName: String, windowId: Int): Boolean {
-        val key = packageName to windowId
-        val existing = accepted[key]
-        if (existing != null) {
-            existing.releaseRequested = false
-            return false
-        }
-        accepted[key] = AcceptedWindow(persistenceInFlight = true)
-        return true
-    }
-
-    @Synchronized
-    fun deferIfPersistenceInFlight(batch: BillSyncCaptureBatch): Boolean {
-        val trigger = batch.trigger
-        val packageName = trigger.packageName ?: return false
-        if (trigger.windowId < 0) return false
-        val key = packageName to trigger.windowId
-        if (accepted[key]?.persistenceInFlight != true) return false
-        deferredCaptures[key] = deferredCaptures[key]?.merge(batch) ?: batch
-        return true
-    }
-
-    @Synchronized
-    fun takeDeferredCapture(packageName: String, windowId: Int): BillSyncCaptureBatch? =
-        deferredCaptures.remove(packageName to windowId)
-
-    @Synchronized
-    fun release(packageName: String, windowId: Int) {
-        val key = packageName to windowId
-        val existing = accepted[key] ?: return
-        if (existing.persistenceInFlight) {
-            existing.releaseRequested = true
-        } else {
-            accepted.remove(key)
-        }
-    }
-
-    @Synchronized
-    fun persistenceSucceeded(packageName: String, windowId: Int) {
-        completePersistence(packageName, windowId, remove = false)
-    }
-
-    @Synchronized
-    fun persistenceFailed(packageName: String, windowId: Int) {
-        completePersistence(packageName, windowId, remove = true)
-    }
-
-    @Synchronized
-    fun persistenceCancelled(packageName: String, windowId: Int) {
-        deferredCaptures.remove(packageName to windowId)
-        completePersistence(packageName, windowId, remove = false)
-    }
-
-    @Synchronized
-    fun clear() {
-        accepted.clear()
-        deferredCaptures.clear()
-    }
-
-    private fun completePersistence(packageName: String, windowId: Int, remove: Boolean) {
-        val key = packageName to windowId
-        val existing = accepted[key] ?: return
-        existing.persistenceInFlight = false
-        if (remove || existing.releaseRequested) accepted.remove(key)
-    }
-
-    private data class AcceptedWindow(
-        var persistenceInFlight: Boolean,
-        var releaseRequested: Boolean = false
-    )
-}
-
-internal data class ReadablePageCapture(
-    val pageText: String,
-    val visitedNodeCount: Int,
-    val nodeLimitReached: Boolean
-)
-
-internal fun AccessibilityNodeInfo.collectReadableText(): String = collectReadablePageCapture().pageText
-
-@Suppress("CyclomaticComplexMethod")
-internal fun AccessibilityNodeInfo.collectReadablePageCapture(): ReadablePageCapture {
-    val lines = linkedSetOf<String>()
-    var visitedNodes = 0
-    var collectedCharacters = 0
-    var nodeLimitReached = false
-
-    fun add(value: CharSequence?) {
-        val line = value?.toString()?.trim()?.takeIf(String::isNotBlank) ?: return
-        if (line in lines) return
-        val addedCharacters = line.length + if (lines.isEmpty()) 0 else 1
-        if (collectedCharacters + addedCharacters > MAX_CAPTURE_CHARACTERS) return
-        lines += line
-        collectedCharacters += addedCharacters
-    }
-
-    val pendingNodes = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
-    pendingNodes.add(this to 0)
-    while (pendingNodes.isNotEmpty() && visitedNodes < MAX_CAPTURE_NODES) {
-        val (node, depth) = pendingNodes.removeFirst()
-        visitedNodes += 1
-        if (node.isPassword || node.isEditable) continue
-        if (node.isVisibleToUser) {
-            add(node.text)
-            add(node.contentDescription)
-            add(node.hintText)
-            add(node.paneTitle)
-            add(node.tooltipText)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) add(node.stateDescription)
-        }
-        if (depth == MAX_CAPTURE_DEPTH || collectedCharacters >= MAX_CAPTURE_CHARACTERS) continue
-        for (index in 0 until node.childCount) {
-            if (visitedNodes + pendingNodes.size >= MAX_CAPTURE_NODES) {
-                nodeLimitReached = true
-                break
-            }
-            node.getChild(index)?.let { pendingNodes.add(it to depth + 1) }
-        }
-    }
-
-    return ReadablePageCapture(
-        pageText = lines.joinToString("\n"),
-        visitedNodeCount = visitedNodes,
-        nodeLimitReached = nodeLimitReached || pendingNodes.isNotEmpty()
-    )
-}
-
-internal const val MAX_CAPTURE_NODES = 512
-internal const val MAX_CAPTURE_DEPTH = 24
-internal const val MAX_CAPTURE_CHARACTERS = 16 * 1024
 internal const val CAPTURE_SETTLE_MILLIS = 500L
 internal const val MAX_CAPTURE_INTERVAL_MILLIS = 1_000L
 internal const val WAVE_INTERVAL_MILLIS = 1_000L
-internal const val MAIN_PROBE_INTERVAL_MILLIS = 2_000L
 internal const val WECHAT_PACKAGE_NAME = "com.tencent.mm"
-private const val RUNTIME_PROBE_THREAD_NAME = "BksBillSyncProbe"
 
 private val CAPTURE_EVENT_TYPES = setOf(
     AccessibilityEvent.TYPE_VIEW_CLICKED,

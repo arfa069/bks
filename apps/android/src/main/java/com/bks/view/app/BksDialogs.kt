@@ -3,7 +3,7 @@ package com.bks.view.app
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.bks.model.application.sync.LedgerSyncOperationResult
+import com.bks.viewmodel.sync.LedgerSyncActionResult
 import com.bks.viewmodel.sync.LedgerSyncUiState
 import com.bks.view.common.components.Button
 import com.bks.view.common.components.TextButton
@@ -49,12 +49,12 @@ internal fun BksLedgerSyncAccountSwitchDialog(
 }
 
 internal suspend fun runLedgerSyncAccountSwitchAction(
-    switchAccount: suspend () -> LedgerSyncOperationResult<Unit>,
+    switchAccount: suspend () -> LedgerSyncActionResult<Unit>,
     showMessage: suspend (String) -> Unit
 ) {
     when (val result = switchAccount()) {
-        is LedgerSyncOperationResult.Success -> showMessage("账户同步数据已切换")
-        is LedgerSyncOperationResult.Failure -> showMessage(result.message)
+        is LedgerSyncActionResult.Success -> showMessage("账户同步数据已切换")
+        is LedgerSyncActionResult.Failure -> showMessage(result.message)
     }
 }
 

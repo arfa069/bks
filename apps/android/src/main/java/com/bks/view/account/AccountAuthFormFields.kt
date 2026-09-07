@@ -1,7 +1,7 @@
 package com.bks.view.account
 
 import com.bks.viewmodel.ledger.label
-import com.bks.viewmodel.account.AccountUiState
+import com.bks.viewmodel.account.AccountFormState
 import com.bks.viewmodel.account.requiresVerificationCode
 import com.bks.viewmodel.account.AccountAction
 import androidx.compose.foundation.clickable
@@ -22,7 +22,7 @@ import com.bks.view.common.components.OutlinedButton
 import com.bks.view.common.components.OutlinedTextField
 @Composable
 internal fun PhoneField(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit
 ) {
     OutlinedTextField(
@@ -40,7 +40,7 @@ internal fun PhoneField(
 
 @Composable
 internal fun SmsCodeRow(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit
 ) {
     if (!state.requiresVerificationCode) return
@@ -82,7 +82,7 @@ internal fun SmsCodeRow(
 
 @Composable
 internal fun PasswordPairFields(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit
 ) {
     PasswordField(

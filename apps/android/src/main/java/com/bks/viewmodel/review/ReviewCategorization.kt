@@ -5,7 +5,7 @@ import com.bks.model.domain.categorization.AiCategorizationPayload
 import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.categorization.CategorizationTransaction
 import com.bks.model.domain.categorization.suggestCategory
-fun ReviewQueueEntry.toAiCategorizationPayload(
+fun ReviewEntryUiModel.toAiCategorizationPayload(
     categoryCandidates: List<String>,
     enhancedContextGranted: Boolean
 ): AiCategorizationPayload = AiCategorizationPayload(
@@ -19,9 +19,9 @@ fun ReviewQueueEntry.toAiCategorizationPayload(
     rawEvidenceText = rawEvidenceText.takeIf { enhancedContextGranted }
 )
 
-fun ReviewQueueEntry.applyCategorizationSuggestion(
+fun ReviewEntryUiModel.applyCategorizationSuggestion(
     rules: List<CategorizationRule>
-): ReviewQueueEntry {
+): ReviewEntryUiModel {
     val suggestion = suggestCategory(
         rules = rules,
         transaction = CategorizationTransaction(

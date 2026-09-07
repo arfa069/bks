@@ -17,13 +17,13 @@ import com.bks.viewmodel.ledger.LedgerUiState
 import com.bks.viewmodel.ledger.LedgerViewModel
 import com.bks.view.ledger.ReportsScreen
 import com.bks.viewmodel.ledger.defaultLedgerCategoryUiModels
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewQueueUiState
 import com.bks.view.review.ReviewQueueScreen
 import com.bks.viewmodel.review.ReviewQueueViewModel
 @Composable
 @Suppress("LongParameterList")
 internal fun BksReviewRoute(
-    reviewState: ReviewQueueState,
+    reviewState: ReviewQueueUiState,
     reviewViewModel: ReviewQueueViewModel,
     ledgerState: LedgerUiState,
     onCategorizationRulesChange: suspend (CategorizationRulesUpdate) -> Unit,

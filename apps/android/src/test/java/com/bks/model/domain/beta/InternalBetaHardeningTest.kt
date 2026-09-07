@@ -4,7 +4,6 @@ import com.bks.model.domain.beta.BetaReadinessItemId
 import com.bks.model.domain.beta.buildInternalBetaReadinessReport
 import com.bks.model.domain.beta.calculateInternalBetaMetrics
 import com.bks.model.domain.beta.InternalBetaMetricSample
-import com.bks.model.domain.beta.scanForSecretLikeValues
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -50,7 +49,7 @@ class InternalBetaHardeningTest {
     @Test
     fun currentClientAndBackendSourcesDoNotContainSecretLikeValues() {
         val root = projectRoot()
-        val findings = scanForSecretLikeValues(
+        val findings = SourceSecretScanner.scan(
             files = listOf(
                 root.resolve("apps/android/src/main"),
                 root.resolve("services/backend/src/main"),
@@ -64,7 +63,8 @@ class InternalBetaHardeningTest {
     }
 
     private fun projectRoot(): File {
-        return generateSequence(File(System.getProperty("user.dir"))) { current ->
+        val workingDirectory = checkNotNull(System.getProperty("user.dir"))
+        return generateSequence(File(workingDirectory)) { current ->
             current.parentFile?.absoluteFile
         }.first { it.resolve("settings.gradle.kts").exists() }
     }

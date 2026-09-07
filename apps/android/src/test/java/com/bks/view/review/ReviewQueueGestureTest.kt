@@ -1,8 +1,7 @@
 package com.bks.view.review
 
 import com.bks.model.domain.ledger.Category
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewEntryUiModel
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,7 +28,7 @@ class ReviewQueueGestureTest {
     @Test
     fun shortSlowSwipesInEitherDirectionDoNotResolvePendingEntry() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            ReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -58,7 +57,7 @@ class ReviewQueueGestureTest {
     @Test
     fun shortFastSwipeDoesNotResolvePendingEntry() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            ReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -78,7 +77,7 @@ class ReviewQueueGestureTest {
     @Test
     fun longSwipeFromStartToEndConfirmsPendingEntry() {
         composeRule.setContent {
-            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -98,7 +97,7 @@ class ReviewQueueGestureTest {
     @Test
     fun longSwipeFromEndToStartIgnoresPendingEntry() {
         composeRule.setContent {
-            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -118,7 +117,7 @@ class ReviewQueueGestureTest {
     @Test
     fun confirmShowsUndoAndRestoresEntry() {
         composeRule.setContent {
-            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -135,7 +134,7 @@ class ReviewQueueGestureTest {
     @Test
     fun ignoreCanBeRecoveredFromIgnoredList() {
         composeRule.setContent {
-            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -161,7 +160,7 @@ class ReviewQueueGestureTest {
     private fun sampleEntry(
         id: String = "pending-lunch",
         confidence: ConfidenceState = ConfidenceState.NEEDS_REVIEW
-    ): ReviewQueueEntry = ReviewQueueEntry(
+    ): ReviewEntryUiModel = ReviewEntryUiModel(
         id = id,
         title = "午餐",
         amountMinor = 3590,

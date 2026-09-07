@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.bks.R
 import com.bks.view.common.components.HomeReturnButton
 import com.bks.view.common.visual.CachedResourceImage
+import com.bks.viewmodel.account.ProfileAccountSummaryUiModel
 
 private val ProfileContentMaxWidth = 880.dp
 private val ProfileTwoColumnBreakpoint = 840.dp
@@ -333,8 +334,6 @@ private fun ProfileChevron(modifier: Modifier = Modifier) {
         )
     }
 }
-
-data class ProfileAccountSummaryUiModel(val text: String)
 
 private fun ProfileDestination.summary(ledgerSyncEnabled: Boolean): String = when (this) {
     ProfileDestination.AccountManagement -> error("Account summary is rendered by AccountStatusCard")

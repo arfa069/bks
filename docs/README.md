@@ -7,6 +7,7 @@
 - [产品需求文档 (PRD)](./PRD.md)
 - [系统架构设计 (Current Architecture)](./ARCHITECTURE.md)
 - [Android 系统性架构重构执行计划](./refactor/README.md)
+- [Android 职责与命名重构审查及方案（2026-09-05，阶段 1-5 已完成）](./refactor/android-responsibility-refactor-plan-2026-09-05.md)
 - [UI 设计规范](./UI-DESIGN.md)
 - [合规与隐私评估草案](./COMPLIANCE.md)
 - [通用交易识别规则](./PAYMENT-RECOGNITION-RULES.md)

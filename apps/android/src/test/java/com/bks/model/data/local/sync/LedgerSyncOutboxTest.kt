@@ -19,7 +19,7 @@ import com.bks.model.data.local.database.CategoryEntity
 import com.bks.model.data.local.database.FundingAccountEntity
 import com.bks.model.domain.ledger.FundingAccountSourceScope
 import com.bks.model.data.local.database.LedgerBookEntity
-import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
 import com.bks.model.data.local.sync.LocalSyncMutationRecorder
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
@@ -107,7 +107,7 @@ class LedgerSyncOutboxTest {
 
     @Test
     fun reseedingUnchangedSyncedSystemCategoriesDoesNotQueueMutations() = runBlocking {
-        val repository = LocalLedgerRepository(
+        val repository = TestLedgerRepository(
             database = database,
             clock = { NOW },
             idGenerator = { "repository-${++nextId}" }

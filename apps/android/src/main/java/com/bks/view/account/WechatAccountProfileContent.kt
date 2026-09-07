@@ -1,6 +1,6 @@
 package com.bks.view.account
 
-import com.bks.viewmodel.account.AccountIdentityUiState
+import com.bks.viewmodel.account.AccountIdentityFormState
 
 import com.bks.model.domain.account.AccountSession
 import androidx.compose.foundation.BorderStroke
@@ -35,7 +35,7 @@ internal enum class WechatAccountProfileAction {
 }
 
 internal data class WechatAccountProfileUiState(
-    val identityState: AccountIdentityUiState,
+    val identityState: AccountIdentityFormState,
     val displayedAvatarUrl: String?,
     val avatarError: String?,
     val wechatAuthAvailable: Boolean
@@ -129,7 +129,7 @@ private fun WechatAccountAvatarRow(
 @Composable
 private fun WechatAccountNicknameRow(
     session: AccountSession.SignedIn,
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     onAction: (WechatAccountProfileAction) -> Unit
 ) {
     Row(
@@ -193,7 +193,7 @@ private fun WechatAccountIdRow(session: AccountSession.SignedIn) {
 @Composable
 private fun WechatAccountPhoneRow(
     session: AccountSession.SignedIn,
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     onAction: (WechatAccountProfileAction) -> Unit
 ) {
     Row(
@@ -235,7 +235,7 @@ private fun WechatAccountPhoneRow(
 @Composable
 private fun WechatAccountEmailRow(
     session: AccountSession.SignedIn,
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     onAction: (WechatAccountProfileAction) -> Unit
 ) {
     Row(
@@ -277,7 +277,7 @@ private fun WechatAccountEmailRow(
 @Composable
 private fun WechatAccountWechatRow(
     session: AccountSession.SignedIn,
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     wechatAuthAvailable: Boolean,
     onAction: (WechatAccountProfileAction) -> Unit
 ) {

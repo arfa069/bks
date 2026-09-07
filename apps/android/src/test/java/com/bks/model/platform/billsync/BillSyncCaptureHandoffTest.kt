@@ -3,7 +3,7 @@ package com.bks.model.platform.billsync
 import com.bks.model.domain.billsync.BillSyncFailureReason
 import com.bks.model.domain.billsync.BillSyncResult
 import com.bks.model.domain.ledger.PaymentSource
-import com.bks.model.platform.billsync.AcceptedWindowMemory
+import com.bks.model.platform.billsync.CaptureWindowTracker
 import com.bks.model.platform.billsync.BillSyncCaptureOutcome
 import com.bks.model.platform.billsync.collectReadableText
 import com.bks.model.platform.billsync.handoffSanitizedCapture
@@ -28,11 +28,11 @@ class BillSyncCaptureHandoffTest {
         val root = node("safe")
         shadowOf(root).addChild(node("password").apply { isPassword = true })
         val capture = SanitizedBillSyncCapture(PAYMENT_PACKAGE, WINDOW_ID, root.collectReadableText())
-        val acceptedWindows = AcceptedWindowMemory()
+        val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(recognized = true)
 
-        handoff(capture, acceptedWindows, coordinator)
-        handoff(capture, acceptedWindows, coordinator)
+        handoff(capture, windowTracker, coordinator)
+        handoff(capture, windowTracker, coordinator)
 
         assertEquals(listOf("safe", "safe"), coordinator.recognizedPageTexts)
         assertEquals(
@@ -40,107 +40,107 @@ class BillSyncCaptureHandoffTest {
             coordinator.recognizedPaymentSources
         )
         assertEquals(1, coordinator.persistedResults.size)
-        assertFalse(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertFalse(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
     }
 
     @Test
     fun unrecognizedCaptureReleasesPreviouslySuccessfulWindow() {
-        val acceptedWindows = AcceptedWindowMemory()
-        assertTrue(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
-        acceptedWindows.persistenceSucceeded(PAYMENT_PACKAGE, WINDOW_ID)
+        val windowTracker = CaptureWindowTracker()
+        assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        windowTracker.persistenceSucceeded(PAYMENT_PACKAGE, WINDOW_ID)
         val coordinator = FakeCaptureCoordinator(recognized = false)
 
-        handoff(capture(), acceptedWindows, coordinator)
+        handoff(capture(), windowTracker, coordinator)
 
-        assertTrue(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
         assertTrue(coordinator.persistedResults.isEmpty())
     }
 
     @Test
     fun unrecognizedCaptureDuringPersistenceReleasesAfterPersistenceCompletes() {
-        val acceptedWindows = AcceptedWindowMemory()
+        val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(recognized = true)
         var pendingPersistence: (suspend () -> Unit)? = null
 
         handoffSanitizedCapture(
             capture = capture(),
-            acceptedWindows = acceptedWindows,
+            windowTracker = windowTracker,
             recognize = coordinator::recognize,
             persist = coordinator::persist,
             launch = { block -> pendingPersistence = block }
         )
         coordinator.recognized = false
-        handoff(capture(), acceptedWindows, coordinator)
+        handoff(capture(), windowTracker, coordinator)
 
         runBlocking { requireNotNull(pendingPersistence).invoke() }
 
-        assertTrue(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
         assertEquals(1, coordinator.persistedResults.size)
     }
 
     @Test
     fun recognitionReturningDuringPersistenceKeepsWindowSuppressed() {
-        val acceptedWindows = AcceptedWindowMemory()
+        val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(recognized = true)
         var pendingPersistence: (suspend () -> Unit)? = null
 
         handoffSanitizedCapture(
             capture = capture(),
-            acceptedWindows = acceptedWindows,
+            windowTracker = windowTracker,
             recognize = coordinator::recognize,
             persist = coordinator::persist,
             launch = { block -> pendingPersistence = block }
         )
         coordinator.recognized = false
-        handoff(capture(), acceptedWindows, coordinator)
+        handoff(capture(), windowTracker, coordinator)
         coordinator.recognized = true
-        handoff(capture(), acceptedWindows, coordinator)
+        handoff(capture(), windowTracker, coordinator)
 
         runBlocking { requireNotNull(pendingPersistence).invoke() }
 
         assertEquals(1, coordinator.persistedResults.size)
-        assertFalse(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertFalse(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
     }
 
     @Test
     fun processorFailureReleasesWindowForRetry() {
-        val acceptedWindows = AcceptedWindowMemory()
+        val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(
             recognized = true,
             persistFailure = IllegalStateException("expected")
         )
 
-        handoff(capture(), acceptedWindows, coordinator)
+        handoff(capture(), windowTracker, coordinator)
 
-        assertTrue(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertTrue(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
     }
 
     @Test
     fun cancellationPropagatesWithoutReleasingSuccessfulWindow() {
-        val acceptedWindows = AcceptedWindowMemory()
+        val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(
             recognized = true,
             persistFailure = CancellationException("expected")
         )
 
         val cancellation = runCatching {
-            handoff(capture(), acceptedWindows, coordinator)
+            handoff(capture(), windowTracker, coordinator)
         }.exceptionOrNull()
 
         assertTrue(cancellation is CancellationException)
-        assertFalse(acceptedWindows.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
+        assertFalse(windowTracker.acceptIfNew(PAYMENT_PACKAGE, WINDOW_ID))
     }
 
     @Test
     fun outcomeReportsActualInsertDuplicateAndParserFailureReasons() {
-        val acceptedWindows = AcceptedWindowMemory()
+        val windowTracker = CaptureWindowTracker()
         val coordinator = FakeCaptureCoordinator(recognized = true)
         val outcomes = mutableListOf<BillSyncCaptureOutcome>()
 
-        handoff(capture(), acceptedWindows, coordinator, outcomes)
-        handoff(capture(), acceptedWindows, coordinator, outcomes)
+        handoff(capture(), windowTracker, coordinator, outcomes)
+        handoff(capture(), windowTracker, coordinator, outcomes)
         coordinator.recognized = false
-        handoff(capture(), acceptedWindows, coordinator, outcomes)
+        handoff(capture(), windowTracker, coordinator, outcomes)
 
         assertEquals(BillSyncCaptureOutcome.Inserted(1), outcomes[0])
         assertEquals(
@@ -162,13 +162,13 @@ class BillSyncCaptureHandoffTest {
 
     private fun handoff(
         capture: SanitizedBillSyncCapture,
-        acceptedWindows: AcceptedWindowMemory,
+        windowTracker: CaptureWindowTracker,
         coordinator: FakeCaptureCoordinator,
         outcomes: MutableList<BillSyncCaptureOutcome>? = null
     ) {
         handoffSanitizedCapture(
             capture = capture,
-            acceptedWindows = acceptedWindows,
+            windowTracker = windowTracker,
             recognize = coordinator::recognize,
             persist = coordinator::persist,
             launch = { block -> runBlocking { block() } },

@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MvvmPackageArchitectureTest {
+    private val ruleChecker = KotlinArchitectureRuleChecker()
     private val sourceRoot = Path.of(
         requireNotNull(System.getProperty(MAIN_SOURCE_ROOT_PROPERTY)) {
             "$MAIN_SOURCE_ROOT_PROPERTY must be supplied by Gradle"
@@ -81,8 +82,10 @@ class MvvmPackageArchitectureTest {
                         add("$relative uses unsupported model section $modelSection")
                     }
                 }
-                LEGACY_PACKAGES.filter(text::contains).forEach { legacy ->
-                    add("$relative still references $legacy")
+                ruleChecker.codeDependencies(text).forEach { dependency ->
+                    LEGACY_PACKAGES.firstOrNull(dependency::startsWith)?.let {
+                        add("$relative still references legacy dependency $dependency")
+                    }
                 }
             }
         }
@@ -94,35 +97,32 @@ class MvvmPackageArchitectureTest {
         val violations = buildList {
             sources.forEach { source ->
                 val relative = relativePath(source)
-                val imports = source.readText().lineSequence()
-                    .filter { it.startsWith("import ") }
-                    .map { it.removePrefix("import ").substringBefore(" as ") }
-                    .toList()
+                val text = source.readText()
                 when {
-                    relative.startsWith("model/domain/") -> checkImports(
+                    relative.startsWith("model/domain/") -> checkDependencies(
                         relative,
-                        imports,
+                        text,
                         DOMAIN_FORBIDDEN_IMPORTS,
                         this
                     )
-                    relative.startsWith("model/application/") -> checkImports(
+                    relative.startsWith("model/application/") -> checkDependencies(
                         relative,
-                        imports,
+                        text,
                         APPLICATION_FORBIDDEN_IMPORTS,
                         this
                     )
                     relative.startsWith("model/data/") || relative.startsWith("model/platform/") ->
-                        checkImports(relative, imports, MODEL_REVERSE_IMPORTS, this)
-                    relative.startsWith("viewmodel/") -> checkImports(
+                        checkDependencies(relative, text, MODEL_REVERSE_IMPORTS, this)
+                    relative.startsWith("viewmodel/") -> checkDependencies(
                         relative,
-                        imports,
+                        text,
                         VIEW_MODEL_FORBIDDEN_IMPORTS,
                         this
                     )
                     relative.startsWith("view/") && !relative.startsWith("view/app/") -> {
-                        checkImports(relative, imports, VIEW_FORBIDDEN_IMPORTS, this)
-                        if (imports.any { it.endsWith(".BksAppContainer") }) {
-                            add("$relative imports BksAppContainer outside view/app")
+                        checkDependencies(relative, text, VIEW_FORBIDDEN_IMPORTS, this)
+                        if (ruleChecker.codeDependencies(text).any { it.endsWith(".BksAppContainer") }) {
+                            add("$relative references BksAppContainer outside view/app")
                         }
                     }
                 }
@@ -137,14 +137,15 @@ class MvvmPackageArchitectureTest {
             sources.forEach { source ->
                 val relative = relativePath(source)
                 val text = source.readText()
-                if ("@Composable" in text && !relative.startsWith("view/")) {
+                val code = ruleChecker.codeOnly(text)
+                if ("@Composable" in code && !relative.startsWith("view/")) {
                     add("$relative declares Compose UI outside view")
                 }
-                if (VIEW_MODEL_DECLARATION.containsMatchIn(text) && !relative.startsWith("viewmodel/")) {
+                if (VIEW_MODEL_DECLARATION.containsMatchIn(code) && !relative.startsWith("viewmodel/")) {
                     add("$relative declares an AndroidX ViewModel outside viewmodel")
                 }
                 if (
-                    "import androidx.room" in text &&
+                    ruleChecker.codeDependencies(text).any { it.startsWith("androidx.room.") } &&
                     !relative.startsWith("model/data/local/")
                 ) {
                     add("$relative uses Room outside model/data/local")
@@ -154,17 +155,30 @@ class MvvmPackageArchitectureTest {
         assertNoViolations(violations)
     }
 
-    private fun checkImports(
+    @Test
+    fun screenEntrypointsDoNotAcceptOrAssembleBusinessOwners() {
+        val violations = buildList {
+            sources.forEach { source ->
+                val relative = relativePath(source)
+                if (relative.startsWith("view/") && source.fileName.toString().contains("Screen")) {
+                    addAll(ruleChecker.screenBoundaryViolations(relative, source.readText()))
+                }
+            }
+        }
+        assertNoViolations(violations)
+    }
+
+    private fun checkDependencies(
         relative: String,
-        imports: List<String>,
+        source: String,
         forbiddenPrefixes: List<String>,
         violations: MutableList<String>
     ) {
-        imports.forEach { dependency ->
-            forbiddenPrefixes.firstOrNull(dependency::startsWith)?.let {
-                violations.add("$relative imports forbidden dependency $dependency")
-            }
-        }
+        violations += ruleChecker.forbiddenDependencyViolations(
+            relativePath = relative,
+            source = source,
+            forbiddenPrefixes = forbiddenPrefixes
+        )
     }
 
     private fun relativePath(source: Path): String =
@@ -186,7 +200,7 @@ class MvvmPackageArchitectureTest {
         val DOMAIN_FORBIDDEN_IMPORTS = listOf(
             "android.", "androidx.", "com.bks.api.", "com.bks.model.application.",
             "com.bks.model.data.", "com.bks.model.platform.", "com.bks.view.",
-            "com.bks.viewmodel."
+            "com.bks.viewmodel.", "java.io.", "java.nio.file.", "kotlin.io.path."
         )
         val APPLICATION_FORBIDDEN_IMPORTS = listOf(
             "android.", "androidx.compose.", "androidx.lifecycle.", "androidx.room.",
@@ -196,7 +210,7 @@ class MvvmPackageArchitectureTest {
         val MODEL_REVERSE_IMPORTS = listOf("com.bks.view.", "com.bks.viewmodel.")
         val VIEW_MODEL_FORBIDDEN_IMPORTS = listOf(
             "android.", "androidx.activity.", "androidx.compose.", "androidx.room.",
-            "com.bks.api.", "com.bks.model.data.", "com.bks.view."
+            "com.bks.api.", "com.bks.model.data.", "com.bks.model.platform.", "com.bks.view."
         )
         val VIEW_FORBIDDEN_IMPORTS = listOf("com.bks.model.data.", "androidx.room.")
     }

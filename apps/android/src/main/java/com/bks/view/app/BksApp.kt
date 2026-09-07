@@ -23,8 +23,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.R
 import com.bks.model.platform.app.BksAppContainer
@@ -36,8 +34,8 @@ import com.bks.model.domain.account.AccountRepository
 import com.bks.model.domain.account.AccountSession
 import com.bks.model.application.account.AccountSessionCoordinator
 import com.bks.model.application.account.AccountSessionNotice
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
 import com.bks.model.application.account.cloudWritesPaused
 import com.bks.model.application.account.effectiveAiCategorizationSettings
 import com.bks.model.application.account.settingsSyncInFlight
@@ -50,7 +48,7 @@ import com.bks.viewmodel.ledger.LedgerUiState
 import com.bks.viewmodel.monitoring.AutomaticBookkeepingFeatureState
 import com.bks.viewmodel.monitoring.AutomaticBookkeepingViewModel
 import com.bks.view.profile.ProfileDestination
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewQueueUiState
 import com.bks.viewmodel.review.ReviewQueueViewModel
 import com.bks.viewmodel.settings.DataAndBackupUiState
 import com.bks.viewmodel.settings.DataAndBackupViewModel
@@ -235,7 +233,6 @@ fun BksApp(
                                                 appState.profileDestination.value = null
                                             },
                                             onBack = {
-                                                accountManagementViewModel.closeManagement()
                                                 appState.profileDestination.value = null
                                             },
                                             innerPadding = innerPadding
@@ -341,7 +338,7 @@ private data class BksFeatureOwners(
     val ledgerViewModel: LedgerViewModel,
     val ledgerUiState: LedgerUiState,
     val reviewQueueViewModel: ReviewQueueViewModel,
-    val reviewQueueState: ReviewQueueState,
+    val reviewQueueState: ReviewQueueUiState,
     val dataAndBackupViewModel: DataAndBackupViewModel,
     val dataAndBackupUiState: DataAndBackupUiState,
     val ledgerSyncViewModel: LedgerSyncViewModel,
@@ -415,23 +412,15 @@ private fun rememberBksFeatureOwners(
     val cloudSettingsCoordinator = applicationOwners.cloudSettingsCoordinator
     val ledgerSyncRuntime = applicationOwners.ledgerSyncRuntime
     val diagnosticLogsViewModel: com.bks.viewmodel.diagnostics.DiagnosticLogsViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                com.bks.viewmodel.diagnostics.DiagnosticLogsViewModel(container.diagnosticLogs) as T
-        }
+        factory = diagnosticLogsFactory(container.diagnosticLogs)
     )
     val categorizationViewModel: com.bks.viewmodel.categorization.CategorizationViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                com.bks.viewmodel.categorization.CategorizationViewModel(
-                    preferencesRepository = container.preferencesRepository,
-                    accountSessionState = accountSessionCoordinator.state,
-                    cloudSettingsCoordinator = cloudSettingsCoordinator,
-                    categorizationRulesCoordinator = container.categorizationRulesCoordinator
-                ) as T
-        }
+        factory = categorizationFactory(
+            repository = container.preferencesRepository,
+            accountSessionCoordinator = accountSessionCoordinator,
+            cloudSettingsCoordinator = cloudSettingsCoordinator,
+            categorizationRulesCoordinator = container.categorizationRulesCoordinator
+        )
     )
     val ledgerViewModel: LedgerViewModel = viewModel(
         factory = ledgerFactory(container.ledgerRepository, cloudSettingsCoordinator)
@@ -455,14 +444,11 @@ private fun rememberBksFeatureOwners(
         )
     )
     val ledgerSyncViewModel: LedgerSyncViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerSyncViewModel(
-                runtime = ledgerSyncRuntime,
-                coordinator = container.ledgerSyncCoordinator,
-                accountSessionState = accountSessionCoordinator.state
-            ) as T
-        }
+        factory = ledgerSyncFactory(
+            runtime = ledgerSyncRuntime,
+            coordinator = container.ledgerSyncCoordinator,
+            accountSessionCoordinator = accountSessionCoordinator
+        )
     )
     val automaticBookkeepingViewModel: AutomaticBookkeepingViewModel = viewModel(
         factory = automaticBookkeepingFactory(container.preferencesRepository)

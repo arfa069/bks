@@ -4,10 +4,10 @@ import com.bks.viewmodel.review.formatReviewDateTime
 import com.bks.viewmodel.review.parseReviewDateTime
 import com.bks.viewmodel.review.toTransactionKind
 import com.bks.viewmodel.ledger.label
-import com.bks.viewmodel.review.amountMinorToText
+import com.bks.viewmodel.ledger.amountMinorToText
 import com.bks.view.common.components.Button
 import com.bks.viewmodel.review.parseReviewEvidenceText
-import com.bks.viewmodel.review.ReviewQueueEntry
+import com.bks.viewmodel.review.ReviewEntryUiModel
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,7 +51,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private data class AiSuggestionRequest(
-    val entry: ReviewQueueEntry,
+    val entry: ReviewEntryUiModel,
     val draft: LedgerEntryFormState,
     val input: LedgerEntryFormSubmission,
     val categories: List<LedgerCategoryUiModel>,
@@ -62,7 +62,7 @@ private data class AiSuggestionRequest(
 
 @Composable
 internal fun ReviewEditorTools(
-    entry: ReviewQueueEntry,
+    entry: ReviewEntryUiModel,
     draft: LedgerEntryFormState,
     categories: List<LedgerCategoryUiModel>,
     fundingAccounts: List<FundingAccountUiModel>,
@@ -201,7 +201,7 @@ private suspend fun requestAiSuggestion(request: AiSuggestionRequest): String {
     } ?: result.message
 }
 
-internal fun ReviewQueueEntry.toLedgerEntryFormState(
+internal fun ReviewEntryUiModel.toLedgerEntryFormState(
     categories: List<LedgerCategoryUiModel>,
     fundingAccounts: List<FundingAccountUiModel>
 ): LedgerEntryFormState {
@@ -256,7 +256,7 @@ internal fun String.toReviewPaymentSource(): PaymentSource? = when (trim()) {
 }
 
 @Composable
-private fun EvidenceSection(entry: ReviewQueueEntry) {
+private fun EvidenceSection(entry: ReviewEntryUiModel) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("证据", fontWeight = FontWeight.SemiBold)
         Text("来源：${entry.sourceLabel}", style = MaterialTheme.typography.bodySmall)

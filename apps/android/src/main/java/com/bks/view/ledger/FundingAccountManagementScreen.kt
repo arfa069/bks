@@ -47,8 +47,9 @@ import com.bks.view.common.components.TextButton
 import kotlinx.coroutines.launch
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.viewmodel.ledger.FundingAccountUiModel
+
 @Composable
-internal fun FundingAccountManagementContent(
+internal fun FundingAccountManagementScreen(
     fundingAccounts: List<FundingAccountUiModel>,
     defaultFundingAccountSyncId: String? = null,
     snackbarHostState: SnackbarHostState,

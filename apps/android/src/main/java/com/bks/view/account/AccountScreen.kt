@@ -1,16 +1,15 @@
 package com.bks.view.account
 
-import com.bks.model.platform.account.WechatAuthCallback
 import com.bks.viewmodel.account.isNetworkAction
 import com.bks.viewmodel.account.WechatBindMethod
 import com.bks.viewmodel.account.WechatLoginPage
 import com.bks.viewmodel.account.WechatLoginUiState
-import com.bks.viewmodel.account.AccountUiState
+import com.bks.viewmodel.account.AccountFormState
 import com.bks.viewmodel.account.AccountAction
-import com.bks.viewmodel.account.AccountEntryViewModel
+import com.bks.viewmodel.account.AccountEntryOperationState
 import com.bks.viewmodel.account.AccountEntryWechatAction
 import com.bks.viewmodel.account.AccountFlow
-import com.bks.viewmodel.account.reduceAccountState
+import com.bks.viewmodel.account.reduceAccountFormState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -23,13 +22,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bks.view.common.components.SlidePageTransition
-internal data class AccountScreenDependencies(
-    val viewModel: AccountEntryViewModel,
-    val wechatAuthCallback: WechatAuthCallback? = null,
-    val onWechatAuthCallbackConsumed: () -> Unit = {},
+
+internal data class AccountScreenState(
+    val operationState: AccountEntryOperationState,
+    val wechatAvailable: Boolean
+)
+
+internal data class AccountScreenPlatform(
+    val snackbarHostState: SnackbarHostState,
     val avatarCacheOverride: WechatAvatarCache? = null
+)
+
+internal data class AccountScreenActions(
+    val onSubmit: (AccountAction, AccountFormState) -> Unit,
+    val onEnterLocalMode: () -> Unit,
+    val onInvalidateSmsContext: () -> Unit,
+    val onWechatAction: (AccountEntryWechatAction) -> Unit,
+    val onComplianceClick: () -> Unit,
+    val onBack: (() -> Unit)?
 )
 
 internal data class WechatLoginActions(
@@ -48,60 +59,45 @@ internal data class WechatLoginPageArgs(
 
 @Composable
 internal fun AccountScreen(
-    dependencies: AccountScreenDependencies,
+    state: AccountScreenState,
+    actions: AccountScreenActions,
+    platform: AccountScreenPlatform,
     modifier: Modifier = Modifier,
-    initialState: AccountUiState = AccountUiState(),
-    onComplianceClick: () -> Unit = {},
-    onBack: (() -> Unit)? = null
+    initialState: AccountFormState = AccountFormState()
 ) {
-    val viewModel = dependencies.viewModel
     var formState by remember { mutableStateOf(initialState) }
-    val operationState by viewModel.state.collectAsStateWithLifecycle()
+    val operationState = state.operationState
     val scrollState = rememberScrollState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val avatarCache = dependencies.avatarCacheOverride ?: rememberWechatAvatarCache()
+    val avatarCache = platform.avatarCacheOverride ?: rememberWechatAvatarCache()
     val renderedState = formState.copy(
         operationInProgress = operationState.operationInProgress,
         smsCountdownSeconds = operationState.smsCountdownSeconds
     )
 
     fun dispatch(action: AccountAction) {
-        val validated = reduceAccountState(formState, action)
+        val validated = reduceAccountFormState(formState, action)
         formState = validated
         when {
-            action == AccountAction.ConfirmLocalMode -> viewModel.enterLocalMode()
-            action is AccountAction.UpdatePhone || action.changesSmsContext() -> viewModel.invalidateSmsContext()
-            action.isNetworkAction() -> viewModel.submit(action, validated)
+            action == AccountAction.ConfirmLocalMode -> actions.onEnterLocalMode()
+            action is AccountAction.UpdatePhone || action.changesSmsContext() -> actions.onInvalidateSmsContext()
+            action.isNetworkAction() -> actions.onSubmit(action, validated)
         }
     }
 
     AccountBackHandler(
         wechatState = operationState.wechat,
-        onWechatBack = { viewModel.onWechatAction(AccountEntryWechatAction.Back) },
+        onWechatBack = { actions.onWechatAction(AccountEntryWechatAction.Back) },
         flow = formState.flow,
         onFlowBack = { flow ->
             dispatch(if (flow == AccountFlow.Recovery) AccountAction.ShowLogin else AccountAction.BackToLanding)
         },
-        onBack = onBack
+        onBack = actions.onBack
     )
 
     LaunchedEffect(formState.flow) { scrollState.scrollTo(0) }
 
-    LaunchedEffect(dependencies.wechatAuthCallback) {
-        if (dependencies.wechatAuthCallback != null && viewModel.wechatAvailable) {
-            viewModel.onWechatAction(
-                AccountEntryWechatAction.HandleCallback(dependencies.wechatAuthCallback)
-            )
-            dependencies.onWechatAuthCallbackConsumed()
-        }
-    }
-
-    LaunchedEffect(viewModel) {
-        viewModel.notices.collect { snackbarHostState.showSnackbar(it) }
-    }
-
     LaunchedEffect(formState.errorMessage) {
-        formState.errorMessage?.let { snackbarHostState.showSnackbar(it) }
+        formState.errorMessage?.let { platform.snackbarHostState.showSnackbar(it) }
     }
 
     SlidePageTransition(
@@ -116,24 +112,24 @@ internal fun AccountScreen(
                 args = WechatLoginPageArgs(
                     state = operationState.wechat,
                     actions = WechatLoginActions(
-                        onBack = { viewModel.onWechatAction(AccountEntryWechatAction.Back) },
-                        onShowBinding = { viewModel.onWechatAction(AccountEntryWechatAction.ShowBinding) },
+                        onBack = { actions.onWechatAction(AccountEntryWechatAction.Back) },
+                        onShowBinding = { actions.onWechatAction(AccountEntryWechatAction.ShowBinding) },
                         onSelectBindMethod = {
-                            viewModel.onWechatAction(AccountEntryWechatAction.SelectBindMethod(it))
+                            actions.onWechatAction(AccountEntryWechatAction.SelectBindMethod(it))
                         },
-                        onCreateAccount = { viewModel.onWechatAction(AccountEntryWechatAction.CreateAccount) },
+                        onCreateAccount = { actions.onWechatAction(AccountEntryWechatAction.CreateAccount) },
                         onRequestBindingSms = {
-                            viewModel.onWechatAction(AccountEntryWechatAction.RequestBindingSms(it))
+                            actions.onWechatAction(AccountEntryWechatAction.RequestBindingSms(it))
                         },
                         onBindExistingAccount = { identifier, password, code ->
-                            viewModel.onWechatAction(
+                            actions.onWechatAction(
                                 AccountEntryWechatAction.BindExistingAccount(identifier, password, code)
                             )
                         }
                     )
                 ),
                 avatarCache = avatarCache,
-                snackbarHostState = snackbarHostState,
+                snackbarHostState = platform.snackbarHostState,
                 scrollState = scrollState,
                 modifier = Modifier.fillMaxSize()
             )
@@ -142,13 +138,13 @@ internal fun AccountScreen(
                 args = AccountFlowPageArgs(
                     state = renderedState,
                     onAction = ::dispatch,
-                    wechatEnabled = viewModel.wechatAvailable,
+                    wechatEnabled = state.wechatAvailable,
                     onWechatClick = {
-                        viewModel.onWechatAction(AccountEntryWechatAction.Start(formState.agreementAccepted))
+                        actions.onWechatAction(AccountEntryWechatAction.Start(formState.agreementAccepted))
                     },
-                    onComplianceClick = onComplianceClick
+                    onComplianceClick = actions.onComplianceClick
                 ),
-                snackbarHostState = snackbarHostState,
+                snackbarHostState = platform.snackbarHostState,
                 scrollState = scrollState,
                 modifier = Modifier.fillMaxSize()
             )

@@ -1,7 +1,7 @@
 package com.bks.view.review
 
-import com.bks.viewmodel.review.formatAmount
-import com.bks.viewmodel.review.ReviewQueueIgnoredEntry
+import com.bks.viewmodel.ledger.formatMoney
+import com.bks.viewmodel.review.IgnoredReviewEntryUiModel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun IgnoredEntriesDialog(
-    ignoredEntries: List<ReviewQueueIgnoredEntry>,
+    ignoredEntries: List<IgnoredReviewEntryUiModel>,
     onDismiss: () -> Unit,
     onRecover: (String) -> Unit
 ) {
@@ -43,7 +43,7 @@ internal fun IgnoredEntriesDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(ignored.entry.title, fontWeight = FontWeight.SemiBold)
-                                Text(formatAmount(ignored.entry.amountMinor))
+                                Text(formatMoney(ignored.entry.amountMinor))
                             }
                             Spacer(Modifier.width(12.dp))
                             OutlinedButton(

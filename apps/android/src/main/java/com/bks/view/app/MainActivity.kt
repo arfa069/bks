@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import com.bks.model.platform.app.bksAppContainer
-import com.bks.model.platform.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthCallback
 import com.bks.model.platform.account.WechatAuthCallbackIntent
 import com.bks.view.common.platform.BillSyncStateCoordinator
 class MainActivity : ComponentActivity() {

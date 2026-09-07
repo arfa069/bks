@@ -5,7 +5,7 @@ import com.bks.viewmodel.account.WechatLoginUiState
 import com.bks.viewmodel.ledger.label
 import com.bks.viewmodel.account.AccountAction
 import com.bks.viewmodel.account.AccountFlow
-import com.bks.viewmodel.account.AccountUiState
+import com.bks.viewmodel.account.AccountFormState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
@@ -51,7 +51,7 @@ internal fun currentAccountPage(
 }
 
 internal class AccountFlowPageArgs(
-    val state: AccountUiState,
+    val state: AccountFormState,
     val onAction: (AccountAction) -> Unit,
     val wechatEnabled: Boolean,
     val onWechatClick: () -> Unit,
@@ -135,7 +135,7 @@ private fun AccountHeader() {
 
 @Composable
 private fun LandingContent(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit,
     wechatEnabled: Boolean,
     onWechatClick: () -> Unit,
@@ -182,7 +182,7 @@ private fun LandingContent(
 
 @Composable
 private fun LoginContent(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit,
     wechatEnabled: Boolean,
     onWechatClick: () -> Unit
@@ -223,7 +223,7 @@ private fun LoginContent(
 
 @Composable
 private fun RegisterContent(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit,
     wechatEnabled: Boolean,
     onWechatClick: () -> Unit
@@ -254,7 +254,7 @@ private fun RegisterContent(
 
 @Composable
 private fun RecoveryContent(
-    state: AccountUiState,
+    state: AccountFormState,
     onAction: (AccountAction) -> Unit
 ) {
     AccountFormFrame(title = "找回密码", onBack = { onAction(AccountAction.ShowLogin) }) {

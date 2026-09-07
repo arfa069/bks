@@ -187,10 +187,10 @@ internal class LedgerViewModel(
 private const val LOCAL_DATA_REPLACEMENT_MESSAGE = "本机数据正在删除，请稍后重试"
 
 private fun LedgerSnapshot.toUiState(): LedgerUiState {
-    val mappedEntries = ledgerEntries.map { it.toLedgerUiEntry() }
+    val mappedEntries = ledgerEntries.map { it.toLedgerEntryUiModel() }
     return LedgerUiState(
         entries = mappedEntries,
-        deletedEntries = deletedLedgerEntries.map { it.toLedgerUiEntry() },
+        deletedEntries = deletedLedgerEntries.map { it.toLedgerEntryUiModel() },
         categories = categories.map { it.toLedgerCategoryUiModel() },
         fundingAccounts = fundingAccounts.map { it.toFundingAccountUiModel() },
         ledgerBooks = ledgerBooks.map { ledgerBook ->

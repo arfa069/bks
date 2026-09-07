@@ -4,8 +4,7 @@ import com.bks.model.domain.account.AccountRuntimeState
 import com.bks.model.domain.account.AccountRuntimeStatus
 import com.bks.model.domain.account.AccountSession
 import com.bks.model.domain.account.AccountDeletionState
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.viewmodel.account.AccountManagementViewModel
+import com.bks.viewmodel.account.AccountManagementOperationState
 import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -32,17 +31,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bks.view.common.components.Button
 import com.bks.view.common.components.OutlinedButton
 import com.bks.view.common.components.TextButton
 import java.text.DateFormat
 import java.util.Date
 
-internal data class AccountManagementScreenDependencies(
-    val viewModel: AccountManagementViewModel,
-    val wechatAuthCallback: WechatAuthCallback? = null,
-    val onWechatAuthCallbackConsumed: () -> Unit = {},
+internal data class AccountManagementScreenPlatform(
     val avatarCacheOverride: WechatAvatarCache? = null,
     val avatarDataReader: suspend (Context, Uri) -> String = { context, uri ->
         context.readCompressedAvatarDataUrl(uri)
@@ -52,32 +47,35 @@ internal data class AccountManagementScreenDependencies(
 internal data class AccountManagementScreenState(
     val session: AccountSession,
     val runtimeState: AccountRuntimeState,
-    val deletionState: AccountDeletionState
+    val deletionState: AccountDeletionState,
+    val operationState: AccountManagementOperationState,
+    val wechatAvailable: Boolean
 )
 
 internal data class AccountManagementScreenActions(
     val onSignInOrRegister: () -> Unit,
-    val onBack: () -> Unit
+    val onBack: () -> Unit,
+    val onRetryVerification: () -> Unit,
+    val onSignOut: () -> Unit,
+    val onRequestDeletion: () -> Unit,
+    val onCancelDeletion: () -> Unit,
+    val wechat: WechatAccountManagementActions
 )
 
 @Composable
 internal fun AccountManagementScreen(
     screenState: AccountManagementScreenState,
-    dependencies: AccountManagementScreenDependencies,
+    platform: AccountManagementScreenPlatform,
     actions: AccountManagementScreenActions,
     modifier: Modifier = Modifier
 ) {
     val session = screenState.session
     val runtimeState = screenState.runtimeState
     val deletionState = screenState.deletionState
-    val viewModel = dependencies.viewModel
-    val operationState by viewModel.state.collectAsStateWithLifecycle()
+    val operationState = screenState.operationState
     var showDeletionConfirmation by remember { mutableStateOf(false) }
-    val avatarCache = dependencies.avatarCacheOverride ?: rememberWechatAvatarCache()
+    val avatarCache = platform.avatarCacheOverride ?: rememberWechatAvatarCache()
 
-    LaunchedEffect(session) {
-        viewModel.activate(session)
-    }
     val operationInProgress = operationState.accountOperationInProgress ||
         operationState.identityOperationInProgress
     LaunchedEffect(operationInProgress) {
@@ -112,25 +110,25 @@ internal fun AccountManagementScreen(
                 if (runtimeState.status == AccountRuntimeStatus.OfflineUnverified) {
                     OfflineAccountConnectionCard(
                         onRetry = {
-                            viewModel.retryVerification(session, deletionState)
+                            actions.onRetryVerification()
                         },
                         retryEnabled = !operationInProgress
                     )
                 }
                 WechatAccountManagementPanel(
                     session = session,
-                    deletionState = deletionState,
-                    operationState = operationState,
-                    dependencies = WechatAccountManagementDependencies(
-                        viewModel = viewModel,
-                        wechatAuthCallback = dependencies.wechatAuthCallback,
+                    state = WechatAccountManagementState(
+                        operationState = operationState,
+                        wechatAuthAvailable = screenState.wechatAvailable
+                    ),
+                    platform = WechatAccountManagementPlatform(
                         avatarCache = avatarCache,
-                        onWechatAuthCallbackConsumed = dependencies.onWechatAuthCallbackConsumed,
-                        avatarDataReader = dependencies.avatarDataReader
-                    )
+                        avatarDataReader = platform.avatarDataReader
+                    ),
+                    actions = actions.wechat
                 )
                 OutlinedButton(
-                    onClick = { viewModel.signOut(session) },
+                    onClick = actions.onSignOut,
                     enabled = !operationInProgress,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -144,7 +142,7 @@ internal fun AccountManagementScreen(
                     operationEnabled = runtimeState.accountOperationsAllowed &&
                         !operationInProgress,
                     onRequest = { showDeletionConfirmation = true },
-                    onCancel = { viewModel.cancelDeletion(session) }
+                    onCancel = actions.onCancelDeletion
                 )
             }
         }
@@ -156,7 +154,7 @@ internal fun AccountManagementScreen(
     if (showDeletionConfirmation && session is AccountSession.SignedIn) {
         AccountDeletionConfirmationDialog(
             operationInProgress = operationInProgress,
-            onConfirm = { viewModel.requestDeletion(session) },
+            onConfirm = actions.onRequestDeletion,
             onDismiss = { showDeletionConfirmation = false }
         )
     }

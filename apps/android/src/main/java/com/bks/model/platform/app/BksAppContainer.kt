@@ -11,10 +11,9 @@ import android.content.Context
 import com.bks.BuildConfig
 import com.bks.model.data.local.database.BksDatabase
 import com.bks.model.data.local.database.BksDatabaseProvider
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.ledger.LocalLedgerDomainRepository
+import com.bks.model.data.local.ledger.RoomLedgerRepository
 import com.bks.model.domain.ledger.LedgerRepository
-import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.domain.settings.PreferencesRepository
 import com.bks.model.domain.settings.DataBackupRepository
 import com.bks.model.application.account.AccountCloudSettingsCoordinator
@@ -24,7 +23,7 @@ import com.bks.model.data.remote.account.HttpAccountRepository
 import com.bks.model.data.local.account.InstallationIdStore
 import com.bks.model.data.local.account.LocalModeSessionStore
 import com.bks.model.data.local.account.SecureAccountSessionStore
-import com.bks.model.platform.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthGateway
 import com.bks.model.platform.billsync.BillSyncCaptureCoordinator
 import com.bks.model.platform.billsync.BillSyncCaptureOperations
 import com.bks.model.application.billsync.BillSyncCaptureProcessor
@@ -35,7 +34,7 @@ import com.bks.model.domain.categorization.CloudAiSettingsGateway
 import com.bks.model.data.remote.categorization.HttpCloudAiSettingsGateway
 import com.bks.model.domain.diagnostics.DiagnosticLogRepository
 import com.bks.model.data.local.diagnostics.DiagnosticLogs
-import com.bks.model.data.local.ledger.ReviewQueuePersistence
+import com.bks.model.data.local.review.RoomReviewQueueRepository
 import com.bks.model.domain.review.ReviewQueueRepository
 import com.bks.model.data.local.backup.LocalDataBackupRepository
 import com.bks.model.data.remote.sync.HttpLedgerSyncRepository
@@ -56,12 +55,11 @@ internal class BksAppContainer(context: Context) {
     private val billSyncCaptureDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     private val database: BksDatabase by lazy { BksDatabaseProvider.get(applicationContext) }
-    private val localLedgerRepository: LocalLedgerRepository by lazy { LocalLedgerRepository(database) }
-    val ledgerRepository: LedgerRepository by lazy { LocalLedgerDomainRepository(localLedgerRepository) }
-    val preferencesRepository: PreferencesRepository by lazy { LocalPreferencesRepository(database) }
+    val ledgerRepository: LedgerRepository by lazy { RoomLedgerRepository(database) }
+    val preferencesRepository: PreferencesRepository by lazy { RoomPreferencesRepository(database) }
     val dataBackupRepository: DataBackupRepository by lazy { LocalDataBackupRepository(database) }
     val reviewQueuePersistence: ReviewQueueRepository by lazy {
-        ReviewQueuePersistence(localLedgerRepository)
+        RoomReviewQueueRepository(database)
     }
     val categorizationRulesCoordinator: CategorizationRulesCoordinator by lazy {
         CategorizationRulesCoordinator(preferencesRepository, reviewQueuePersistence)
@@ -145,7 +143,7 @@ internal class BksAppContainer(context: Context) {
 
     fun createBillSyncCaptureProcessor(): BillSyncCaptureProcessor = BillSyncCaptureProcessor(
         pipeline = BillSyncPipeline(),
-        reviewQueuePersistence = ReviewQueuePersistence(localLedgerRepository),
+        reviewQueuePersistence = RoomReviewQueueRepository(database),
         preferencesRepository = preferencesRepository
     )
 
@@ -167,7 +165,7 @@ internal class BksAppContainer(context: Context) {
     ): AccountCloudSettingsCoordinator = AccountCloudSettingsCoordinator(
         accountSessionState = sessionCoordinator.state,
         preferencesRepository = preferencesRepository,
-        fundingAccountRepository = localLedgerRepository,
+        fundingAccountRepository = ledgerRepository,
         cloudGateway = gateway,
         applicationScope = applicationScope
     )

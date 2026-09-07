@@ -1,40 +1,37 @@
 package com.bks.view.account
 
 import com.bks.model.domain.account.AccountSession
-import com.bks.model.domain.account.AccountDeletionState
-import com.bks.viewmodel.account.AccountIdentityUiState
-import com.bks.viewmodel.account.AccountManagementViewModel
+import com.bks.viewmodel.account.AccountIdentityFormState
 internal class WechatAccountIdentityDialogOperations(
     val session: AccountSession.SignedIn,
-    private val deletionState: AccountDeletionState,
-    private val viewModel: AccountManagementViewModel,
+    private val managementActions: WechatAccountManagementActions,
     val actions: WechatAccountIdentityActions
 ) {
     fun launchNicknameUpdate(nickname: String) {
-        viewModel.updateNickname(session, deletionState, nickname)
+        managementActions.onUpdateNickname(nickname)
     }
 
-    fun launchIdentifierSms(state: AccountIdentityUiState) {
-        viewModel.prepareIdentifierLink(session, state)
+    fun launchIdentifierSms(state: AccountIdentityFormState) {
+        managementActions.onPrepareIdentifierLink(state)
     }
 
-    fun launchIdentifierConfirmation(state: AccountIdentityUiState) {
-        viewModel.confirmIdentifier(session, state)
+    fun launchIdentifierConfirmation(state: AccountIdentityFormState) {
+        managementActions.onConfirmIdentifier(state)
     }
 
-    fun launchPhonePasswordConfirmation(state: AccountIdentityUiState) {
-        viewModel.confirmPhonePassword(session, state)
+    fun launchPhonePasswordConfirmation(state: AccountIdentityFormState) {
+        managementActions.onConfirmPhonePassword(state)
     }
 
-    fun launchMergeConfirmation(state: AccountIdentityUiState) {
-        viewModel.confirmMerge(session, state.confirmText)
+    fun launchMergeConfirmation(state: AccountIdentityFormState) {
+        managementActions.onConfirmMerge(state.confirmText)
     }
 
-    fun launchUnlinkSmsRequest(state: AccountIdentityUiState) {
-        viewModel.requestUnlinkCode(session, state.unlinkIdentifier)
+    fun launchUnlinkSmsRequest(state: AccountIdentityFormState) {
+        managementActions.onRequestUnlinkCode(state.unlinkIdentifier)
     }
 
-    fun launchUnlinkConfirmation(state: AccountIdentityUiState) {
-        viewModel.unlinkWechat(session, state)
+    fun launchUnlinkConfirmation(state: AccountIdentityFormState) {
+        managementActions.onUnlinkWechat(state)
     }
 }

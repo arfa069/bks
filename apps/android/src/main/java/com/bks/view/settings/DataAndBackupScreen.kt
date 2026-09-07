@@ -1,14 +1,14 @@
 package com.bks.view.settings
 
 import com.bks.viewmodel.ledger.label
-import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
+import com.bks.viewmodel.settings.LedgerCsvEntryUiModel
 import com.bks.viewmodel.settings.DataAndBackupActions
 import com.bks.viewmodel.settings.DataAndBackupNotice
 import com.bks.viewmodel.settings.DataAndBackupOperation
 import com.bks.viewmodel.settings.DataAndBackupUiState
 import com.bks.viewmodel.settings.DELETE_LOCAL_DATA_PHRASE
-import com.bks.viewmodel.settings.LedgerSyncSectionActions
-import com.bks.viewmodel.settings.LedgerSyncSettingsUiState
+import com.bks.viewmodel.sync.LedgerSyncSectionActions
+import com.bks.viewmodel.sync.LedgerSyncUiState
 import com.bks.viewmodel.settings.LocalDataDeletionAction
 import com.bks.viewmodel.settings.LocalDataDeletionState
 import com.bks.viewmodel.settings.reduceLocalDataDeletionState
@@ -45,14 +45,14 @@ import androidx.compose.ui.unit.dp
 @Composable
 @Suppress("LongParameterList")
 internal fun DataAndBackupScreen(
-    ledgerEntries: List<BackupLedgerEntryUiModel>,
+    ledgerEntries: List<LedgerCsvEntryUiModel>,
     currentLedgerName: String = "默认账本",
     dataAndBackupState: DataAndBackupUiState,
     dataAndBackupActions: DataAndBackupActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = SnackbarHostState(),
-    ledgerSyncState: LedgerSyncSettingsUiState = LedgerSyncSettingsUiState(),
+    ledgerSyncState: LedgerSyncUiState = LedgerSyncUiState(),
     ledgerSyncActions: LedgerSyncSectionActions = LedgerSyncSectionActions()
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }

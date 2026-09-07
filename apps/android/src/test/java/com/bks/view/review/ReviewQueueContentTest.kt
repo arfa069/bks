@@ -1,8 +1,7 @@
 package com.bks.view.review
 
 import com.bks.model.domain.ledger.Category
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewEntryUiModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +40,7 @@ class ReviewQueueContentTest {
     fun headerShowsCurrentLedgerAsConfirmationTarget() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(),
+                initialState = testReviewQueueUiState(),
                 targetLedgerName = "家庭账本"
             )
         }
@@ -62,7 +61,7 @@ class ReviewQueueContentTest {
     fun summaryShowsApprovedCountsWithoutBillImportAction() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(
+                initialState = testReviewQueueUiState(
                     pendingEntries = listOf(
                         sampleEntry(id = "duplicate", confidence = ConfidenceState.DUPLICATE_SUSPECT),
                         sampleEntry(id = "quick", confidence = ConfidenceState.HIGH)
@@ -85,7 +84,7 @@ class ReviewQueueContentTest {
     fun allPendingEntriesAppearInSingleReviewList() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(
+                initialState = testReviewQueueUiState(
                     pendingEntries = listOf(
                         sampleEntry(id = "high", confidence = ConfidenceState.HIGH),
                         sampleEntry(id = "needs-review", confidence = ConfidenceState.NEEDS_REVIEW),
@@ -113,7 +112,7 @@ class ReviewQueueContentTest {
     @Test
     fun emptyQueueKeepsSummaryAndEmptyState() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState())
+            ReviewQueueScreen(initialState = testReviewQueueUiState())
         }
         composeRule.waitForIdle()
 
@@ -130,7 +129,7 @@ class ReviewQueueContentTest {
     fun largeQueueCanScrollToLastPendingEntry() {
         composeRule.setContent {
             ReviewQueueScreen(
-                initialState = ReviewQueueState(
+                initialState = testReviewQueueUiState(
                     pendingEntries = (1..20).map { index ->
                         sampleEntry(id = "pending-$index").copy(title = "记录 $index")
                     }
@@ -147,7 +146,7 @@ class ReviewQueueContentTest {
     @Test
     fun rowShowsCaptureReasonAndConfidence() {
         composeRule.setContent {
-            ReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            ReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -160,7 +159,7 @@ class ReviewQueueContentTest {
     @Test
     fun detailShowsEvidenceAndCanConfirmOrIgnore() {
         composeRule.setContent {
-            TestReviewQueueScreen(initialState = ReviewQueueState(pendingEntries = listOf(sampleEntry())))
+            TestReviewQueueScreen(initialState = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())))
         }
         composeRule.waitForIdle()
         scrollToFirstPendingEntry()
@@ -195,7 +194,7 @@ class ReviewQueueContentTest {
                     DeviceConfigurationOverride.FontScale(fontScale)
             ) {
                 ReviewQueueScreen(
-                    initialState = ReviewQueueState(
+                    initialState = testReviewQueueUiState(
                         pendingEntries = listOf(sampleEntry(id = "adaptive-entry"))
                     )
                 )
@@ -236,7 +235,7 @@ class ReviewQueueContentTest {
     private fun sampleEntry(
         id: String = "pending-lunch",
         confidence: ConfidenceState = ConfidenceState.NEEDS_REVIEW
-    ): ReviewQueueEntry = ReviewQueueEntry(
+    ): ReviewEntryUiModel = ReviewEntryUiModel(
         id = id,
         title = "午餐",
         amountMinor = 3590,

@@ -5,7 +5,7 @@ import com.bks.model.domain.account.AccountIdentifierParser
 import com.bks.model.domain.account.AccountIdentifierType
 import com.bks.model.domain.account.AccountSession
 import com.bks.viewmodel.account.AccountIdentityPage
-import com.bks.viewmodel.account.AccountIdentityUiState
+import com.bks.viewmodel.account.AccountIdentityFormState
 import com.bks.viewmodel.account.IdentifierAttachMethod
 import com.bks.viewmodel.account.UnlinkMethod
 import com.bks.viewmodel.ledger.label
@@ -50,14 +50,14 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun AccountIdentityDialog(
     title: String,
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     allowPasswordMerge: Boolean,
-    onStateChange: (AccountIdentityUiState) -> Unit,
+    onStateChange: (AccountIdentityFormState) -> Unit,
     onRequestSms: () -> Unit,
     onConfirm: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = { if (!state.operationInProgress) onStateChange(AccountIdentityUiState()) },
+        onDismissRequest = { if (!state.operationInProgress) onStateChange(AccountIdentityFormState()) },
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,7 +124,7 @@ internal fun AccountIdentityDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = { onStateChange(AccountIdentityUiState()) },
+                onClick = { onStateChange(AccountIdentityFormState()) },
                 enabled = !state.operationInProgress
             ) { Text("取消") }
         }
@@ -164,7 +164,7 @@ internal fun SimplePasswordDialog(
 @Composable
 internal fun MergeConfirmationDialog(
     session: AccountSession.SignedIn,
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     onConfirmTextChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
@@ -200,14 +200,14 @@ internal fun MergeConfirmationDialog(
 
 @Composable
 internal fun UnlinkWechatDialog(
-    state: AccountIdentityUiState,
+    state: AccountIdentityFormState,
     availableIdentifiers: List<AccountIdentifier>,
-    onStateChange: (AccountIdentityUiState) -> Unit,
+    onStateChange: (AccountIdentityFormState) -> Unit,
     onRequestSms: () -> Unit,
     onConfirm: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = { if (!state.operationInProgress) onStateChange(AccountIdentityUiState()) },
+        onDismissRequest = { if (!state.operationInProgress) onStateChange(AccountIdentityFormState()) },
         title = { Text("解绑微信") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -269,7 +269,7 @@ internal fun UnlinkWechatDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = { onStateChange(AccountIdentityUiState()) },
+                onClick = { onStateChange(AccountIdentityFormState()) },
                 enabled = !state.operationInProgress
             ) { Text("取消") }
         }

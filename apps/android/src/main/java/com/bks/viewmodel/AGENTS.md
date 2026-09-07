@@ -3,7 +3,7 @@
 ## 职责与依赖
 
 - 保存 AndroidX ViewModel、`UiState`、`UiModel`、UI command/result、reducer 及 Domain → UI mapper。
-- 只能依赖领域类型、领域接口和必要 application coordinator；禁止依赖 Compose、Activity、Context、Intent、URI、Room Entity/DAO、具体 Repository 实现或 Shared API wire DTO。
+- 只能依赖领域类型、领域接口和必要 application coordinator；禁止依赖 `model/platform`、Compose、Activity、Context、Intent、URI、Room Entity/DAO、具体 Repository 实现或 Shared API wire DTO。
 - ViewModel 接收稳定 command/action，不接收 View 私有 DTO 或平台对象；耗时与并发操作保留取消、串行化、generation guard 和 undo 时序。
 
 ## 状态规则

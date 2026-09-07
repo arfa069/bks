@@ -7,7 +7,7 @@ import com.bks.viewmodel.ledger.categoryShareSlices
 import com.bks.viewmodel.ledger.CategoryTotal
 import com.bks.viewmodel.ledger.latestCashFlowMonthKey
 import com.bks.viewmodel.ledger.LedgerFlowType
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import com.bks.viewmodel.ledger.monthlyCashFlowRange
 import com.bks.viewmodel.ledger.monthlySummary
 import com.bks.viewmodel.ledger.MonthlyCashFlowTotal
@@ -219,7 +219,7 @@ class LedgerReportQueriesTest {
         flowType: LedgerFlowType = LedgerFlowType.EXPENSE,
         monthKey: String = "2026-07",
         deletedAtEpochMillis: Long? = null
-    ): LedgerUiEntry = LedgerUiEntry(
+    ): LedgerEntryUiModel = LedgerEntryUiModel(
         id = id,
         title = id,
         amountMinor = amountMinor,

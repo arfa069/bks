@@ -19,4 +19,4 @@
 
 ## 验证
 
-结构变更至少运行 `MvvmPackageArchitectureTest`、受影响层专项测试和 `compileBenchmarkKotlin`；整轮完成后运行 Android 全量单测、Detekt 与 Debug/Release 构建。
+结构变更至少运行 `MvvmPackageArchitectureTest` 及其规则检查器自测、受影响层专项测试和 `compileBenchmarkKotlin`；整轮完成后运行 Android 全量单测、Detekt 与 Debug/Release 构建。架构检查按实际代码解析 import 与全限定引用，并忽略注释和字符串中的文档示例。

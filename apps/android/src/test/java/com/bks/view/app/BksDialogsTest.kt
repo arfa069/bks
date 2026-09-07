@@ -1,6 +1,6 @@
 package com.bks.view.app
 
-import com.bks.model.application.sync.LedgerSyncOperationResult
+import com.bks.viewmodel.sync.LedgerSyncActionResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -11,7 +11,7 @@ class BksDialogsTest {
         val messages = mutableListOf<String>()
 
         runLedgerSyncAccountSwitchAction(
-            switchAccount = { LedgerSyncOperationResult.Success(Unit) },
+            switchAccount = { LedgerSyncActionResult.Success(Unit) },
             showMessage = { message -> messages += message }
         )
 
@@ -24,11 +24,7 @@ class BksDialogsTest {
 
         runLedgerSyncAccountSwitchAction(
             switchAccount = {
-                LedgerSyncOperationResult.Failure(
-                    code = "sync_failed",
-                    message = "切换失败",
-                    retryable = false
-                )
+                LedgerSyncActionResult.Failure("切换失败")
             },
             showMessage = { message -> messages += message }
         )

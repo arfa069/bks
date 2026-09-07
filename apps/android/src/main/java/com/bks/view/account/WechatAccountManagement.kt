@@ -2,14 +2,9 @@ package com.bks.view.account
 
 import com.bks.model.domain.account.AccountSession
 import com.bks.model.domain.account.AccountIdentifierType
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthPurpose
-import com.bks.model.platform.account.managementPurpose
-import com.bks.model.domain.account.AccountDeletionState
 import com.bks.viewmodel.account.AccountManagementOperationState
-import com.bks.viewmodel.account.AccountManagementViewModel
 import com.bks.viewmodel.account.AccountIdentityPage
-import com.bks.viewmodel.account.AccountIdentityUiState
+import com.bks.viewmodel.account.AccountIdentityFormState
 import com.bks.viewmodel.account.IdentifierAttachMethod
 import com.bks.viewmodel.account.UnlinkMethod
 import android.content.Context
@@ -36,17 +31,39 @@ private data class AccountIdentityDraft(
     val confirmText: String = ""
 )
 
-internal data class WechatAccountManagementDependencies(
-    val viewModel: AccountManagementViewModel,
-    val wechatAuthCallback: WechatAuthCallback?,
+internal data class WechatAccountManagementActions(
+    val onStartWechatLink: () -> Unit,
+    val onBeginAvatarRead: () -> Unit,
+    val onCancelAvatarRead: () -> Unit,
+    val onAvatarDataReady: (String) -> Unit,
+    val onAvatarReadFailure: (String) -> Unit,
+    val onIdentityFailure: (String) -> Unit,
+    val onOpenIdentityPage: (AccountIdentityPage) -> Unit,
+    val onCloseIdentityPage: () -> Unit,
+    val onIdentityContextChanged: () -> Unit,
+    val onClearIdentityError: () -> Unit,
+    val onUpdateNickname: (String) -> Unit,
+    val onPrepareIdentifierLink: (AccountIdentityFormState) -> Unit,
+    val onConfirmIdentifier: (AccountIdentityFormState) -> Unit,
+    val onConfirmPhonePassword: (AccountIdentityFormState) -> Unit,
+    val onConfirmMerge: (String) -> Unit,
+    val onRequestUnlinkCode: (String) -> Unit,
+    val onUnlinkWechat: (AccountIdentityFormState) -> Unit
+)
+
+internal data class WechatAccountManagementState(
+    val operationState: AccountManagementOperationState,
+    val wechatAuthAvailable: Boolean
+)
+
+internal data class WechatAccountManagementPlatform(
     val avatarCache: WechatAvatarCache,
-    val onWechatAuthCallbackConsumed: () -> Unit,
     val avatarDataReader: suspend (Context, Uri) -> String
 )
 
 private class WechatAccountProfileActionHandler(
     private val session: AccountSession.SignedIn,
-    private val viewModel: AccountManagementViewModel,
+    private val actions: WechatAccountManagementActions,
     private val onDraftChange: (AccountIdentityDraft) -> Unit,
     private val onAvatarEditorRequested: () -> Unit
 ) {
@@ -62,7 +79,7 @@ private class WechatAccountProfileActionHandler(
             WechatAccountProfileAction.ReplaceEmail -> openIdentifier(AccountIdentifierType.EMAIL, true)
             WechatAccountProfileAction.BindEmail -> openIdentifier(AccountIdentifierType.EMAIL, false)
             WechatAccountProfileAction.UnlinkWechat -> openWechatUnlink()
-            WechatAccountProfileAction.BindWechat -> viewModel.startWechatLink(session)
+            WechatAccountProfileAction.BindWechat -> actions.onStartWechatLink()
         }
     }
 
@@ -78,7 +95,7 @@ private class WechatAccountProfileActionHandler(
 
     private fun openWechatUnlink() {
         if (session.phone == null && session.email == null && session.username == null) {
-            viewModel.reportIdentityFailure("最后一种登录方式不可解绑")
+            actions.onIdentityFailure("最后一种登录方式不可解绑")
         } else {
             open(
                 AccountIdentityPage.UnlinkWechat,
@@ -89,19 +106,19 @@ private class WechatAccountProfileActionHandler(
 
     private fun open(page: AccountIdentityPage, draft: AccountIdentityDraft) {
         onDraftChange(draft)
-        viewModel.openIdentityPage(page)
+        actions.onOpenIdentityPage(page)
     }
 }
 
 @Composable
 internal fun WechatAccountManagementPanel(
     session: AccountSession.SignedIn,
-    deletionState: AccountDeletionState,
-    operationState: AccountManagementOperationState,
-    dependencies: WechatAccountManagementDependencies,
+    state: WechatAccountManagementState,
+    platform: WechatAccountManagementPlatform,
+    actions: WechatAccountManagementActions,
     modifier: Modifier = Modifier
 ) {
-    val viewModel = dependencies.viewModel
+    val operationState = state.operationState
     var draft by remember { mutableStateOf(AccountIdentityDraft()) }
     var showAvatarSourceDialog by rememberSaveable { mutableStateOf(false) }
     var pendingCameraUri by rememberSaveable { mutableStateOf<String?>(null) }
@@ -109,18 +126,11 @@ internal fun WechatAccountManagementPanel(
     LaunchedEffect(operationState.draftResetGeneration) {
         draft = AccountIdentityDraft()
     }
-    LaunchedEffect(dependencies.wechatAuthCallback, session.token) {
-        val callback = dependencies.wechatAuthCallback ?: return@LaunchedEffect
-        if (callback.managementPurpose() != WechatAuthPurpose.LinkCurrentAccount) return@LaunchedEffect
-        dependencies.onWechatAuthCallbackConsumed()
-        viewModel.handleWechatCallback(session, callback)
-    }
-
     val identityState = draft.toUiState(operationState)
-    val profileActionHandler = remember(session, viewModel) {
+    val profileActionHandler = remember(session, actions) {
         WechatAccountProfileActionHandler(
             session = session,
-            viewModel = viewModel,
+            actions = actions,
             onDraftChange = { draft = it },
             onAvatarEditorRequested = { showAvatarSourceDialog = true }
         )
@@ -132,15 +142,15 @@ internal fun WechatAccountManagementPanel(
             identityState = identityState,
             displayedAvatarUrl = session.avatarUrl,
             avatarError = operationState.avatarError,
-            wechatAuthAvailable = viewModel.wechatAvailable
+            wechatAuthAvailable = state.wechatAuthAvailable
         ),
-        avatarCache = dependencies.avatarCache,
+        avatarCache = platform.avatarCache,
         onAction = profileActionHandler::handle,
         modifier = modifier
     )
 
     WechatAccountAvatarEditor(
-        avatarDataReader = dependencies.avatarDataReader,
+        avatarDataReader = platform.avatarDataReader,
         state = WechatAvatarEditorState(
             showSourceDialog = showAvatarSourceDialog,
             pendingCameraUri = pendingCameraUri
@@ -150,27 +160,26 @@ internal fun WechatAccountManagementPanel(
                 showAvatarSourceDialog = next.showSourceDialog
                 pendingCameraUri = next.pendingCameraUri
             },
-            onAvatarReadStarted = viewModel::beginAvatarRead,
-            onAvatarReadCancelled = viewModel::cancelAvatarRead,
-            onAvatarDataReady = { dataUrl -> viewModel.updateAvatar(session, deletionState, dataUrl) },
-            onAvatarReadFailure = viewModel::reportAvatarReadFailure
+            onAvatarReadStarted = actions.onBeginAvatarRead,
+            onAvatarReadCancelled = actions.onCancelAvatarRead,
+            onAvatarDataReady = actions.onAvatarDataReady,
+            onAvatarReadFailure = actions.onAvatarReadFailure
         )
     )
 
     WechatAccountIdentityDialogHost(
         session = session,
-        deletionState = deletionState,
-        viewModel = viewModel,
+        actions = actions,
         state = identityState,
         onStateChange = { next ->
             if (next.page == AccountIdentityPage.Idle) {
                 draft = AccountIdentityDraft()
-                viewModel.closeIdentityPage()
+                actions.onCloseIdentityPage()
             } else {
                 if (draft.identityContextChanged(next)) {
-                    viewModel.identityContextChanged()
+                    actions.onIdentityContextChanged()
                 } else if (next.errorMessage == null && identityState.errorMessage != null) {
-                    viewModel.clearIdentityError()
+                    actions.onClearIdentityError()
                 }
                 draft = next.toDraft()
             }
@@ -180,7 +189,7 @@ internal fun WechatAccountManagementPanel(
 
 private fun AccountIdentityDraft.toUiState(
     operationState: AccountManagementOperationState
-): AccountIdentityUiState = AccountIdentityUiState(
+): AccountIdentityFormState = AccountIdentityFormState(
     page = operationState.identityPage,
     identifierAttachMethod = identifierAttachMethod,
     unlinkMethod = unlinkMethod,
@@ -202,7 +211,7 @@ private fun AccountIdentityDraft.toUiState(
     errorMessage = operationState.identityError
 )
 
-private fun AccountIdentityUiState.toDraft(): AccountIdentityDraft = AccountIdentityDraft(
+private fun AccountIdentityFormState.toDraft(): AccountIdentityDraft = AccountIdentityDraft(
     identifierAttachMethod = identifierAttachMethod,
     unlinkMethod = unlinkMethod,
     phone = phone,
@@ -215,7 +224,7 @@ private fun AccountIdentityUiState.toDraft(): AccountIdentityDraft = AccountIden
     confirmText = confirmText
 )
 
-private fun AccountIdentityDraft.identityContextChanged(next: AccountIdentityUiState): Boolean =
+private fun AccountIdentityDraft.identityContextChanged(next: AccountIdentityFormState): Boolean =
     phone != next.phone ||
         identifierAttachMethod != next.identifierAttachMethod ||
         targetIdentifierType != next.targetIdentifierType ||

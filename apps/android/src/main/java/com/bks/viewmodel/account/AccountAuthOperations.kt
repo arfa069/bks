@@ -14,7 +14,7 @@ internal fun AccountAction.isNetworkAction(): Boolean = when (this) {
     else -> false
 }
 
-internal fun AccountUiState.isReadyFor(action: AccountAction): Boolean = when (action) {
+internal fun AccountFormState.isReadyFor(action: AccountAction): Boolean = when (action) {
     AccountAction.RequestSmsCode -> phoneError == null
     AccountAction.SubmitLogin -> phoneError == null && errorMessage == null
     AccountAction.SubmitRegister,
@@ -23,7 +23,7 @@ internal fun AccountUiState.isReadyFor(action: AccountAction): Boolean = when (a
     else -> true
 }
 
-internal suspend fun AccountUiState.runNetworkAction(
+internal suspend fun AccountFormState.runNetworkAction(
     action: AccountAction,
     accountRepository: AccountRepository,
     commitSession: (AccountCredentials) -> Boolean,
@@ -55,7 +55,7 @@ internal suspend fun AccountUiState.runNetworkAction(
     else -> AccountEntryOperationResult.Failure("当前操作不可用")
 }
 
-private suspend fun AccountUiState.submitSmsCodeRequest(
+private suspend fun AccountFormState.submitSmsCodeRequest(
     accountRepository: AccountRepository
 ): AccountEntryOperationResult {
     val purpose = when (flow) {

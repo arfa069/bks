@@ -3,7 +3,7 @@ package com.bks.viewmodel.review
 import com.bks.model.data.local.database.LedgerEntryDao
 import com.bks.model.data.local.database.LedgerSyncDao
 import com.bks.model.data.local.database.PendingEntryDao
-import com.bks.model.data.local.ledger.ReviewQueuePersistence
+import com.bks.model.data.local.review.RoomReviewQueueRepository
 import com.bks.model.data.local.ledger.toDomain
 import com.bks.model.domain.categorization.suggestCategory
 import com.bks.model.domain.ledger.Category
@@ -23,7 +23,7 @@ import com.bks.model.data.local.database.BksDatabase
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.ConfidenceState
 import com.bks.model.data.local.database.DEFAULT_LEDGER_BOOK_ID
-import com.bks.model.data.local.ledger.LocalLedgerRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.data.local.database.PendingEntryEntity
 import com.bks.model.domain.ledger.TransactionKind
@@ -67,8 +67,8 @@ import org.robolectric.annotation.Config
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ReviewQueueViewModelTest {
     private lateinit var database: BksDatabase
-    private lateinit var repository: LocalLedgerRepository
-    private lateinit var persistence: ReviewQueuePersistence
+    private lateinit var repository: TestLedgerRepository
+    private lateinit var persistence: RoomReviewQueueRepository
     private lateinit var replacementInFlight: MutableStateFlow<Boolean>
     private var nextId = 0
 
@@ -79,12 +79,17 @@ class ReviewQueueViewModelTest {
             ApplicationProvider.getApplicationContext<Context>(),
             BksDatabase::class.java
         ).allowMainThreadQueries().build()
-        repository = LocalLedgerRepository(
+        repository = TestLedgerRepository(
             database = database,
             clock = { NOW },
             idGenerator = { "generated-${++nextId}" }
         )
-        persistence = ReviewQueuePersistence(repository, { NOW }, ZoneId.of("UTC"))
+        persistence = RoomReviewQueueRepository(
+            database = database,
+            nowProvider = { NOW },
+            zoneId = ZoneId.of("UTC"),
+            idGenerator = { "generated-${++nextId}" }
+        )
         replacementInFlight = MutableStateFlow(false)
     }
 
@@ -177,20 +182,22 @@ class ReviewQueueViewModelTest {
     @Test
     fun persistenceFailureRollsBackAndReloadsInsteadOfKeepingOptimisticSuccess() = runBlocking {
         val calls = AtomicInteger()
-        val failingRepository = LocalLedgerRepository(
+        val failingIdGenerator = {
+            if (calls.incrementAndGet() == 1) "ledger-before-failure" else error("outbox failure")
+        }
+        val failingRepository = TestLedgerRepository(
             database = database,
             clock = { NOW },
-            idGenerator = {
-                if (calls.incrementAndGet() == 1) "ledger-before-failure" else error("outbox failure")
-            }
+            idGenerator = failingIdGenerator
         )
         failingRepository.ensureDefaultLedgerBook()
         failingRepository.upsertPending(samplePending())
         database.ledgerSyncDao().upsertState(AccountSyncStateEntity(enabled = true))
-        val failingPersistence = ReviewQueuePersistence(
-            failingRepository,
-            { NOW },
-            ZoneId.of("UTC")
+        val failingPersistence = RoomReviewQueueRepository(
+            database = database,
+            nowProvider = { NOW },
+            zoneId = ZoneId.of("UTC"),
+            idGenerator = failingIdGenerator
         )
 
         withViewModel(failingPersistence) { viewModel ->
@@ -498,8 +505,8 @@ class ReviewQueueViewModelTest {
     }
 
     private suspend fun withViewModel(
-        activePersistence: ReviewQueuePersistence = persistence,
-        stateLoader: suspend () -> ReviewQueueState = {
+        activePersistence: RoomReviewQueueRepository = persistence,
+        stateLoader: suspend () -> ReviewQueueUiState = {
             activePersistence.loadSnapshot().toUiState(ZoneId.of("UTC"))
         },
         aiDependencies: ReviewAiDependencies? = null,
@@ -526,8 +533,8 @@ class ReviewQueueViewModelTest {
     }
 
     private suspend fun ReviewQueueViewModel.awaitState(
-        predicate: (ReviewQueueState) -> Boolean
-    ): ReviewQueueState = withTimeout(5_000) { uiState.first(predicate) }
+        predicate: (ReviewQueueUiState) -> Boolean
+    ): ReviewQueueUiState = withTimeout(5_000) { uiState.first(predicate) }
 
     private fun samplePending(note: String? = "客户会议"): PendingEntryEntity = PendingEntryEntity(
         id = "pending-lunch",

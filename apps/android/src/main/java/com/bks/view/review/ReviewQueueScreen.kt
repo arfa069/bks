@@ -3,8 +3,8 @@ package com.bks.view.review
 import com.bks.viewmodel.review.ReviewAiSuggestionResult
 
 import com.bks.model.domain.review.ReviewPersistenceCommand
-import com.bks.viewmodel.review.ReviewQueueEntry
-import com.bks.viewmodel.review.ReviewQueueState
+import com.bks.viewmodel.review.ReviewEntryUiModel
+import com.bks.viewmodel.review.ReviewQueueUiState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 @Suppress("LongParameterList")
 internal fun ReviewQueueScreen(
     modifier: Modifier = Modifier,
-    initialState: ReviewQueueState = ReviewQueueState(),
+    initialState: ReviewQueueUiState,
     targetLedgerBookId: String? = DEFAULT_LEDGER_ID,
     targetLedgerName: String = "默认账本",
     categories: List<LedgerCategoryUiModel> = emptyList(),
@@ -42,7 +42,7 @@ internal fun ReviewQueueScreen(
     fundingAccounts: List<FundingAccountUiModel> = emptyList(),
     defaultFundingAccountSyncId: String? = null,
     onCategorizationRuleRequested: suspend (ReviewCategoryRuleRequest) -> Unit = {},
-    onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
+    onAiSuggest: suspend (ReviewEntryUiModel, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
         ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
     },
     onCommand: (ReviewPersistenceCommand) -> Unit = {},
@@ -71,7 +71,7 @@ internal fun ReviewQueueScreen(
 @Composable
 @Suppress("LongParameterList", "LongMethod")
 internal fun ReviewQueueScreen(
-    state: ReviewQueueState,
+    state: ReviewQueueUiState,
     targetLedgerBookId: String? = DEFAULT_LEDGER_ID,
     targetLedgerName: String = "默认账本",
     categories: List<LedgerCategoryUiModel> = emptyList(),
@@ -80,7 +80,7 @@ internal fun ReviewQueueScreen(
     defaultFundingAccountSyncId: String? = null,
     modifier: Modifier = Modifier,
     onCategorizationRuleRequested: suspend (ReviewCategoryRuleRequest) -> Unit = {},
-    onAiSuggest: suspend (ReviewQueueEntry, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
+    onAiSuggest: suspend (ReviewEntryUiModel, List<String>) -> ReviewAiSuggestionResult = { _, _ ->
         ReviewAiSuggestionResult(message = "登录后才能使用云端 AI 分类")
     },
     onCommand: (ReviewPersistenceCommand) -> Unit = {},
@@ -97,7 +97,7 @@ internal fun ReviewQueueScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    fun confirmEdit(entry: ReviewQueueEntry, edit: PendingReviewEdit) {
+    fun confirmEdit(entry: ReviewEntryUiModel, edit: PendingReviewEdit) {
         onCommand(
             ReviewPersistenceCommand.Confirm(
                 stableId = entry.id,

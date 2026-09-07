@@ -27,7 +27,7 @@ data class LedgerReportUiModel(
     val cashFlowTotals: List<MonthlyCashFlowTotal> = emptyList()
 )
 
-fun buildLedgerReportUiModel(entries: List<LedgerUiEntry>): LedgerReportUiModel {
+fun buildLedgerReportUiModel(entries: List<LedgerEntryUiModel>): LedgerReportUiModel {
     val anchorMonthKey = latestCashFlowMonthKey(entries) ?: return LedgerReportUiModel()
     val summary = monthlySummary(entries, anchorMonthKey)
     val categoryTotals = categoryExpenseTotals(entries, anchorMonthKey)
@@ -40,20 +40,20 @@ fun buildLedgerReportUiModel(entries: List<LedgerUiEntry>): LedgerReportUiModel 
     )
 }
 
-fun monthlySummary(entries: List<LedgerUiEntry>, monthKey: String): MonthlySummary {
+fun monthlySummary(entries: List<LedgerEntryUiModel>, monthKey: String): MonthlySummary {
     val currentMonthEntries = entries.filter { it.isActive() && it.monthKey == monthKey }
     val expense = currentMonthEntries.filter { it.flowType == LedgerFlowType.EXPENSE }.sumOf { it.amountMinor }
     val income = currentMonthEntries.filter { it.flowType == LedgerFlowType.INCOME }.sumOf { it.amountMinor }
     return MonthlySummary(expense, income, income - expense)
 }
 
-fun categoryExpenseTotals(entries: List<LedgerUiEntry>, monthKey: String): List<CategoryTotal> = entries
+fun categoryExpenseTotals(entries: List<LedgerEntryUiModel>, monthKey: String): List<CategoryTotal> = entries
     .filter { it.isActive() && it.monthKey == monthKey && it.flowType == LedgerFlowType.EXPENSE }
     .groupBy { it.category }
     .map { (category, values) -> CategoryTotal(category, values.sumOf { it.amountMinor }) }
     .sortedByDescending { it.amountMinor }
 
-fun latestCashFlowMonthKey(entries: List<LedgerUiEntry>): String? = entries
+fun latestCashFlowMonthKey(entries: List<LedgerEntryUiModel>): String? = entries
     .asSequence()
     .filter { it.isActiveCashFlow() }
     .map { YearMonth.parse(it.monthKey) }
@@ -61,7 +61,7 @@ fun latestCashFlowMonthKey(entries: List<LedgerUiEntry>): String? = entries
     ?.toString()
 
 fun monthlyCashFlowRange(
-    entries: List<LedgerUiEntry>,
+    entries: List<LedgerEntryUiModel>,
     anchorMonthKey: String,
     radius: Int = 3
 ): List<MonthlyCashFlowTotal> {
@@ -114,10 +114,10 @@ fun categoryShareSlices(
     }
 }
 
-fun latestMonthKey(entries: List<LedgerUiEntry>): String =
+fun latestMonthKey(entries: List<LedgerEntryUiModel>): String =
     entries.maxOfOrNull { it.monthKey } ?: "2026-07"
 
-private fun LedgerUiEntry.isActive(): Boolean = deletedAtEpochMillis == null
+private fun LedgerEntryUiModel.isActive(): Boolean = deletedAtEpochMillis == null
 
-private fun LedgerUiEntry.isActiveCashFlow(): Boolean =
+private fun LedgerEntryUiModel.isActiveCashFlow(): Boolean =
     isActive() && flowType != LedgerFlowType.NEUTRAL

@@ -9,11 +9,11 @@ import com.bks.model.domain.account.AccountRepositoryResult
 import com.bks.model.domain.account.AccountSession
 import com.bks.model.domain.account.AccountWechatAuthResult
 import com.bks.model.domain.account.toCredentials
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthLaunchResult
-import com.bks.model.platform.account.WechatAuthPurpose
-import com.bks.model.platform.account.wechatSessionFingerprint
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthLaunchResult
+import com.bks.model.domain.account.WechatAuthPurpose
+import com.bks.model.domain.account.wechatSessionFingerprint
 import com.bks.model.domain.account.TestAccountRepository
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -164,7 +164,7 @@ class AccountManagementViewModelTest {
             fixture.viewModel.openIdentityPage(AccountIdentityPage.AttachIdentifier)
             fixture.viewModel.prepareIdentifierLink(
                 fixture.session,
-                AccountIdentityUiState(
+                AccountIdentityFormState(
                     page = AccountIdentityPage.AttachIdentifier,
                     phone = "13900139000",
                     targetIdentifierType = AccountIdentifierType.PHONE
@@ -244,7 +244,7 @@ class AccountManagementViewModelTest {
         ) { fixture ->
             fixture.viewModel.prepareIdentifierLink(
                 fixture.session,
-                AccountIdentityUiState(
+                AccountIdentityFormState(
                     phone = "13900139000",
                     targetIdentifierType = AccountIdentifierType.PHONE
                 )

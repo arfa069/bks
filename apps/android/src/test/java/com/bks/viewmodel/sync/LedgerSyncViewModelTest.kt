@@ -1,7 +1,6 @@
 package com.bks.viewmodel.sync
 
 import com.bks.model.application.sync.LedgerSyncCoordinator
-import com.bks.model.application.sync.LedgerSyncOperationResult
 import com.bks.model.application.sync.LedgerSyncRuntime
 import com.bks.model.application.sync.LedgerSyncSchedulingGateway
 import com.bks.model.data.local.database.LedgerSyncDao
@@ -150,13 +149,47 @@ class LedgerSyncViewModelTest {
             pendingInitialize.complete(
                 LedgerSyncRemoteResult.Success(LedgerSyncInitializeResult("profile-a", 0, 0))
             )
-            assertTrue(result.await() is LedgerSyncOperationResult.Success)
+            val previewResult = result.await()
+            assertTrue(previewResult is LedgerSyncActionResult.Success)
             val previewed = viewModel.uiState.first { !it.previewBusy && it.preview != null }
             assertFalse(previewed.previewBusy)
-            assertEquals("profile-a", previewed.preview?.profileKey)
+            assertEquals(0, previewed.preview?.localRecordCount)
+            assertEquals(0, previewed.preview?.cloudRecordCount)
+            assertFalse(requireNotNull(previewed.preview).insecureHttpTestMode)
+            assertTrue(previewed.conflicts.isEmpty())
 
             viewModel.dismissPreview()
             assertEquals(null, viewModel.uiState.first { it.preview == null }.preview)
+        } finally {
+            store.clear()
+            runtime?.stop()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun previewFailureMapsMessageAndClearsBusyWithoutPublishingPreview() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        val store = ViewModelStore()
+        var runtime: LedgerSyncRuntime? = null
+        try {
+            repository.initialize = {
+                LedgerSyncRemoteResult.Failure("OFFLINE", "同步服务不可用", true)
+            }
+            val owners = createViewModel(store)
+            runtime = owners.runtime
+            val viewModel = owners.viewModel
+
+            val result = viewModel.preview()
+
+            assertEquals(
+                LedgerSyncActionResult.Failure("同步服务不可用"),
+                result
+            )
+            val settled = viewModel.uiState.first { !it.previewBusy }
+            assertEquals(null, settled.preview)
+            assertTrue(settled.conflicts.isEmpty())
         } finally {
             store.clear()
             runtime?.stop()
@@ -192,7 +225,7 @@ class LedgerSyncViewModelTest {
                 LedgerSyncRemoteResult.Success(LedgerSyncInitializeResult("profile-a", 2, 3))
             )
 
-            assertTrue(result.await() is LedgerSyncOperationResult.Success)
+            assertTrue(result.await() is LedgerSyncActionResult.Success)
             assertEquals(null, viewModel.uiState.first { !it.previewBusy }.preview)
         } finally {
             store.clear()
@@ -236,7 +269,7 @@ class LedgerSyncViewModelTest {
             val result = viewModel.switchAccount()
             followUpFailureReturned.await()
 
-            assertTrue(result is LedgerSyncOperationResult.Success)
+            assertTrue(result is LedgerSyncActionResult.Success)
             assertFalse(viewModel.uiState.first { !it.accountSwitchBusy }.showAccountSwitch)
             assertEquals(1, scheduler.periodicCalls)
         } finally {

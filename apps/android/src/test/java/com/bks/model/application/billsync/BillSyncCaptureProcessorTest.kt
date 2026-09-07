@@ -13,11 +13,11 @@ import com.bks.model.data.local.database.BksDatabase
 import com.bks.model.data.local.database.CategoryEntity
 import com.bks.model.domain.ledger.CaptureReason
 import com.bks.model.domain.ledger.ConfidenceState
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
+import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.ledger.PaymentSource
-import com.bks.model.data.local.ledger.ReviewQueuePersistence
+import com.bks.model.data.local.review.RoomReviewQueueRepository
 import com.bks.model.domain.review.ReviewPersistenceCommand
 import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
@@ -39,7 +39,7 @@ class BillSyncCaptureProcessorTest {
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
     private lateinit var database: BksDatabase
-    private lateinit var persistence: ReviewQueuePersistence
+    private lateinit var persistence: RoomReviewQueueRepository
     private lateinit var processor: BillSyncCaptureProcessor
 
     @Before
@@ -48,12 +48,15 @@ class BillSyncCaptureProcessorTest {
             ApplicationProvider.getApplicationContext<Context>(),
             BksDatabase::class.java
         ).allowMainThreadQueries().build()
-        val repository = LocalLedgerRepository(database, clock = { NOW })
-        persistence = ReviewQueuePersistence(repository, nowProvider = { NOW }, zoneId = ZoneId.of("UTC"))
+        persistence = RoomReviewQueueRepository(
+            database = database,
+            nowProvider = { NOW },
+            zoneId = ZoneId.of("UTC")
+        )
         processor = BillSyncCaptureProcessor(
             pipeline = BillSyncPipeline(captureTimeFormatter = { "2026-08-21 10:00" }),
             reviewQueuePersistence = persistence,
-            preferencesRepository = LocalPreferencesRepository(database),
+            preferencesRepository = RoomPreferencesRepository(database),
             clock = { NOW }
         )
     }
@@ -103,7 +106,7 @@ class BillSyncCaptureProcessorTest {
         val repeatedProcessor = BillSyncCaptureProcessor(
             pipeline = BillSyncPipeline(captureTimeFormatter = { "2026-08-21 10:00" }),
             reviewQueuePersistence = persistence,
-            preferencesRepository = LocalPreferencesRepository(database),
+            preferencesRepository = RoomPreferencesRepository(database),
             clock = { now }
         )
         val page = "支付成功\n¥4.99\n交易方式\n花呗"
@@ -158,7 +161,7 @@ class BillSyncCaptureProcessorTest {
                 createdAtEpochMillis = NOW
             )
         )
-        LocalPreferencesRepository(database).updateCategorizationRules {
+        RoomPreferencesRepository(database).updateCategorizationRules {
             listOf(
                 CategorizationRule(
                     id = "rule-telecom",

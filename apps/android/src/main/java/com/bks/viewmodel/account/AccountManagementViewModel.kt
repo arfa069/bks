@@ -4,8 +4,6 @@ import com.bks.model.domain.account.AccountCredentials
 import com.bks.model.domain.account.AccountDeletionState
 import com.bks.model.domain.account.AccountFailureKind
 import com.bks.model.domain.account.AccountIdentifier
-import com.bks.model.domain.account.AccountIdentifierParser
-import com.bks.model.domain.account.AccountIdentifierType
 import com.bks.model.domain.account.AccountRepository
 import com.bks.model.domain.account.AccountRepositoryResult
 import com.bks.model.domain.account.AccountSession
@@ -14,14 +12,13 @@ import com.bks.model.domain.account.AccountVerificationPurpose
 import com.bks.model.domain.account.AccountWechatAuthResult
 import com.bks.model.domain.account.IdentifierLinkPreparation
 import com.bks.model.domain.account.toCredentials
-import com.bks.model.platform.account.matchesSession
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthCoordinator
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthLaunchResult
-import com.bks.model.platform.account.WechatAuthPurpose
-import com.bks.model.platform.account.managementPurpose
-import com.bks.model.platform.account.wechatSessionFingerprint
+import com.bks.model.application.account.WechatAuthCoordinator
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthLaunchResult
+import com.bks.model.domain.account.WechatAuthPurpose
+import com.bks.model.domain.account.matchesSession
+import com.bks.model.domain.account.wechatSessionFingerprint
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -149,17 +146,7 @@ internal class AccountManagementViewModel(
 
     fun openIdentityPage(page: AccountIdentityPage) {
         invalidateIdentityOperation()
-        mutableState.update {
-            it.copy(
-                identityPage = page,
-                identityError = null,
-                phoneTicket = null,
-                mergeTicket = null,
-                sourceIdentifiers = emptyList(),
-                sourceNickname = null,
-                sourceWechatLinked = false
-            )
-        }
+        mutableState.update { it.openIdentityPage(page) }
     }
 
     fun closeIdentityPage() {
@@ -200,7 +187,7 @@ internal class AccountManagementViewModel(
     }
 
     fun handleWechatCallback(session: AccountSession.SignedIn, callback: WechatAuthCallback) {
-        if (callback.managementPurpose() != WechatAuthPurpose.LinkCurrentAccount) return
+        if (callback.purpose != WechatAuthPurpose.LinkCurrentAccount) return
         if (!callback.matchesSession(session.token)) {
             failIdentity("登录状态已变化，请重新发起微信授权")
             return
@@ -213,10 +200,7 @@ internal class AccountManagementViewModel(
                         is AccountWechatAuthResult.SignedIn -> commitCredentials(auth.credentials)
                         is AccountWechatAuthResult.MergeRequired -> if (isCurrent()) {
                             mutableState.update {
-                                it.copy(
-                                    identityOperationInProgress = false,
-                                    identityError = null,
-                                    identityPage = AccountIdentityPage.Merge,
+                                it.showIdentityMerge(
                                     mergeTicket = auth.mergeTicket,
                                     sourceIdentifiers = auth.sourceIdentifiers,
                                     sourceNickname = auth.sourceNickname,
@@ -290,7 +274,7 @@ internal class AccountManagementViewModel(
         mutableState.update { it.copy(identityError = null) }
     }
 
-    fun prepareIdentifierLink(session: AccountSession.SignedIn, state: AccountIdentityUiState) {
+    fun prepareIdentifierLink(session: AccountSession.SignedIn, state: AccountIdentityFormState) {
         if (!state.hasValidIdentifier()) return failIdentity(state.expectedIdentifierError())
         val identifier = state.phone
         val submittedContext = identityOperationGeneration
@@ -305,12 +289,9 @@ internal class AccountManagementViewModel(
                 is AccountRepositoryResult.Success -> if (isCurrent() && submittedContext + 1 == identityOperationGeneration) {
                     mutableState.update {
                         when (val prepared = result.value) {
-                            IdentifierLinkPreparation.AlreadyLinked -> identityReset(it)
-                            is IdentifierLinkPreparation.LinkTicketIssued -> it.copy(
-                                identityOperationInProgress = false,
-                                identityError = null,
-                                phoneTicket = prepared.linkTicket
-                            )
+                            IdentifierLinkPreparation.AlreadyLinked -> it.resetIdentity()
+                            is IdentifierLinkPreparation.LinkTicketIssued ->
+                                it.showIdentifierLinkTicket(prepared.linkTicket)
                             is IdentifierLinkPreparation.MergeRequired -> it.copy(
                                 identityOperationInProgress = false,
                                 identityError = "该标识已属于其他账号，不能绑定或合并",
@@ -324,7 +305,7 @@ internal class AccountManagementViewModel(
         }
     }
 
-    fun confirmIdentifier(session: AccountSession.SignedIn, state: AccountIdentityUiState) {
+    fun confirmIdentifier(session: AccountSession.SignedIn, state: AccountIdentityFormState) {
         if (!state.hasValidIdentifier()) return failIdentity(state.expectedIdentifierError())
         if (state.identifierAttachMethod == IdentifierAttachMethod.PasswordMerge) {
             launchIdentityOperation(session.token) {
@@ -338,10 +319,7 @@ internal class AccountManagementViewModel(
                     is AccountRepositoryResult.Success -> if (isCurrent()) {
                         val merge = result.value
                         mutableState.update {
-                            it.copy(
-                                identityOperationInProgress = false,
-                                identityError = null,
-                                identityPage = AccountIdentityPage.Merge,
+                            it.showIdentityMerge(
                                 mergeTicket = merge.mergeTicket,
                                 sourceIdentifiers = merge.sourceIdentifiers,
                                 sourceNickname = merge.sourceNickname,
@@ -357,13 +335,7 @@ internal class AccountManagementViewModel(
 
         val ticket = mutableState.value.phoneTicket ?: return failIdentity("请先获取验证码")
         if (session.identifiers.isEmpty() && session.wechatLinked) {
-            mutableState.update {
-                it.copy(
-                    identityPage = AccountIdentityPage.SetPhonePassword,
-                    identityOperationInProgress = false,
-                    identityError = null
-                )
-            }
+            mutableState.update(AccountManagementOperationState::showPhonePasswordPage)
         } else {
             launchIdentityOperation(session.token) {
                 handleCredentials(accountRepository.completeIdentifierLink(session.token, ticket, state.code))
@@ -371,7 +343,7 @@ internal class AccountManagementViewModel(
         }
     }
 
-    fun confirmPhonePassword(session: AccountSession.SignedIn, state: AccountIdentityUiState) {
+    fun confirmPhonePassword(session: AccountSession.SignedIn, state: AccountIdentityFormState) {
         val ticket = mutableState.value.phoneTicket ?: return failIdentity("绑定票据已失效")
         launchIdentityOperation(session.token) {
             handleCredentials(
@@ -410,7 +382,7 @@ internal class AccountManagementViewModel(
         }
     }
 
-    fun unlinkWechat(session: AccountSession.SignedIn, state: AccountIdentityUiState) {
+    fun unlinkWechat(session: AccountSession.SignedIn, state: AccountIdentityFormState) {
         launchIdentityOperation(session.token) {
             val result = when (state.unlinkMethod) {
                 UnlinkMethod.Password -> accountRepository.unlinkWechatWithPassword(session.token, state.password)
@@ -484,11 +456,11 @@ internal class AccountManagementViewModel(
     ) {
         if (!isCurrent()) return
         when (commitManagementCredentials(activeSessionToken ?: return, credentials)) {
-            AccountSessionMutationResult.Applied -> mutableState.update(::identityReset)
+            AccountSessionMutationResult.Applied -> mutableState.update(AccountManagementOperationState::resetIdentity)
             AccountSessionMutationResult.PersistenceFailed -> {
                 if (!invalidateSession()) {
                     mutableState.update {
-                        identityReset(it).copy(
+                        it.resetIdentity().copy(
                             identityError = "无法安全保存新会话，且本机登录状态清理失败，请重启应用"
                         )
                     }
@@ -496,7 +468,7 @@ internal class AccountManagementViewModel(
                 }
                 activeSessionToken = null
                 mutableState.update {
-                    identityReset(it).copy(identityError = "无法安全保存新会话，已切换到本地模式")
+                    it.resetIdentity().copy(identityError = "无法安全保存新会话，已切换到本地模式")
                 }
                 accountRepository.signOut(credentials.token)
             }
@@ -562,7 +534,7 @@ internal class AccountManagementViewModel(
             }
         } else {
             mutableState.update {
-                identityReset(it).copy(
+                it.resetIdentity().copy(
                     identityError = "登录已失效，但本机登录状态清理失败，请重启应用"
                 )
             }
@@ -576,22 +548,8 @@ internal class AccountManagementViewModel(
     }
 
     private fun resetIdentityState() {
-        mutableState.update(::identityReset)
+        mutableState.update(AccountManagementOperationState::resetIdentity)
     }
-
-    private fun identityReset(state: AccountManagementOperationState): AccountManagementOperationState =
-        state.copy(
-            identityOperationInProgress = false,
-            identityError = null,
-            identityPage = AccountIdentityPage.Idle,
-            phoneTicket = null,
-            mergeTicket = null,
-            sourceIdentifiers = emptyList(),
-            sourceNickname = null,
-            sourceWechatLinked = false,
-            avatarError = null,
-            draftResetGeneration = state.draftResetGeneration + 1
-        )
 
     private fun invalidateIdentityOperation() {
         identityOperationGeneration += 1
@@ -633,17 +591,5 @@ internal class AccountManagementViewModel(
     }
 }
 
-private fun AccountIdentityUiState.hasValidIdentifier(): Boolean {
-    val parsedType = runCatching { AccountIdentifierParser.parse(phone).type }.getOrNull() ?: return false
-    if (parsedType == AccountIdentifierType.USERNAME) return false
-    return targetIdentifierType?.let { it == parsedType } ?: true
-}
-
 private val AccountManagementOperationState.anyOperationInProgress: Boolean
     get() = accountOperationInProgress || identityOperationInProgress
-
-private fun AccountIdentityUiState.expectedIdentifierError(): String = when (targetIdentifierType) {
-    AccountIdentifierType.PHONE -> "请输入有效的手机号"
-    AccountIdentifierType.EMAIL -> "请输入有效的邮箱"
-    else -> "请输入有效的手机号或邮箱"
-}

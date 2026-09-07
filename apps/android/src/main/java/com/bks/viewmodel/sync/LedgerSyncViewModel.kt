@@ -65,14 +65,14 @@ internal class LedgerSyncViewModel(
         initialValue = LedgerSyncUiState(insecureHttpTestMode = runtime.state.value.insecureHttpTestMode)
     )
 
-    suspend fun preview(): LedgerSyncOperationResult<LedgerSyncPreview> = withBusy(
+    suspend fun preview(): LedgerSyncActionResult<LedgerSyncPreviewUiModel> = withBusy(
         setBusy = { busy -> operations.update { it.copy(previewBusy = busy) } }
     ) {
         val session = accountSessionState.value.session as? AccountSession.SignedIn
-            ?: return@withBusy LedgerSyncOperationResult.Failure(null, "请先登录账户", false)
-        coordinator.preview(session.token).also { result ->
+            ?: return@withBusy LedgerSyncActionResult.Failure("请先登录账户")
+        coordinator.preview(session.token).toUiResult(LedgerSyncPreview::toUiModel).also { result ->
             if (
-                result is LedgerSyncOperationResult.Success &&
+                result is LedgerSyncActionResult.Success &&
                 accountSessionState.value.session == session
             ) {
                 operations.update { it.copy(preview = result.value) }
@@ -84,21 +84,23 @@ internal class LedgerSyncViewModel(
         if (!operations.value.syncBusy) operations.update { it.copy(preview = null) }
     }
 
-    suspend fun enable(mode: LedgerSyncInitialMode): LedgerSyncOperationResult<Unit> = withBusy(
+    suspend fun enable(mode: LedgerSyncEnableMode): LedgerSyncActionResult<Unit> = withBusy(
         setBusy = { busy -> operations.update { it.copy(syncBusy = busy) } }
     ) {
-        withToken { token -> coordinator.enable(token, mode) }.also { result ->
-            if (result is LedgerSyncOperationResult.Success) {
-                operations.update { it.copy(preview = null) }
-                runtime.onSyncOperationSucceeded()
+        withToken { token -> coordinator.enable(token, mode.toApplicationMode()) }
+            .toUiResult { Unit }
+            .also { result ->
+                if (result is LedgerSyncActionResult.Success) {
+                    operations.update { it.copy(preview = null) }
+                    runtime.onSyncOperationSucceeded()
+                }
             }
-        }
     }
 
-    suspend fun synchronize(): LedgerSyncOperationResult<Unit> = withBusy(
+    suspend fun synchronize(): LedgerSyncActionResult<Unit> = withBusy(
         setBusy = { busy -> operations.update { it.copy(syncBusy = busy) } }
     ) {
-        withToken { token -> coordinator.synchronize(token) }
+        withToken { token -> coordinator.synchronize(token) }.toUiResult { Unit }
     }
 
     suspend fun disable() {
@@ -110,20 +112,21 @@ internal class LedgerSyncViewModel(
         conflictId: String,
         expectedVersion: Long,
         choice: LedgerSyncConflictChoice
-    ): LedgerSyncOperationResult<Unit> {
+    ): LedgerSyncActionResult<Unit> {
         operations.update { it.copy(resolvingConflictIds = it.resolvingConflictIds + conflictId) }
         return try {
             withToken { token -> coordinator.resolveConflict(token, conflictId, expectedVersion, choice) }
+                .toUiResult { Unit }
         } finally {
             operations.update { it.copy(resolvingConflictIds = it.resolvingConflictIds - conflictId) }
         }
     }
 
-    suspend fun switchAccount(): LedgerSyncOperationResult<Unit> = withBusy(
+    suspend fun switchAccount(): LedgerSyncActionResult<Unit> = withBusy(
         setBusy = { busy -> operations.update { it.copy(accountSwitchBusy = busy) } }
     ) {
-        withToken { token -> coordinator.switchAccount(token) }.also { result ->
-            if (result is LedgerSyncOperationResult.Success) runtime.onSyncOperationSucceeded()
+        withToken { token -> coordinator.switchAccount(token) }.toUiResult { Unit }.also { result ->
+            if (result is LedgerSyncActionResult.Success) runtime.onSyncOperationSucceeded()
         }
     }
 
@@ -137,8 +140,8 @@ internal class LedgerSyncViewModel(
 
     private suspend fun <T> withBusy(
         setBusy: (Boolean) -> Unit,
-        operation: suspend () -> LedgerSyncOperationResult<T>
-    ): LedgerSyncOperationResult<T> {
+        operation: suspend () -> T
+    ): T {
         setBusy(true)
         return try {
             operation()
@@ -148,12 +151,30 @@ internal class LedgerSyncViewModel(
     }
 
     private data class LedgerSyncOperationState(
-        val preview: LedgerSyncPreview? = null,
+        val preview: LedgerSyncPreviewUiModel? = null,
         val previewBusy: Boolean = false,
         val syncBusy: Boolean = false,
         val accountSwitchBusy: Boolean = false,
         val resolvingConflictIds: Set<String> = emptySet()
     )
+}
+
+private fun LedgerSyncPreview.toUiModel() = LedgerSyncPreviewUiModel(
+    localRecordCount = localRecordCount,
+    cloudRecordCount = cloudRecordCount,
+    insecureHttpTestMode = insecureHttpTestMode
+)
+
+private fun LedgerSyncEnableMode.toApplicationMode(): LedgerSyncInitialMode = when (this) {
+    LedgerSyncEnableMode.MERGE -> LedgerSyncInitialMode.MERGE
+    LedgerSyncEnableMode.REPLACE_LOCAL -> LedgerSyncInitialMode.REPLACE_LOCAL
+}
+
+private fun <T, R> LedgerSyncOperationResult<T>.toUiResult(
+    transform: (T) -> R
+): LedgerSyncActionResult<R> = when (this) {
+    is LedgerSyncOperationResult.Success -> LedgerSyncActionResult.Success(transform(value))
+    is LedgerSyncOperationResult.Failure -> LedgerSyncActionResult.Failure(message)
 }
 
 private fun LedgerSyncConflict.toUiModel(resolving: Boolean) = LedgerSyncConflictUiModel(

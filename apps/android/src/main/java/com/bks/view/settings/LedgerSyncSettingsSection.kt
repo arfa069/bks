@@ -1,11 +1,11 @@
 package com.bks.view.settings
 
-import com.bks.viewmodel.settings.LedgerSyncSectionActions
-import com.bks.viewmodel.settings.LedgerSyncSettingsActionResult
-import com.bks.viewmodel.settings.LedgerSyncSettingsConflictChoice
-import com.bks.viewmodel.settings.LedgerSyncSettingsConflictUiModel
-import com.bks.viewmodel.settings.LedgerSyncSettingsInitialMode
-import com.bks.viewmodel.settings.LedgerSyncSettingsUiState
+import com.bks.viewmodel.sync.LedgerSyncSectionActions
+import com.bks.viewmodel.sync.LedgerSyncActionResult
+import com.bks.model.domain.sync.LedgerSyncConflictChoice
+import com.bks.viewmodel.sync.LedgerSyncConflictUiModel
+import com.bks.viewmodel.sync.LedgerSyncEnableMode
+import com.bks.viewmodel.sync.LedgerSyncUiState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,7 +37,7 @@ private fun formatSyncTime(epochMillis: Long): String =
 
 @Composable
 internal fun LedgerSyncSettingsSection(
-    ledgerSyncState: LedgerSyncSettingsUiState,
+    ledgerSyncState: LedgerSyncUiState,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState
 ) {
@@ -84,8 +84,8 @@ private fun EnableSyncContent(
         onClick = {
             coroutineScope.launch {
                 when (val result = actions.onPreview()) {
-                    is LedgerSyncSettingsActionResult.Success -> Unit
-                    is LedgerSyncSettingsActionResult.Failure ->
+                    is LedgerSyncActionResult.Success -> Unit
+                    is LedgerSyncActionResult.Failure ->
                         snackbarHostState.showSnackbar(result.message)
                 }
             }
@@ -97,7 +97,7 @@ private fun EnableSyncContent(
 
 @Composable
 private fun EnabledSyncContent(
-    ledgerSyncState: LedgerSyncSettingsUiState,
+    ledgerSyncState: LedgerSyncUiState,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState
@@ -123,8 +123,8 @@ private fun EnabledSyncContent(
                     val result = actions.onSyncNow()
                     snackbarHostState.showSnackbar(
                         when (result) {
-                            is LedgerSyncSettingsActionResult.Success -> "同步完成"
-                            is LedgerSyncSettingsActionResult.Failure -> result.message
+                            is LedgerSyncActionResult.Success -> "同步完成"
+                            is LedgerSyncActionResult.Failure -> result.message
                         }
                     )
                 }
@@ -148,7 +148,7 @@ private fun EnabledSyncContent(
 
 @Composable
 private fun SyncConflictCard(
-    conflict: LedgerSyncSettingsConflictUiModel,
+    conflict: LedgerSyncConflictUiModel,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions
 ) {
@@ -169,7 +169,7 @@ private fun SyncConflictCard(
                         actions.onResolveConflict(
                             conflict.conflictId,
                             conflict.canonicalVersion,
-                            LedgerSyncSettingsConflictChoice.CANONICAL
+                            LedgerSyncConflictChoice.CANONICAL
                         )
                     }
                 }, enabled = !conflict.resolving) { Text("保留云端") }
@@ -178,7 +178,7 @@ private fun SyncConflictCard(
                         actions.onResolveConflict(
                             conflict.conflictId,
                             conflict.canonicalVersion,
-                            LedgerSyncSettingsConflictChoice.CANDIDATE
+                            LedgerSyncConflictChoice.CANDIDATE
                         )
                     }
                 }, enabled = !conflict.resolving) { Text("保留本机") }
@@ -189,7 +189,7 @@ private fun SyncConflictCard(
 
 @Composable
 private fun FirstSyncConfirmationDialog(
-    ledgerSyncState: LedgerSyncSettingsUiState,
+    ledgerSyncState: LedgerSyncUiState,
     coroutineScope: CoroutineScope,
     actions: LedgerSyncSectionActions,
     snackbarHostState: SnackbarHostState,
@@ -215,16 +215,16 @@ private fun FirstSyncConfirmationDialog(
                 onClick = {
                     coroutineScope.launch {
                         val mode = if (preview.localRecordCount == 0 && preview.cloudRecordCount > 0) {
-                            LedgerSyncSettingsInitialMode.REPLACE_LOCAL
+                            LedgerSyncEnableMode.REPLACE_LOCAL
                         } else {
-                            LedgerSyncSettingsInitialMode.MERGE
+                            LedgerSyncEnableMode.MERGE
                         }
                         val result = actions.onEnable(mode)
-                        if (result is LedgerSyncSettingsActionResult.Success) onDismiss()
+                        if (result is LedgerSyncActionResult.Success) onDismiss()
                         snackbarHostState.showSnackbar(
                             when (result) {
-                                is LedgerSyncSettingsActionResult.Success -> "账户同步已启用"
-                                is LedgerSyncSettingsActionResult.Failure -> result.message
+                                is LedgerSyncActionResult.Success -> "账户同步已启用"
+                                is LedgerSyncActionResult.Failure -> result.message
                             }
                         )
                     }

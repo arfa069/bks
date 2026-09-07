@@ -10,6 +10,8 @@ import com.bks.model.domain.diagnostics.DiagnosticSensitiveField
 import com.bks.model.domain.diagnostics.DiagnosticSensitivePayload
 import com.bks.model.domain.diagnostics.DiagnosticSource
 import com.bks.viewmodel.diagnostics.DiagnosticLogsViewModel
+import com.bks.view.app.BksDiagnosticLogsRoute
+import com.bks.view.app.DiagnosticLogsRoutePlatform
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -24,9 +26,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -52,7 +57,7 @@ class DiagnosticLogsScreenTest {
     fun plaintextPayloadIsDisplayedWithoutRevealConfirmation() {
         val repository = FakeDiagnosticRepository(initialEnabled = true)
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository)
@@ -73,7 +78,7 @@ class DiagnosticLogsScreenTest {
     fun releaseEnableRequiresExplicitConfirmation() {
         val repository = FakeDiagnosticRepository(initialEnabled = false)
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = false,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository)
@@ -93,7 +98,7 @@ class DiagnosticLogsScreenTest {
     fun backgroundingKeepsPlaintextVisibleAfterReturning() {
         val repository = FakeDiagnosticRepository(initialEnabled = true)
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository)
@@ -115,7 +120,7 @@ class DiagnosticLogsScreenTest {
         val repository = FakeDiagnosticRepository(initialEnabled = true)
         val restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository)
@@ -148,7 +153,7 @@ class DiagnosticLogsScreenTest {
             blockExport = true
         }
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository)
@@ -167,7 +172,7 @@ class DiagnosticLogsScreenTest {
             blockExport = true
         }
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository) { "fresh-diagnostics.log" }
@@ -194,7 +199,7 @@ class DiagnosticLogsScreenTest {
         val secondWriterCancelled = CompletableDeferred<Unit>()
         val writerCalls = AtomicInteger()
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository) {
@@ -237,7 +242,7 @@ class DiagnosticLogsScreenTest {
     fun completedExportShowsFileNameInVisibleDialog() {
         val repository = FakeDiagnosticRepository(initialEnabled = true)
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository) { "test-diagnostics.log" }
@@ -257,7 +262,7 @@ class DiagnosticLogsScreenTest {
             failExport = true
         }
         composeRule.setContent {
-            DiagnosticLogsScreen(
+            TestDiagnosticLogsRoute(
                 isDebugBuild = true,
                 onBack = {},
                 overrides = diagnosticScreenOverrides(repository)
@@ -288,21 +293,56 @@ class DiagnosticLogsScreenTest {
     }
 }
 
-private fun diagnosticViewModelFactory(
-    repository: DiagnosticLogRepository
-): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        DiagnosticLogsViewModel(repository) as T
-}
-
 private fun diagnosticScreenOverrides(
     repository: DiagnosticLogRepository,
     exportWriter: (suspend (String) -> String)? = null
-): DiagnosticLogsScreenOverrides = DiagnosticLogsScreenOverrides(
-    viewModelFactory = diagnosticViewModelFactory(repository),
-    applySecureWindowFlag = false,
+): DiagnosticTestOverrides = DiagnosticTestOverrides(
+    viewModel = DiagnosticLogsViewModel(repository),
     exportWriter = exportWriter
+)
+
+private data class DiagnosticTestOverrides(
+    val viewModel: DiagnosticLogsViewModel,
+    val exportWriter: (suspend (String) -> String)?
+)
+
+@Composable
+private fun TestDiagnosticLogsRoute(
+    isDebugBuild: Boolean,
+    onBack: () -> Unit,
+    overrides: DiagnosticTestOverrides
+) {
+    if (isDebugBuild) {
+        BksDiagnosticLogsRoute(
+            viewModel = overrides.viewModel,
+            onBack = onBack,
+            innerPadding = PaddingValues(0.dp),
+            isDebugBuild = true,
+            platform = DiagnosticLogsRoutePlatform(
+                exportWriterOverride = overrides.exportWriter,
+                applySecureWindowFlag = false
+            )
+        )
+    } else {
+        val state by overrides.viewModel.uiState.collectAsStateWithLifecycle()
+        DiagnosticLogsScreen(
+            state = state,
+            actions = diagnosticScreenActions(overrides.viewModel, onBack),
+            isDebugBuild = false
+        )
+    }
+}
+
+private fun diagnosticScreenActions(
+    viewModel: DiagnosticLogsViewModel,
+    onBack: () -> Unit
+) = DiagnosticLogsScreenActions(
+    onBack = onBack,
+    onSetEnabled = { enabled, confirmed -> viewModel.setEnabled(enabled, confirmed) },
+    onRefresh = viewModel::refresh,
+    onExport = viewModel::export,
+    onClear = viewModel::clear,
+    onDismissExportResult = viewModel::dismissExportResult
 )
 
 private class FakeDiagnosticRepository(initialEnabled: Boolean) : DiagnosticLogRepository {

@@ -39,7 +39,7 @@ import com.bks.view.common.components.TextButton
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun LedgerBookManagementContent(
+internal fun LedgerBookManagementScreen(
     ledgerBooks: List<LedgerBookUiModel>,
     snackbarHostState: SnackbarHostState,
     actions: LedgerBookManagementActions

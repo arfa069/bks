@@ -14,11 +14,11 @@ import com.bks.model.domain.account.AccountRuntimeStatus
 import com.bks.model.domain.account.AccountSession
 import com.bks.model.domain.account.AccountVerificationPurpose
 import com.bks.model.domain.account.toSignedInSession
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthLaunchResult
-import com.bks.model.platform.account.WechatAuthPurpose
-import com.bks.model.platform.account.wechatSessionFingerprint
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthLaunchResult
+import com.bks.model.domain.account.WechatAuthPurpose
+import com.bks.model.domain.account.wechatSessionFingerprint
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri

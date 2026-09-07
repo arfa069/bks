@@ -104,7 +104,12 @@ internal class BenchmarkApp(private val device: UiDevice) {
 
     fun returnHomeFromLedgerDetail() {
         device.pressBack()
-        waitForText("默认账本")
+        check(
+            device.wait(
+                Until.hasObject(By.text(Pattern.compile("基准账目 \\d+"))),
+                TIMEOUT_MILLIS
+            )
+        ) { "Timed out waiting for the seeded ledger list after leaving entry detail" }
         device.pressBack()
         waitForHome()
     }

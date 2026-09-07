@@ -3,7 +3,7 @@ package com.bks.view.settings
 import com.bks.model.domain.settings.isEncryptedLocalDataBackup
 import com.bks.model.domain.settings.MIN_BACKUP_PASSPHRASE_LENGTH
 import com.bks.viewmodel.ledger.label
-import com.bks.viewmodel.settings.BackupLedgerEntryUiModel
+import com.bks.viewmodel.settings.LedgerCsvEntryUiModel
 import com.bks.viewmodel.settings.DataAndBackupOperation
 import com.bks.viewmodel.settings.DataAndBackupUiState
 import com.bks.viewmodel.settings.exportLedgerCsv
@@ -81,7 +81,7 @@ private class BackupDialogEnvironment(
 
 @Composable
 internal fun LocalBackupSection(
-    ledgerEntries: List<BackupLedgerEntryUiModel>,
+    ledgerEntries: List<LedgerCsvEntryUiModel>,
     currentLedgerName: String,
     actions: LocalBackupSectionActions,
     operationState: DataAndBackupUiState,
@@ -202,7 +202,7 @@ private fun rememberDataAndBackupUiSession(actions: LocalBackupSectionActions): 
 
 @Composable
 private fun CsvExportButton(
-    ledgerEntries: List<BackupLedgerEntryUiModel>,
+    ledgerEntries: List<LedgerCsvEntryUiModel>,
     currentLedgerName: String,
     context: Context,
     coroutineScope: CoroutineScope,

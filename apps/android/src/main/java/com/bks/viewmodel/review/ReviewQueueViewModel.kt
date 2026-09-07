@@ -43,11 +43,13 @@ internal class ReviewQueueViewModel(
     private val localDataReplacementInFlight: StateFlow<Boolean>,
     private val aiDependencies: ReviewAiDependencies = ReviewAiDependencies(),
     private val zoneId: ZoneId = ZoneId.systemDefault(),
-    private val stateLoader: suspend () -> ReviewQueueState = {
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val stateLoader: suspend () -> ReviewQueueUiState = {
         persistence.loadSnapshot().toUiState(zoneId)
     }
 ) : ViewModel() {
-    private val persistedState = MutableStateFlow(ReviewQueueState())
+    private val initialState = emptyReviewQueueUiState(clock(), zoneId)
+    private val persistedState = MutableStateFlow(initialState)
     private val presentationState = MutableStateFlow(ReviewQueuePresentationState())
     private val operationMutex = Mutex()
     private val noticeChannel = Channel<String>(Channel.BUFFERED)
@@ -56,7 +58,7 @@ internal class ReviewQueueViewModel(
     private var localDataReplacementGeneration = 0L
 
     val notices = noticeChannel.receiveAsFlow()
-    val uiState: StateFlow<ReviewQueueState> = combine(
+    val uiState: StateFlow<ReviewQueueUiState> = combine(
         persistedState,
         presentationState
     ) { persisted, presentation ->
@@ -68,7 +70,7 @@ internal class ReviewQueueViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = ReviewQueueState()
+        initialValue = initialState
     )
 
     init {
@@ -128,7 +130,7 @@ internal class ReviewQueueViewModel(
     }
 
     suspend fun suggestCategory(
-        entry: ReviewQueueEntry,
+        entry: ReviewEntryUiModel,
         categoryCandidates: List<String>
     ): ReviewAiSuggestionResult {
         val client = aiDependencies.client
@@ -293,13 +295,13 @@ private data class ReviewQueuePresentationState(
 )
 
 private sealed interface ReviewQueueOptimisticChange {
-    fun apply(state: ReviewQueueState): ReviewQueueState
+    fun apply(state: ReviewQueueUiState): ReviewQueueUiState
 
     data class EditPending(
         val stableId: String,
         val edit: ReviewEntryEdit
     ) : ReviewQueueOptimisticChange {
-        override fun apply(state: ReviewQueueState): ReviewQueueState = state.copy(
+        override fun apply(state: ReviewQueueUiState): ReviewQueueUiState = state.copy(
             pendingEntries = state.pendingEntries.map { entry ->
                 if (entry.id == stableId) entry.apply(edit) else entry
             }
@@ -307,16 +309,16 @@ private sealed interface ReviewQueueOptimisticChange {
     }
 
     data class RemovePending(val stableId: String) : ReviewQueueOptimisticChange {
-        override fun apply(state: ReviewQueueState): ReviewQueueState = state.copy(
+        override fun apply(state: ReviewQueueUiState): ReviewQueueUiState = state.copy(
             pendingEntries = state.pendingEntries.filterNot { it.id == stableId }
         )
     }
 
     data class RestorePending(
-        val entry: ReviewQueueEntry,
+        val entry: ReviewEntryUiModel,
         val ignoredEntryId: String? = null
     ) : ReviewQueueOptimisticChange {
-        override fun apply(state: ReviewQueueState): ReviewQueueState = state.copy(
+        override fun apply(state: ReviewQueueUiState): ReviewQueueUiState = state.copy(
             pendingEntries = listOf(entry) + state.pendingEntries.filterNot { it.id == entry.id },
             ignoredEntries = ignoredEntryId?.let { id ->
                 state.ignoredEntries.filterNot { it.id == id }
@@ -327,7 +329,7 @@ private sealed interface ReviewQueueOptimisticChange {
     companion object {
         fun from(
             command: ReviewPersistenceCommand,
-            state: ReviewQueueState,
+            state: ReviewQueueUiState,
             undo: ReviewPersistenceUndo?
         ): ReviewQueueOptimisticChange? = when (command) {
             is ReviewPersistenceCommand.Edit -> EditPending(command.stableId, command.edit)
@@ -353,7 +355,7 @@ private fun ReviewPersistenceCommand.operationKind(): ReviewQueueOperationKind =
     is ReviewPersistenceCommand.UndoIgnore -> ReviewQueueOperationKind.UNDO_IGNORE
 }
 
-private fun ReviewQueueEntry.apply(edit: ReviewEntryEdit): ReviewQueueEntry = copy(
+private fun ReviewEntryUiModel.apply(edit: ReviewEntryEdit): ReviewEntryUiModel = copy(
     title = edit.title.trim().ifBlank { title },
     amountMinor = edit.amountMinor,
     transactionTimeText = formatReviewDateTime(

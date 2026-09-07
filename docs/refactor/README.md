@@ -1,6 +1,10 @@
 # Android 系统性架构重构执行计划
 
-> 本目录是已完成重构阶段的历史快照，保留当时路径和测试记录；现行 Android 目录与依赖规则以 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) 为准。
+> 本目录包含现行职责重构方案与已完成重构阶段的历史快照；现行 Android 目录与依赖规则以 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) 为准。
+
+## 现行职责重构方案
+
+- [Android 职责与命名重构审查及实施方案（2026-09-05）](./android-responsibility-refactor-plan-2026-09-05.md)：阶段 1-5 已完成。
 
 ## 重构总体目标
 

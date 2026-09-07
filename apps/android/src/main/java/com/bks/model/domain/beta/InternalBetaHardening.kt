@@ -1,7 +1,5 @@
 package com.bks.model.domain.beta
 
-import java.io.File
-
 data class InternalBetaMetricSample(
     val expectedTransactions: Int,
     val capturedTransactions: Int,
@@ -48,11 +46,6 @@ data class InternalBetaReadinessReport(
     val items: List<BetaReadinessItem>,
     val deviceMatrix: List<String>,
     val knownRisks: List<String>
-)
-
-data class SecretFinding(
-    val path: String,
-    val patternName: String
 )
 
 fun calculateInternalBetaMetrics(sample: InternalBetaMetricSample): InternalBetaMetrics {
@@ -134,46 +127,7 @@ fun buildInternalBetaReadinessReport(): InternalBetaReadinessReport = InternalBe
     )
 )
 
-fun scanForSecretLikeValues(files: List<File>): List<SecretFinding> {
-    return files
-        .flatMap { it.sourceFiles() }
-        .flatMap { file ->
-            val text = file.readText()
-            SECRET_PATTERNS.mapNotNull { pattern ->
-                if (pattern.regex.containsMatchIn(text)) {
-                    SecretFinding(file.path, pattern.name)
-                } else {
-                    null
-                }
-            }
-        }
-}
-
 private fun ratio(numerator: Int, denominator: Int): Double {
     if (denominator <= 0) return 0.0
     return numerator.toDouble() / denominator.toDouble()
 }
-
-private fun File.sourceFiles(): List<File> {
-    if (!exists()) return emptyList()
-    if (isFile) return listOf(this).filter { it.isScannableSource() }
-    return walkTopDown()
-        .filter { it.isFile && it.isScannableSource() }
-        .toList()
-}
-
-private fun File.isScannableSource(): Boolean {
-    return extension in setOf("kt", "kts", "xml", "properties", "gradle")
-}
-
-private data class SecretPattern(
-    val name: String,
-    val regex: Regex
-)
-
-private val SECRET_PATTERNS = listOf(
-    SecretPattern("OpenAI style API key", Regex("""sk-[A-Za-z0-9_-]{20,}""")),
-    SecretPattern("Private key block", Regex("""-----BEGIN [A-Z ]*PRIVATE KEY-----""")),
-    SecretPattern("Hard-coded API key assignment", Regex("""api[_-]?key\s*=\s*["'][^"']{12,}["']""", RegexOption.IGNORE_CASE)),
-    SecretPattern("Hard-coded secret assignment", Regex("""secret\s*=\s*["'][^"']{12,}["']""", RegexOption.IGNORE_CASE))
-)

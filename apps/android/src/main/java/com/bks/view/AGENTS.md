@@ -3,7 +3,7 @@
 ## 职责与依赖
 
 - `app/` 保存 `MainActivity`、`BksApp`、UI composition 与 ViewModel factory；`navigation/` 保存根路由；`common/` 保存共享组件、表单、主题、视觉和界面侧平台回调。
-- 普通 Screen/Route 只接收 `UiState + actions + 必要平台回调`；禁止访问 Database、DAO、Room Entity、具体 Repository、Shared API wire DTO 或 `BksAppContainer`。
+- 普通 Screen 只接收 `UiState + actions + 必要平台回调`，不得以参数接收或在文件内装配 ViewModel、Repository、Gateway、Factory 或 `BksAppContainer`；ViewModel 获取与业务依赖装配只允许留在 `view/app` Route/composition root。Screen/Route 均禁止访问 Database、DAO、Room Entity、具体 Repository 或 Shared API wire DTO。
 - Context、Intent、URI、MediaStore、文件 writer、系统设置 Launcher 与窗口控制留在 View；转换为稳定 action/result 后再交给 ViewModel。
 - Compose `remember` 仅用于短暂展示状态；持久业务状态必须由 ViewModel/Model 提供。
 

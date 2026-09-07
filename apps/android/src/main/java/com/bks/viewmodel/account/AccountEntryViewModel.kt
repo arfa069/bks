@@ -4,10 +4,10 @@ import com.bks.model.domain.account.AccountCredentials
 import com.bks.model.domain.account.AccountRepository
 import com.bks.viewmodel.account.isNetworkAction
 import com.bks.viewmodel.account.isReadyFor
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthCoordinator
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthPurpose
+import com.bks.model.application.account.WechatAuthCoordinator
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthPurpose
 import com.bks.viewmodel.account.WechatBindMethod
 import com.bks.viewmodel.account.WechatLoginController
 import com.bks.viewmodel.account.WechatLoginUiState
@@ -82,7 +82,7 @@ internal class AccountEntryViewModel(
     val notices = noticeChannel.receiveAsFlow()
     val wechatAvailable: Boolean = wechatController != null
 
-    fun submit(action: AccountAction, form: AccountUiState) {
+    fun submit(action: AccountAction, form: AccountFormState) {
         if (!action.isNetworkAction() || mutableState.value.operationInProgress || !form.isReadyFor(action)) return
         val submittedEntryGeneration = entryGeneration
         val submittedOperationGeneration = ++accountOperationGeneration

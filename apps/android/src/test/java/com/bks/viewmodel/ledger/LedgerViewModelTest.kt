@@ -1,7 +1,6 @@
 package com.bks.viewmodel.ledger
 
-import com.bks.model.data.local.ledger.FundingAccountRepository
-import com.bks.model.data.local.ledger.LocalLedgerDomainRepository
+import com.bks.model.domain.ledger.FundingAccountRepository
 import com.bks.model.domain.ledger.DEFAULT_CATEGORY_ID
 import com.bks.model.domain.settings.PreferencesRepository
 import android.content.Context
@@ -14,8 +13,8 @@ import com.bks.model.data.local.database.BksDatabase
 import com.bks.model.data.local.database.DEFAULT_LEDGER_BOOK_ID
 import com.bks.model.data.local.database.DEFAULT_LEDGER_BOOK_NAME
 import com.bks.model.domain.ledger.FlowDirection
-import com.bks.model.data.local.ledger.LocalLedgerRepository
-import com.bks.model.data.local.settings.LocalPreferencesRepository
+import com.bks.model.data.local.ledger.TestLedgerRepository
+import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
 import com.bks.model.application.account.AccountCloudSettingsCoordinator
@@ -59,8 +58,8 @@ import org.robolectric.annotation.Config
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class LedgerViewModelTest {
     private lateinit var database: BksDatabase
-    private lateinit var repository: LocalLedgerRepository
-    private lateinit var preferencesRepository: LocalPreferencesRepository
+    private lateinit var repository: TestLedgerRepository
+    private lateinit var preferencesRepository: RoomPreferencesRepository
     private lateinit var sessionState: MutableStateFlow<AccountSessionCoordinatorState>
     private lateinit var gateway: TestCloudSettingsGateway
 
@@ -71,12 +70,12 @@ class LedgerViewModelTest {
             BksDatabase::class.java
         ).allowMainThreadQueries().build()
         val sequence = AtomicInteger()
-        repository = LocalLedgerRepository(
+        repository = TestLedgerRepository(
             database = database,
             clock = { NOW },
             idGenerator = { "generated-${sequence.incrementAndGet()}" }
         )
-        preferencesRepository = LocalPreferencesRepository(database)
+        preferencesRepository = RoomPreferencesRepository(database)
         sessionState = MutableStateFlow(verifiedAccount("token-a", "account-a"))
         gateway = TestCloudSettingsGateway()
     }
@@ -200,7 +199,7 @@ class LedgerViewModelTest {
             assertEquals(
                 listOf("新账户账目"),
                 viewModel.awaitState { it.entries.singleOrNull()?.title == "新账户账目" }
-                    .entries.map(LedgerUiEntry::title)
+                    .entries.map(LedgerEntryUiModel::title)
             )
         }
     }
@@ -235,7 +234,7 @@ class LedgerViewModelTest {
             assertEquals(
                 listOf("清理后账目"),
                 viewModel.awaitState { it.entries.singleOrNull()?.title == "清理后账目" }
-                    .entries.map(LedgerUiEntry::title)
+                    .entries.map(LedgerEntryUiModel::title)
             )
         }
     }
@@ -270,7 +269,7 @@ class LedgerViewModelTest {
             assertEquals(
                 listOf("替换后账目"),
                 viewModel.awaitState { it.entries.singleOrNull()?.title == "替换后账目" }
-                    .entries.map(LedgerUiEntry::title)
+                    .entries.map(LedgerEntryUiModel::title)
             )
         }
     }
@@ -296,7 +295,7 @@ class LedgerViewModelTest {
             val cloudSettingsCoordinator = AccountCloudSettingsCoordinator(
                 accountSessionState = sessionState,
                 preferencesRepository = preferencesRepository,
-                fundingAccountRepository = repository,
+                fundingAccountRepository = repository.domainRepository,
                 cloudGateway = gateway,
                 applicationScope = backgroundScope
             ).also { it.start() }
@@ -305,7 +304,7 @@ class LedgerViewModelTest {
                 object : ViewModelProvider.Factory {
                     @Suppress("UNCHECKED_CAST")
                     override fun <T : ViewModel> create(modelClass: Class<T>): T = LedgerViewModel(
-                        repository = LocalLedgerDomainRepository(repository),
+                        repository = repository.domainRepository,
                         cloudSettingsCoordinator = cloudSettingsCoordinator
                     ) as T
                 }
@@ -338,7 +337,7 @@ class LedgerViewModelTest {
         amountMinor = amountMinor,
         transactionTimeEpochMillis = NOW - 1_000,
         merchantTitle = title,
-        categoryId = LocalLedgerRepository.DEFAULT_CATEGORY_ID,
+        categoryId = com.bks.model.domain.ledger.DEFAULT_CATEGORY_ID,
         fundingAccountId = fundingAccountId,
         newFundingAccountLabel = null,
         note = null,

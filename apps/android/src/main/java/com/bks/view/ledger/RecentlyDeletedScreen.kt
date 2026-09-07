@@ -1,7 +1,7 @@
 package com.bks.view.ledger
 
 import com.bks.viewmodel.ledger.formatLedgerEpoch
-import com.bks.viewmodel.ledger.LedgerUiEntry
+import com.bks.viewmodel.ledger.LedgerEntryUiModel
 import com.bks.viewmodel.ledger.remainingRetentionDays
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +30,7 @@ import com.bks.view.common.components.OutlinedButton
 import com.bks.view.common.components.TextButton
 @Composable
 internal fun RecentlyDeletedScreen(
-    entries: List<LedgerUiEntry>,
+    entries: List<LedgerEntryUiModel>,
     onBack: () -> Unit,
     onRestore: (String) -> Unit,
     onPermanentlyDelete: (String) -> Unit

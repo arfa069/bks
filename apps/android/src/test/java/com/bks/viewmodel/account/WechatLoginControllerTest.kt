@@ -5,11 +5,11 @@ import com.bks.model.domain.account.AccountCredentials
 import com.bks.model.domain.account.AccountRepository
 import com.bks.model.domain.account.AccountRepositoryResult
 import com.bks.model.domain.account.AccountVerificationPurpose
-import com.bks.model.platform.account.WechatAuthCallback
-import com.bks.model.platform.account.WechatAuthCoordinator
-import com.bks.model.platform.account.WechatAuthGateway
-import com.bks.model.platform.account.WechatAuthLaunchResult
-import com.bks.model.platform.account.WechatAuthPurpose
+import com.bks.model.application.account.WechatAuthCoordinator
+import com.bks.model.domain.account.WechatAuthCallback
+import com.bks.model.domain.account.WechatAuthGateway
+import com.bks.model.domain.account.WechatAuthLaunchResult
+import com.bks.model.domain.account.WechatAuthPurpose
 import com.bks.viewmodel.account.WechatBindMethod
 import com.bks.viewmodel.account.WechatLoginController
 import com.bks.viewmodel.account.WechatLoginPage

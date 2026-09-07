@@ -64,7 +64,15 @@ View → ViewModel → Model Domain
 
 Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/android/schemas/com.bks.model.data.local.database.BksDatabase/`。同步使用 v2 WorkManager 唯一名称，Runtime 启动时取消旧名称后再按 Session/eligibility gate 调度。
 
-`MvvmPackageArchitectureTest` 由 Gradle 注入主源码与测试源码根目录，检查路径/package 一致、三顶层约束、依赖方向、框架类型归属和旧包零残留。`src/test` 镜像被测生产层，测试替身只存在于测试源码。
+本地账本由 `RoomLedgerRepository` 直接实现领域 `LedgerRepository` 并只向上返回 `LedgerSnapshot` 与领域模型；`RoomLedgerBookStore`、`RoomLedgerEntryStore`、`RoomFundingAccountStore` 是仅在 data 层协作的 Entity Store。待确认生命周期由独立的 `RoomReviewQueueRepository` 拥有，它直接执行 Pending/Ignored/ledger/outbox 跨表事务，只复用必要 Store，不依赖账本聚合实现。
+
+微信授权的纯契约、授权结果与 callback 位于 `model/domain/account/WechatAuthGateway.kt`；协议同意检查由 `model/application/account/WechatAuthCoordinator.kt` 协调。OpenSDK 启动、回调 Intent 和 purpose-bound 单次 state/relay token 持久化分别留在 `model/platform/account`，ViewModel 不依赖 platform 类型。`AccountSessionCoordinator` 仍是业务 Session 的唯一 owner。
+
+账号入口、账号管理与诊断日志由 `view/app` Route 获取 ViewModel、生命周期感知收集状态并处理平台 callback/effect；对应 Screen 只接收 state、actions 与头像读取等必要 View 平台输入。诊断导出 writer、后台取消和 `FLAG_SECURE` 由诊断 Route 管理，Screen 不再提供 ViewModel 注入或 factory 回退。ViewModel factory 统一位于 `BksViewModelFactories.kt`，`BksApp` 只调用具名 factory 完成根装配。
+
+账本与资金账户管理入口分别与 `LedgerBookManagementScreen.kt`、`FundingAccountManagementScreen.kt` 同名；跨账本列表与两个管理页共用的稳定测试标识集中在 `LedgerTestTags.kt`。Dialog、Snackbar 和保存恢复状态仍由对应 View owner 持有。
+
+`MvvmPackageArchitectureTest` 由 Gradle 注入主源码与测试源码根目录，检查路径/package 一致、三顶层约束、依赖方向、框架类型归属和旧包零残留；同时禁止 ViewModel 引用 platform、Domain 执行文件 I/O，并检查 Screen 入口参数和文件内业务 owner 装配。规则检查 import 与代码中的全限定引用，忽略注释和字符串，并由独立的违规/合法样例自测防止规则退化。`src/test` 镜像被测生产层，测试替身只存在于测试源码。
 
 ### 历史演进记录（目录名称已失效）
 
@@ -73,15 +81,15 @@ Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/
   - `LedgerBookRepository`: 账本的增删改查 (CRUD) 及活动选择。
   - `LedgerEntryRepository`: 活动与软删除条目的生命周期管理及保留期清理。
   - `FundingAccountRepository`: 跨账本共享资金账户管理。
-  - `LocalLedgerRepository`: 实现上述所有领域接口，作为 UI 和 ViewModel 调用的单一门面 (Facade)。
+  - 当时的 `LocalLedgerRepository` 实现上述接口；该适配器/门面结构已在 2026-09-06 收敛为当前 `RoomLedgerRepository` 与独立 `RoomReviewQueueRepository`。
 - **UI 状态与服务协调器**：
   - `BksAppState`: 统一管理顶层 Tab、个人中心子页面、手动录入入口、列表滚动状态及 `SnackbarHostState`；`MainActivity` 只保留系统生命周期、外部 Intent 转换和 `setContent`。
   - `BksAppBindings` 承载系统权限、设置跳转、外部导航及微信回调，`BksAppOverrides` 仅承载测试替身；生产依赖、Session 恢复、同步副作用和本地状态持久化继续由应用根组合层统一装配。
   - 审核编辑器、账本列表、账本表单模型和账号管理对话框分别位于独立文件，Screen 入口只负责页面状态与事件编排。
-  - `BillSyncAccessibilityService` 是 `AssistsService` 的薄 Android adapter，只转发连接、事件、解绑和销毁回调；Application-owned `BillSyncCaptureCoordinator` 持有开关观察、Service capture session、窗口选择、去重记忆和异步持久化交接，同一窗口成功页面只创建一次。
+  - `BillSyncAccessibilityService` 是 `AssistsService` 的薄 Android adapter，只转发连接、事件、解绑和销毁回调；Application-owned `BillSyncCaptureCoordinator` 唯一持有开关观察、Service capture session、generation、事件调度和取消，`AccessibilityPageReader` 负责根节点选择/遍历/可读文本采集，`CaptureWindowTracker` 负责窗口去重及 in-flight/deferred 状态，`BillSyncCaptureHandoff` 负责识别后的异步持久化交接。同一窗口成功页面仍只创建一次。
 - **Application composition root 收口（2026-08-25）**：`BksAppContainer` 是唯一生产 Composition Root，持有 Room、Repository、Gateway 及真正的 Application-level Coordinator/Runtime；测试 override 通过 Container 的 lifecycle resolver 创建相互匹配的 Session、Cloud Settings 和 Sync owner，不存在额外 dependency facade。
   - `BksApp` 是唯一根组合入口，只直接收集现有 owner/Repository state、派生路由所需只读值、转发 `ON_RESUME`、装配 Feature ViewModel/Route 和显示真正全局 Dialog；不持有 Account、Categorization、Review、Ledger、Sync 或 Backup 的镜像状态。
-  - 分类规则直接以 `LocalPreferencesRepository.categorizationRules` 为持久真实源；AI 设置由 `AccountSessionCoordinator` 与 `AccountCloudSettingsCoordinator` 共同决定，长期同步任务仍由 Application scope 中的 `LedgerSyncRuntime` 执行。
+  - 分类规则直接以 `RoomPreferencesRepository.categorizationRules` 为持久真实源；AI 设置由 `AccountSessionCoordinator` 与 `AccountCloudSettingsCoordinator` 共同决定，长期同步任务仍由 Application scope 中的 `LedgerSyncRuntime` 执行。
   - `BksRouteHost` 仅持有 Navigation shell；各 Route 接收 owner、state 与平台 callback 后装配 Screen，Route/Screen 不直接访问 Database、DAO 或 Container。
   - `BksLedgerSyncAccountSwitchDialog` 必须在 `BksTheme` 组合结束后调用。这样账本同步发现账号与本地 Profile 不一致时，AlertDialog 继续使用重构前的主题作用域，不会因结构拆分意外继承应用自定义颜色、字体或组件主题。
 - **第四轮 Ledger + Review UI 职责拆分（2026-08-02）**：保持产品交互、Room/同步、OCR、后端契约和数据语义不变，将核心页面拆成可独立核对的渲染与编排边界：
@@ -121,7 +129,7 @@ Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/
 - **第二十四轮全项目收口重构（2026-08-05）**：保持产品 UI、Room/PostgreSQL schema、Shared API、HTTP/JSON、备份格式、同步事务与识别规则不变，只删除重复基础逻辑并收缩职责边界：
   - `AppVisuals.kt` 将壁纸与装饰图片缓存收敛为同一私有实现，容量和对外行为分别保留；`BackendTransportPolicy.kt` 让 AI 设置、AI 分类和 Ledger Sync 共用同一私网 HTTP 测试主机判定。
   - `ReportsScreen.kt` 保留路由与 Overview；分类圆环/排行和现金流面板分别位于 `ReportsCategoryBreakdown.kt`、`ReportsCashFlow.kt`，入口签名、绘制算法、语义节点和布局参数不变。
-  - `PersistedLocalDataBackup.kt` 保留 Snapshot/Repository 和恢复事务；校验、加密口令、版本 Codec、实体/元数据编码分别位于 settings 下的职责文件，V2/V3/V4 读取、字段顺序和错误语义不变。
+  - `LocalDataBackupRepository.kt` 保留 Snapshot/Repository 和恢复事务；校验、加密口令、版本 Codec、实体/元数据编码分别位于 backup 下的职责文件，V2/V3/V4 读取、字段顺序和错误语义不变。
   - `LedgerSyncLocalStore.kt` 保留既有 Facade 和事务边界；记录应用、快照/outbox 操作、payload 映射和排序分别外提，`LedgerSyncCoordinator` 将同步拆为 push/pull 步骤，canonical remap、冲突、cursor 和调用顺序不变。Facade 的既有 `TooManyFunctions` 兼容 suppression 保留，未新增其他 suppression。
   - Backend `AccountRoutesTest` 按 Session/Profile、限流、注销、微信和 Identifier 拆为五个路由测试类；未新增测试 Harness，生产代码不变。
   - Android Detekt baseline 从 71 项降至 66 项，Backend 从 1 项降至 0 项；Shared API 7 项、Macrobenchmark 2 项保留，合计从 81 项降至 75 项。本轮专项测试、Android/Backend Detekt、根 `detekt build` 均通过；Android 全量 577 项、Backend 全量 213 项（3 项环境门控跳过）无失败，未执行真机操作。
@@ -180,12 +188,12 @@ Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/
 2. 500 ms 后通过 `AssistsCore.getAccessibilityRootNodes(ActiveWindow)` 复核包名与窗口，并受限采集可读节点文字。
 3. `BillPageParser` 在内存中执行通用完成态、金额、方向和上下文准入；商户优先取显式标签值，标签缺失时只在独立完成状态之后、首个交易上下文字段之前跳过金额并提取首个有效独立文本，且统一折叠空白。
 4. `BillSyncPipeline` 生成经已验证采集根节点包名映射的支付来源（当前支付宝采集生成 `ALIPAY`，保留 `OTHER` 回退）/ `ACCESSIBILITY_AUTO` / `NEEDS_REVIEW` 候选并执行既有去重。
-5. 本地分类规则应用后，`ReviewQueuePersistence` 创建或合并待确认条目。
-6. 用户确认后才由 Repository 写入当前账本。
+5. 本地分类规则应用后，`RoomReviewQueueRepository` 创建或合并待确认条目。
+6. 用户确认后仍由 `RoomReviewQueueRepository` 在单个 Room transaction 内写入当前账本并记录同步 outbox。
 
 核心规则：
 - 捕获流水线**绝不直接写入**已确认的账本条目。
-- `BillSyncCaptureProcessor` 通过 `ReviewQueuePersistence` 进行持久化，应用 UI 从 Room Flow 实时刷新。
+- `BillSyncCaptureProcessor` 通过领域 `ReviewQueueRepository`（生产实现为 `RoomReviewQueueRepository`）持久化，应用 UI 从 Room Flow 实时刷新。
 - 原始页面文字不进入 Room、账本备份、同步或上传链路。诊断日志开启时，每个实际支付宝采集批次会按诊断契约在设备内保存完整采集正文；非支付宝批次只保存元数据。
 - 初始本地规则作为可编辑的 Room 记录预置；Room v12 到 v13 仅补入新增的“麦当劳 -> 餐饮”和“中国电信 -> 通讯”规则，不恢复已删除的旧默认规则，也不覆盖用户后续的修改。
 - 用户创建或修改的规则优先于未修改内置规则；规则只匹配商户，不重新判断支付来源或交易类型。英文逗号分隔的多个商户关键词采用“任一包含即命中”，并忽略首尾空白、空项、大小写及重复项；相同规范化关键词集合再次纠正会覆盖旧规则。
