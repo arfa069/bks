@@ -4,9 +4,11 @@
 
 ## 项目结构
 
+- `apps/android`: Kotlin + Jetpack Compose + Room Android 客户端。
 - `apps/android`: Kotlin + Jetpack Compose + Room Android 客户端，生产源码严格采用 `model`、`viewmodel`、`view` 三顶层架构。
 - `services/backend`: Ktor 后端，提供统一账号认证、云配置、AI 代理和账户级账本同步。
 - `shared/api`: 共享 Kotlin API 模型。
+- `docs`: PRD、架构、UI、合规、ADR 与迭代切片。
 - `docs`: PRD、架构、UI、合规、识别规则与操作手册。
 
 ## 本地构建
@@ -44,8 +46,10 @@
 
 ## 当前 Phase 2 状态
 
+Phase 2 已将本地账本、待确认队列、规则与 AI 同意、备份恢复、自动记账权限服务和“我的”二级页接入当前 Android 主流程。开发者工具只在 Debug 构建中显示。独立的“诊断日志”入口在 Debug、Release 均位于“合规与隐私”，Debug 默认开启，Release 默认关闭并要求用户阅读说明后主动开启。
 Phase 2 已将本地账本、待确认队列、规则与 AI 同意、备份恢复、自动记账权限服务和“我的”二级页接入当前 Android 主流程。开发者工具只在 Debug 构建中显示。独立的“诊断日志”入口在 Debug 构建中位于“我的”总览（紧随“合规与隐私”），Debug 默认开启；Release 默认关闭且在入口过滤与路由两层均不可达，以明文 `.log` 分段保存在私有目录并支持无口令明文导出。
 
+自动记账默认关闭，在“我的 → 自动记账”中开启。获得无障碍授权且服务连接后，应用仅在本机读取第三方应用当前活动窗口中可见、非密码、非输入框的文字；不截图、不操作其他应用、不保存或上传原始页面文字。只有满足通用完成态、唯一金额、明确方向和交易上下文的候选才进入待确认。
 自动记账默认关闭，在“我的 → 自动记账”中开启。获得无障碍授权且服务连接后，应用仅在本机读取第三方应用当前活动窗口中可见、非密码、非输入框的文字；不截图、不操作其他应用、不保存或上传原始页面文字。只有满足通用完成态、唯一金额、明确方向和交易上下文的候选才进入待确认；当前支付宝采集候选直接保留映射的支付宝支付来源。
 
 当前账号入口支持用户名、邮箱或手机号加密码登录；用户名注册和真实 SMTP 邮箱注册已完成验收。短信验证码直接登录不在产品范围内，真实短信 Provider 未配置，因此手机号注册、找回及短信验证类绑定暂不可用。微信代码与假 Provider 自动化已完成，但未配置 Android AppID 和后端 AppID/AppSecret，入口保持隐藏，真实微信登录/注册不可用。
@@ -56,6 +60,11 @@ Phase 2 已将本地账本、待确认队列、规则与 AI 同意、备份恢�
 
 Release 只有在本地提供 keystore 与完整签名凭据时才是可安装的已签名 APK。没有签名凭据时，构建会产出未签名的 `android-release-unsigned.apk`，仅用于编译与 lint 验证。
 
+- 当前执行状态与未完成手工验证见 [Phase 2 Issue Files](docs/issues/phase-2/) 和 [可选真机验证清单](docs/issues/phase-2/OPTIONAL-VALIDATIONS.md)。
+- 当前仍需外部服务、真实设备或生产环境完成的事项见 [todos.md](todos.md)。
+- 内测发布、设备矩阵、签名和风险记录见 [Internal Beta Release](docs/INTERNAL-BETA-RELEASE.md)。
+- 诊断日志的隐私边界、导出与本机解密方式见 [诊断日志操作手册](docs/DIAGNOSTIC-LOGS.md)。
+- [Phase 2 Baseline Audit](docs/PHASE-2-BASELINE-AUDIT.md) 是 `cfa42ec` 时的历史审计，不代表当前工作树状态。
 - 完整架构与代码分层见 [系统架构设计](docs/ARCHITECTURE.md)。
 - 产品功能与交互细节见 [产品需求文档 (PRD)](docs/PRD.md) 与 [UI 设计规范](docs/UI-DESIGN.md)。
 - 交易识别逻辑与采集边界见 [通用交易识别规则](docs/PAYMENT-RECOGNITION-RULES.md)。
