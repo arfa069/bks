@@ -50,6 +50,12 @@ import com.bks.model.data.local.settings.LocalNotificationPreferences
 import com.bks.model.domain.notifications.NotificationPreferencesRepository
 import com.bks.model.platform.notifications.ReviewNotificationPublisher
 import com.bks.model.platform.notifications.ReviewNotificationRuntime
+import com.bks.model.data.local.settings.LocalAttentionReminderState
+import com.bks.model.platform.notifications.AttentionReminderCoordinator
+import com.bks.model.platform.notifications.AttentionReminderRuntime
+import com.bks.model.platform.notifications.AttentionNotificationPublisher
+import com.bks.model.platform.notifications.BacklogReminderScheduler
+import com.bks.model.platform.notifications.BookkeepingHealthObserver
 
 internal class BksAppContainer(context: Context) {
     private val applicationContext = context.applicationContext
@@ -76,6 +82,17 @@ internal class BksAppContainer(context: Context) {
     }
     val categorizationRulesCoordinator: CategorizationRulesCoordinator by lazy {
         CategorizationRulesCoordinator(preferencesRepository, reviewQueuePersistence)
+    }
+    val attentionReminderCoordinator: AttentionReminderCoordinator by lazy {
+        AttentionReminderCoordinator(reviewQueuePersistence, notificationPreferences,
+            LocalAttentionReminderState(applicationContext), AttentionNotificationPublisher(applicationContext))
+    }
+    val attentionReminderRuntime: AttentionReminderRuntime by lazy {
+        AttentionReminderRuntime(applicationScope,
+            BookkeepingHealthObserver(applicationContext,
+                preferencesRepository.userPreferences.map { it.automaticBookkeepingEnabled }).observe(),
+            notificationPreferences, reviewQueuePersistence, attentionReminderCoordinator
+        ) { enabled -> BacklogReminderScheduler.setEnabled(applicationContext, enabled) }
     }
     val ledgerSyncLocalStore: com.bks.model.domain.sync.LedgerSyncLocalRepository by lazy {
         LedgerSyncLocalStore(database)

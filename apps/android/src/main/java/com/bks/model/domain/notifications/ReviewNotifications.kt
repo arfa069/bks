@@ -10,11 +10,15 @@ fun interface ReviewNotificationSink {
 
 data class NotificationPreferences(
     val enabled: Boolean = true,
-    val hideDetailsOnLockScreen: Boolean = true
+    val hideDetailsOnLockScreen: Boolean = true,
+    val interruptionEnabled: Boolean = true,
+    val backlogEnabled: Boolean = false
 )
 
 interface NotificationPreferencesRepository {
     val state: StateFlow<NotificationPreferences>
     suspend fun setEnabled(enabled: Boolean)
     suspend fun setHideDetailsOnLockScreen(hide: Boolean)
+    suspend fun setInterruptionEnabled(enabled: Boolean)
+    suspend fun setBacklogEnabled(enabled: Boolean)
 }

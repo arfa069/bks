@@ -190,7 +190,9 @@ Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/
 4. `BillSyncPipeline` 生成经已验证采集根节点包名映射的支付来源（当前支付宝采集生成 `ALIPAY`，保留 `OTHER` 回退）/ `ACCESSIBILITY_AUTO` / `NEEDS_REVIEW` 候选并执行既有去重。
 5. 本地分类规则应用后，`RoomReviewQueueRepository` 仅插入不存在的稳定 ID，并返回实际新增的领域条目。
 6. `BillSyncCaptureProcessor` 在入库串行区退出后，将实际新增结果交给 `ReviewNotificationSink` 的非阻塞队列。`ReviewNotificationRuntime` 独立批处理并重读待确认状态；`ReviewNotificationPublisher` 管理系统通知分组、锁屏隐私和撤销。失败是旁路结果，不改变采集成功与去重状态。进程重启只校正已有活动通知，不重放历史记录；没有新增通知 outbox 或数据库迁移。
-6. 用户确认后仍由 `RoomReviewQueueRepository` 在单个 Room transaction 内写入当前账本并记录同步 outbox。
+7. 用户确认后仍由 `RoomReviewQueueRepository` 在单个 Room transaction 内写入当前账本并记录同步 outbox。
+
+通知第二阶段使用独立的 `AttentionReminderRuntime`：`BookkeepingHealthObserver` 订阅已有 `BillSyncServiceHealth` 和系统无障碍授权设置，结合持久化自动记账开关，经 30 秒异常等待/5 秒恢复稳定期控制中断提醒。健康回调仅投递状态变化，通知不进入采集锁。`AttentionReminderCoordinator` 串行管理中断标记、积压冷却与通知撤销；积压创建仅由唯一小时任务 `pending-backlog-reminder-v1` 的 `BacklogReminderWorker` 发起，Room/设置观察只校正现有通知。所有投递均复核最新偏好和队列；冷却时间、故障标记与队列摘要在本地 SharedPreferences 保存，先预约再投递，以最佳努力语义避免重启重复提醒。不新增 Room schema、网络请求、前台服务或精确闹钟。
 
 核心规则：
 - 捕获流水线**绝不直接写入**已确认的账本条目。

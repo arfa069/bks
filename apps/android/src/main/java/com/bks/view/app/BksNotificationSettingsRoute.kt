@@ -27,7 +27,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bks.model.platform.app.bksAppContainer
-import com.bks.model.platform.notifications.ReviewNotificationPublisher
 import com.bks.view.settings.NotificationSettingsScreen
 import com.bks.viewmodel.settings.NotificationSettingsViewModel
 
@@ -49,8 +48,7 @@ internal fun BksNotificationSettingsRoute(
     val viewModel: NotificationSettingsViewModel = viewModel(factory = factory)
     val state by viewModel.state.collectAsStateWithLifecycle()
     val manager = remember(context) { context.getSystemService(NotificationManager::class.java) }
-    fun systemAllowed(): Boolean = manager.areNotificationsEnabled() &&
-        manager.getNotificationChannel(ReviewNotificationPublisher.CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
+    fun systemAllowed(): Boolean = manager.areNotificationsEnabled()
     var allowed by remember { mutableStateOf(systemAllowed()) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         allowed = systemAllowed()
@@ -74,6 +72,8 @@ internal fun BksNotificationSettingsRoute(
         state, allowed,
         onEnabledChange = viewModel::setEnabled,
         onHideDetailsChange = viewModel::setHideDetails,
+        onInterruptionChange = viewModel::setInterruptionEnabled,
+        onBacklogChange = viewModel::setBacklogEnabled,
         onRequestPermission = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

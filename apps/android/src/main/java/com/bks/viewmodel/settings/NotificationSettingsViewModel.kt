@@ -17,6 +17,8 @@ internal class NotificationSettingsViewModel(
 
     fun setEnabled(enabled: Boolean) = update { repository.setEnabled(enabled) }
     fun setHideDetails(hide: Boolean) = update { repository.setHideDetailsOnLockScreen(hide) }
+    fun setInterruptionEnabled(enabled: Boolean) = update { repository.setInterruptionEnabled(enabled) }
+    fun setBacklogEnabled(enabled: Boolean) = update { repository.setBacklogEnabled(enabled) }
 
     private fun update(block: suspend () -> Unit) {
         viewModelScope.launch {

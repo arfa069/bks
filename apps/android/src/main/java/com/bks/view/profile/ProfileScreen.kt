@@ -341,7 +341,7 @@ private fun ProfileDestination.summary(ledgerSyncEnabled: Boolean): String = whe
     ProfileDestination.AccountManagement -> error("Account summary is rendered by AccountStatusCard")
     ProfileDestination.AutomaticBookkeeping -> "查看功能说明与运行状态"
     ProfileDestination.CategorizationRules -> "管理本地分类规则"
-    ProfileDestination.Notifications -> "新增待确认提醒与锁屏隐私"
+    ProfileDestination.Notifications -> "待确认、中断提醒与锁屏隐私"
     ProfileDestination.DataAndBackup -> if (ledgerSyncEnabled) {
         "账户同步已启用 · 导入、导出与备份"
     } else {

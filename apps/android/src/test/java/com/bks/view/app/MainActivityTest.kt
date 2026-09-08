@@ -105,6 +105,23 @@ class MainActivityTest {
     }
 
     @Test
+    fun interruptionNotificationOpensSettingsWithoutEnablingBookkeeping() {
+        val requested = mutableStateOf(true)
+        val before = runBlocking { context.bksAppContainer.preferencesRepository.userPreferences.first().automaticBookkeepingEnabled }
+        composeRule.setContent {
+            BksApp(bindings = BksAppBindings(
+                requestedAutomaticBookkeeping = requested.value,
+                onBookkeepingNotificationConsumed = { requested.value = false }
+            ))
+        }
+        composeRule.onNodeWithText("无障碍授权").assertIsDisplayed()
+        composeRule.onNodeWithText("返回").performClick()
+        composeRule.runOnIdle { requested.value = true }
+        composeRule.onNodeWithText("无障碍授权").assertIsDisplayed()
+        assertEquals(before, runBlocking { context.bksAppContainer.preferencesRepository.userPreferences.first().automaticBookkeepingEnabled })
+    }
+
+    @Test
     fun restoredSessionStartsOnHome() {
         composeRule.setContent {
             BksApp()

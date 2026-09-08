@@ -161,6 +161,8 @@ class ReviewNotificationsTest {
         override suspend fun setHideDetailsOnLockScreen(hide: Boolean) {
             state.value = state.value.copy(hideDetailsOnLockScreen = hide)
         }
+        override suspend fun setInterruptionEnabled(enabled: Boolean) { state.value = state.value.copy(interruptionEnabled = enabled) }
+        override suspend fun setBacklogEnabled(enabled: Boolean) { state.value = state.value.copy(backlogEnabled = enabled) }
     }
 
     private class FakeReviewRepository(initial: List<PendingEntry>) : ReviewQueueRepository {

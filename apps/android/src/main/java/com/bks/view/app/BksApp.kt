@@ -75,7 +75,9 @@ data class BksAppBindings(
     val wechatAuthCallback: WechatAuthCallback? = null,
     val onWechatAuthCallbackConsumed: () -> Unit = {},
     val requestedReviewEntryId: String? = null,
-    val onReviewNotificationConsumed: () -> Unit = {}
+    val onReviewNotificationConsumed: () -> Unit = {},
+    val requestedAutomaticBookkeeping: Boolean = false,
+    val onBookkeepingNotificationConsumed: () -> Unit = {}
 )
 
 data class BksAppOverrides(
@@ -113,6 +115,15 @@ fun BksApp(
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
     val signedIn = accountState.session is AccountSession.SignedIn
     var requestedReviewEntryId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(bindings.requestedAutomaticBookkeeping, accountState.session, accountState.isRestoring) {
+        if (!bindings.requestedAutomaticBookkeeping || accountState.isRestoring || accountState.session == null) return@LaunchedEffect
+        appState.manualEntryOpen.value = false
+        appState.closeAccountEntry()
+        appState.selectedTab.value = AppTab.Profile
+        appState.profileDestination.value = ProfileDestination.AutomaticBookkeeping
+        requestedReviewEntryId = null
+        bindings.onBookkeepingNotificationConsumed()
+    }
     LaunchedEffect(bindings.requestedReviewEntryId, accountState.session, accountState.isRestoring) {
         val requested = bindings.requestedReviewEntryId ?: return@LaunchedEffect
         if (accountState.isRestoring || accountState.session == null) return@LaunchedEffect

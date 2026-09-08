@@ -24,21 +24,28 @@ class NotificationSettingsScreenTest {
         var permissionRequests = 0
         var enabled: Boolean? = null
         var hide: Boolean? = null
+        var interruption: Boolean? = null
+        var backlog: Boolean? = null
         compose.setContent {
             NotificationSettingsScreen(
                 state = NotificationPreferences(), systemAllowed = false,
                 onEnabledChange = { enabled = it }, onHideDetailsChange = { hide = it },
+                onInterruptionChange = { interruption = it }, onBacklogChange = { backlog = it },
                 onRequestPermission = { permissionRequests++ }, onOpenSystemSettings = {}, onBack = {}
             )
         }
         compose.waitForIdle()
         assertEquals(0, permissionRequests)
-        compose.onNodeWithText("系统通知未允许，仍会正常识别并保存到待确认").assertIsDisplayed()
+        compose.onNodeWithText("系统通知未允许，仍会正常识别并保存到待确认").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("开启系统通知").performScrollTo().performClick()
         assertEquals(1, permissionRequests)
         compose.onNodeWithTag("notifications-enabled").performScrollTo().performClick()
         compose.onNodeWithTag("notifications-hide-details").performScrollTo().performClick()
+        compose.onNodeWithTag("notifications-interruption").performScrollTo().performClick()
+        compose.onNodeWithTag("notifications-backlog").performScrollTo().performClick()
         assertEquals(false, enabled)
         assertEquals(false, hide)
+        assertEquals(false, interruption)
+        assertEquals(true, backlog)
     }
 }

@@ -26,6 +26,8 @@ internal fun NotificationSettingsScreen(
     systemAllowed: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onHideDetailsChange: (Boolean) -> Unit,
+    onInterruptionChange: (Boolean) -> Unit,
+    onBacklogChange: (Boolean) -> Unit,
     onRequestPermission: () -> Unit,
     onOpenSystemSettings: () -> Unit,
     onBack: () -> Unit,
@@ -42,11 +44,24 @@ internal fun NotificationSettingsScreen(
             Switch(state.enabled, onCheckedChange = onEnabledChange, modifier = Modifier.testTag("notifications-enabled"))
         }
         Text("自动记账新增记录后提醒，包含金额、商户、建议分类和识别时间。短时间多笔记录合并提醒。")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("自动记账中断提醒", Modifier.weight(1f))
+            Switch(state.interruptionEnabled, onCheckedChange = onInterruptionChange,
+                modifier = Modifier.testTag("notifications-interruption"))
+        }
+        Text("开启自动记账后，权限缺失或服务断开持续 30 秒才提醒。同一次中断只提醒一次，恢复后撤销。应用被强制停止时无法保证提醒。")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("待确认积压提醒", Modifier.weight(1f))
+            Switch(state.backlogEnabled, onCheckedChange = onBacklogChange,
+                modifier = Modifier.testTag("notifications-backlog"))
+        }
+        Text("默认关闭。开启后约每小时检查：达到 10 笔或最早记录超过 48 小时才提醒，最多每 24 小时一次。队列未变不重复提醒，后台检查可能延迟。")
         Text(if (systemAllowed) "系统通知已允许" else "系统通知未允许，仍会正常识别并保存到待确认")
         if (!systemAllowed) {
             TextButton(onClick = onRequestPermission) { Text("开启系统通知") }
         }
         TextButton(onClick = onOpenSystemSettings) { Text("系统通知设置") }
+        Text("各类提醒也可在系统通知设置中单独关闭。")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("锁屏隐藏交易详情", Modifier.weight(1f))
             Switch(

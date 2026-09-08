@@ -10,6 +10,7 @@ import com.bks.model.domain.account.WechatAuthCallback
 import com.bks.model.platform.account.WechatAuthCallbackIntent
 import com.bks.view.common.platform.BillSyncStateCoordinator
 import com.bks.model.platform.notifications.ReviewNotificationIntents
+import com.bks.model.platform.notifications.AttentionNotificationIntents
 class MainActivity : ComponentActivity() {
     private val coordinator by lazy {
         BillSyncStateCoordinator(
@@ -20,10 +21,12 @@ class MainActivity : ComponentActivity() {
     }
     private val pendingWechatAuthCallback = mutableStateOf<WechatAuthCallback?>(null)
     private val requestedReviewEntryId = mutableStateOf<String?>(null)
+    private val requestedAutomaticBookkeeping = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedReviewEntryId.value = savedInstanceState?.getString("notification_review_entry")
+        requestedAutomaticBookkeeping.value = savedInstanceState?.getBoolean("notification_bookkeeping") ?: false
         handleNavigationIntent(intent)
         coordinator.onCreate()
         setContent {
@@ -39,7 +42,9 @@ class MainActivity : ComponentActivity() {
                     wechatAuthCallback = pendingWechatAuthCallback.value,
                     onWechatAuthCallbackConsumed = { pendingWechatAuthCallback.value = null },
                     requestedReviewEntryId = requestedReviewEntryId.value,
-                    onReviewNotificationConsumed = { requestedReviewEntryId.value = null }
+                    onReviewNotificationConsumed = { requestedReviewEntryId.value = null },
+                    requestedAutomaticBookkeeping = requestedAutomaticBookkeeping.value,
+                    onBookkeepingNotificationConsumed = { requestedAutomaticBookkeeping.value = false }
                 )
             )
         }
@@ -47,12 +52,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleNavigationIntent(intent)
         setIntent(intent)
+        handleNavigationIntent(intent)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         requestedReviewEntryId.value?.let { outState.putString("notification_review_entry", it) }
+        outState.putBoolean("notification_bookkeeping", requestedAutomaticBookkeeping.value)
         super.onSaveInstanceState(outState)
     }
 
@@ -72,7 +78,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleNavigationIntent(intent: Intent?) {
-        ReviewNotificationIntents.consume(this, intent)?.let { requestedReviewEntryId.value = it }
+        ReviewNotificationIntents.consume(this, intent)?.let {
+            requestedReviewEntryId.value = it
+            requestedAutomaticBookkeeping.value = false
+        }
+        if (AttentionNotificationIntents.consume(this, intent)) {
+            requestedAutomaticBookkeeping.value = true
+            requestedReviewEntryId.value = null
+        }
         WechatAuthCallbackIntent.consume(this, intent)?.let { callback ->
             pendingWechatAuthCallback.value = callback
         }

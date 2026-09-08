@@ -15,7 +15,9 @@ internal class LocalNotificationPreferences(context: Context) : NotificationPref
     private val mutableState = MutableStateFlow(
         NotificationPreferences(
             enabled = preferences.getBoolean("enabled", true),
-            hideDetailsOnLockScreen = preferences.getBoolean("hide_lock_screen_details", true)
+            hideDetailsOnLockScreen = preferences.getBoolean("hide_lock_screen_details", true),
+            interruptionEnabled = preferences.getBoolean("interruption_enabled", true),
+            backlogEnabled = preferences.getBoolean("backlog_enabled", false)
         )
     )
     override val state = mutableState.asStateFlow()
@@ -26,12 +28,17 @@ internal class LocalNotificationPreferences(context: Context) : NotificationPref
     override suspend fun setHideDetailsOnLockScreen(hide: Boolean) =
         update { it.copy(hideDetailsOnLockScreen = hide) }
 
+    override suspend fun setInterruptionEnabled(enabled: Boolean) = update { it.copy(interruptionEnabled = enabled) }
+    override suspend fun setBacklogEnabled(enabled: Boolean) = update { it.copy(backlogEnabled = enabled) }
+
     private suspend fun update(transform: (NotificationPreferences) -> NotificationPreferences) {
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 val next = transform(state.value)
                 check(preferences.edit().putBoolean("enabled", next.enabled)
-                    .putBoolean("hide_lock_screen_details", next.hideDetailsOnLockScreen).commit())
+                    .putBoolean("hide_lock_screen_details", next.hideDetailsOnLockScreen)
+                    .putBoolean("interruption_enabled", next.interruptionEnabled)
+                    .putBoolean("backlog_enabled", next.backlogEnabled).commit())
                 mutableState.value = next
             }
         }
