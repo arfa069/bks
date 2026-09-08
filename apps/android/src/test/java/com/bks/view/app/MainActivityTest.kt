@@ -12,6 +12,8 @@ import com.bks.viewmodel.diagnostics.DiagnosticLogsViewModel
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.mutableStateOf
+import com.bks.model.domain.billsync.BillSyncPipeline
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -75,6 +77,31 @@ class MainActivityTest {
     @After
     fun clearSession() {
         clearPersistedSession()
+    }
+
+    @Test
+    fun notificationOpensPendingEntryAtStartupAndOnANewRequest() {
+        val persistence = context.bksAppContainer.reviewQueuePersistence
+        val entries = listOf("通知首笔", "通知第二笔").mapIndexed { index, merchant ->
+            BillSyncPipeline().sync("支付成功\n￥10.00\n商户：$merchant", index.toLong(), PaymentSource.ALIPAY)
+                .createdEntries.single()
+        }
+        runBlocking { persistence.insertCapturedEntries(entries) }
+        val requested = mutableStateOf<String?>(entries.first().id)
+        composeRule.setContent {
+            BksApp(bindings = BksAppBindings(
+                requestedReviewEntryId = requested.value,
+                onReviewNotificationConsumed = { requested.value = null }
+            ))
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("编辑待确认账目").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("manual-entry-merchant").assertTextContains("通知首笔")
+        composeRule.runOnIdle { requested.value = entries.last().id }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("manual-entry-merchant").assertTextContains("通知第二笔")
+        assertEquals(entries.map { it.id }.toSet(), runBlocking { persistence.loadSnapshot().pendingEntries }.map { it.id }.toSet())
     }
 
     @Test

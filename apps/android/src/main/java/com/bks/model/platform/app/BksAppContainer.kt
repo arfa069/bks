@@ -46,6 +46,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.map
+import com.bks.model.data.local.settings.LocalNotificationPreferences
+import com.bks.model.domain.notifications.NotificationPreferencesRepository
+import com.bks.model.platform.notifications.ReviewNotificationPublisher
+import com.bks.model.platform.notifications.ReviewNotificationRuntime
 
 internal class BksAppContainer(context: Context) {
     private val applicationContext = context.applicationContext
@@ -60,6 +64,15 @@ internal class BksAppContainer(context: Context) {
     val dataBackupRepository: DataBackupRepository by lazy { LocalDataBackupRepository(database) }
     val reviewQueuePersistence: ReviewQueueRepository by lazy {
         RoomReviewQueueRepository(database)
+    }
+    val notificationPreferences: NotificationPreferencesRepository by lazy {
+        LocalNotificationPreferences(applicationContext)
+    }
+    val reviewNotificationRuntime: ReviewNotificationRuntime by lazy {
+        ReviewNotificationRuntime(
+            applicationScope, reviewQueuePersistence, notificationPreferences,
+            ReviewNotificationPublisher(applicationContext)
+        )
     }
     val categorizationRulesCoordinator: CategorizationRulesCoordinator by lazy {
         CategorizationRulesCoordinator(preferencesRepository, reviewQueuePersistence)
@@ -144,7 +157,8 @@ internal class BksAppContainer(context: Context) {
     fun createBillSyncCaptureProcessor(): BillSyncCaptureProcessor = BillSyncCaptureProcessor(
         pipeline = BillSyncPipeline(),
         reviewQueuePersistence = RoomReviewQueueRepository(database),
-        preferencesRepository = preferencesRepository
+        preferencesRepository = preferencesRepository,
+        notifications = reviewNotificationRuntime
     )
 
     fun createAccountSessionCoordinator(

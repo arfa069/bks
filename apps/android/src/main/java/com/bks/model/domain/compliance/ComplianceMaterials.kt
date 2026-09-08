@@ -31,6 +31,7 @@ data class ThirdPartyService(
 
 enum class PermissionExplanationId {
     AccessibilityBillSync,
+    Notifications,
     CloudAi
 }
 
@@ -158,6 +159,12 @@ val BKS_COMPLIANCE = ComplianceMaterials(
         )
     ),
     permissionExplanations = listOf(
+        PermissionExplanation(
+            id = PermissionExplanationId.Notifications,
+            title = "新增待确认通知",
+            purpose = "在自动记账实际新增待确认记录后，显示商户、金额、建议分类、识别时间和来源。",
+            boundary = "可选权限，仅发送本应用提醒，不读取其他应用通知。默认隐藏锁屏交易详情；可在“我的 → 通知设置”关闭提醒或调整锁屏显示，拒绝通知权限不影响识别和入库。"
+        ),
         PermissionExplanation(
             id = PermissionExplanationId.AccessibilityBillSync,
             title = "自动记账无障碍服务",

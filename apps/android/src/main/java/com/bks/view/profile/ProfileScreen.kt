@@ -42,7 +42,8 @@ private val ProfileContentMaxWidth = 880.dp
 private val ProfileTwoColumnBreakpoint = 840.dp
 private val ProfileUtilityDestinations = listOf(
     ProfileDestination.AutomaticBookkeeping,
-    ProfileDestination.CategorizationRules
+    ProfileDestination.CategorizationRules,
+    ProfileDestination.Notifications
 )
 private val ProfileDataDestinations = listOf(
     ProfileDestination.DataAndBackup,
@@ -56,6 +57,7 @@ enum class ProfileDestination(
     AccountManagement("账户管理", R.drawable.aa_profile_account),
     AutomaticBookkeeping("自动记账", R.drawable.aa_profile_automatic),
     CategorizationRules("分类规则", R.drawable.aa_profile_rules),
+    Notifications("通知设置", R.drawable.aa_profile_automatic),
     DataAndBackup("数据与备份", R.drawable.aa_profile_backup),
     ComplianceAndPrivacy("合规与隐私", R.drawable.aa_profile_privacy),
     DiagnosticLogs("诊断日志", R.drawable.aa_profile_privacy)
@@ -339,6 +341,7 @@ private fun ProfileDestination.summary(ledgerSyncEnabled: Boolean): String = whe
     ProfileDestination.AccountManagement -> error("Account summary is rendered by AccountStatusCard")
     ProfileDestination.AutomaticBookkeeping -> "查看功能说明与运行状态"
     ProfileDestination.CategorizationRules -> "管理本地分类规则"
+    ProfileDestination.Notifications -> "新增待确认提醒与锁屏隐私"
     ProfileDestination.DataAndBackup -> if (ledgerSyncEnabled) {
         "账户同步已启用 · 导入、导出与备份"
     } else {

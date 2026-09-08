@@ -94,7 +94,7 @@ class CategorizationViewModelTest {
 
         override suspend fun ensureSystemCategories() = Unit
         override suspend fun loadCategories(): List<Category> = emptyList()
-        override suspend fun insertCapturedEntries(entries: List<PendingEntry>): Int = 0
+        override suspend fun insertCapturedEntries(entries: List<PendingEntry>): List<PendingEntry> = emptyList()
 
         override suspend fun applyCategorizationRulesToUnclassified(
             rules: List<CategorizationRule>

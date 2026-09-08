@@ -9,6 +9,7 @@ import com.bks.model.platform.app.bksAppContainer
 import com.bks.model.domain.account.WechatAuthCallback
 import com.bks.model.platform.account.WechatAuthCallbackIntent
 import com.bks.view.common.platform.BillSyncStateCoordinator
+import com.bks.model.platform.notifications.ReviewNotificationIntents
 class MainActivity : ComponentActivity() {
     private val coordinator by lazy {
         BillSyncStateCoordinator(
@@ -18,9 +19,11 @@ class MainActivity : ComponentActivity() {
         )
     }
     private val pendingWechatAuthCallback = mutableStateOf<WechatAuthCallback?>(null)
+    private val requestedReviewEntryId = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedReviewEntryId.value = savedInstanceState?.getString("notification_review_entry")
         handleNavigationIntent(intent)
         coordinator.onCreate()
         setContent {
@@ -34,7 +37,9 @@ class MainActivity : ComponentActivity() {
                     onOpenBillSyncAutoStartSettings = coordinator::openBillSyncAutoStartSettings,
                     onOpenBillSyncPowerPolicySettings = coordinator::openBillSyncPowerPolicySettings,
                     wechatAuthCallback = pendingWechatAuthCallback.value,
-                    onWechatAuthCallbackConsumed = { pendingWechatAuthCallback.value = null }
+                    onWechatAuthCallbackConsumed = { pendingWechatAuthCallback.value = null },
+                    requestedReviewEntryId = requestedReviewEntryId.value,
+                    onReviewNotificationConsumed = { requestedReviewEntryId.value = null }
                 )
             )
         }
@@ -44,6 +49,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleNavigationIntent(intent)
         setIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        requestedReviewEntryId.value?.let { outState.putString("notification_review_entry", it) }
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -62,6 +72,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleNavigationIntent(intent: Intent?) {
+        ReviewNotificationIntents.consume(this, intent)?.let { requestedReviewEntryId.value = it }
         WechatAuthCallbackIntent.consume(this, intent)?.let { callback ->
             pendingWechatAuthCallback.value = callback
         }

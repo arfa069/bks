@@ -7,6 +7,7 @@ import com.bks.model.domain.settings.PreferencesRepository
 import com.bks.model.application.review.ReviewQueueCaptureCoordinator
 import com.bks.model.domain.review.ReviewQueueRepository
 import com.bks.model.domain.categorization.applyCategorizationSuggestion
+import com.bks.model.domain.notifications.ReviewNotificationSink
 import kotlinx.coroutines.flow.first
 
 class BillSyncCaptureProcessor(
@@ -14,7 +15,8 @@ class BillSyncCaptureProcessor(
     private val reviewQueuePersistence: ReviewQueueRepository,
     private val preferencesRepository: PreferencesRepository,
     private val clock: () -> Long = System::currentTimeMillis,
-    private val captureCoordinator: ReviewQueueCaptureCoordinator = ReviewQueueCaptureCoordinator.Shared
+    private val captureCoordinator: ReviewQueueCaptureCoordinator = ReviewQueueCaptureCoordinator.Shared,
+    private val notifications: ReviewNotificationSink = ReviewNotificationSink { }
 ) {
     suspend fun process(pageText: String, paymentSource: PaymentSource): BillSyncResult =
         persist(recognize(pageText, paymentSource))
@@ -31,19 +33,23 @@ class BillSyncCaptureProcessor(
     internal suspend fun persist(result: BillSyncResult): BillSyncResult {
         if (!result.recognized) return result
 
-        return captureCoordinator.serialize {
+        val (persisted, inserted) = captureCoordinator.serialize {
             reviewQueuePersistence.ensureSystemCategories()
             val rules = preferencesRepository.categorizationRules.first()
             val categories = reviewQueuePersistence.loadCategories()
             val createdEntries = result.createdEntries.map {
                 it.applyCategorizationSuggestion(rules, categories)
             }
-            val insertedCount = if (createdEntries.isEmpty()) {
-                0
+            val insertedEntries = if (createdEntries.isEmpty()) {
+                emptyList()
             } else {
                 reviewQueuePersistence.insertCapturedEntries(createdEntries)
             }
-            result.copy(createdEntries = createdEntries, insertedCount = insertedCount)
+            result.copy(createdEntries = createdEntries, insertedCount = insertedEntries.size) to insertedEntries
         }
+        // No notification permission, IPC or asynchronous work runs inside the capture lock.
+        // A failed handoff must never make a committed capture look like a failed insert.
+        if (inserted.isNotEmpty()) runCatching { notifications.enqueue(inserted) }
+        return persisted
     }
 }

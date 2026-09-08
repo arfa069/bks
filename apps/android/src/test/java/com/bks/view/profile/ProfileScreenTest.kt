@@ -56,6 +56,7 @@ class ProfileScreenTest {
         composeRule.onNodeWithText("记账设置").assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-AutomaticBookkeeping").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-CategorizationRules").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("profile-entry-Notifications").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-DataAndBackup").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("数据与安全").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("profile-entry-ComplianceAndPrivacy").performScrollTo().assertIsDisplayed()

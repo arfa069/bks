@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.runtime.mutableStateOf
 import com.bks.model.domain.ledger.ConfidenceState
 import com.bks.model.domain.ledger.PaymentSource
 import com.bks.model.domain.ledger.TransactionKind
@@ -39,6 +40,40 @@ import org.robolectric.annotation.Config
 class ReviewQueueEditorTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun notificationWaitsForDataThenOpensTheRequestedEntry() {
+        val state = mutableStateOf(testReviewQueueUiState().copy(isLoaded = false))
+        val requested = mutableStateOf<String?>("pending-lunch")
+        composeRule.setContent {
+            ReviewQueueScreen(
+                state = state.value,
+                requestedEntryId = requested.value,
+                onRequestedEntryHandled = { requested.value = null }
+            )
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { assertEquals("pending-lunch", requested.value) }
+        composeRule.runOnIdle { state.value = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("编辑待确认账目").assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(null, requested.value) }
+    }
+
+    @Test
+    fun staleNotificationShowsUnavailableInsteadOfEditingAnotherEntry() {
+        val requested = mutableStateOf<String?>("already-confirmed")
+        composeRule.setContent {
+            ReviewQueueScreen(
+                state = testReviewQueueUiState(pendingEntries = listOf(sampleEntry())),
+                requestedEntryId = requested.value,
+                onRequestedEntryHandled = { requested.value = null }
+            )
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("该记录已处理或不存在").assertIsDisplayed()
+        composeRule.onNodeWithText("编辑待确认账目").assertDoesNotExist()
+    }
 
     @Test
     fun learnedRuleUsesOnlyMerchantAndCategory() {

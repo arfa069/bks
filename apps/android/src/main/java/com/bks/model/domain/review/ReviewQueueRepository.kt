@@ -75,7 +75,7 @@ interface ReviewQueueRepository {
     suspend fun loadSnapshot(): ReviewQueueSnapshot
     suspend fun ensureSystemCategories()
     suspend fun loadCategories(): List<Category>
-    suspend fun insertCapturedEntries(entries: List<PendingEntry>): Int
+    suspend fun insertCapturedEntries(entries: List<PendingEntry>): List<PendingEntry>
     suspend fun applyCategorizationRulesToUnclassified(rules: List<CategorizationRule>): Int
     suspend fun execute(command: ReviewPersistenceCommand): ReviewPersistenceResult
 }

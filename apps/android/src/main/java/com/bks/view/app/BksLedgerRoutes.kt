@@ -28,7 +28,9 @@ internal fun BksReviewRoute(
     ledgerState: LedgerUiState,
     onCategorizationRulesChange: suspend (CategorizationRulesUpdate) -> Unit,
     innerPadding: PaddingValues,
-    onNavigateHome: () -> Unit
+    onNavigateHome: () -> Unit,
+    requestedEntryId: String? = null,
+    onRequestedEntryHandled: () -> Unit = {}
 ) {
     ReviewQueueScreen(
         state = reviewState,
@@ -57,7 +59,9 @@ internal fun BksReviewRoute(
             }
         },
         onAiSuggest = reviewViewModel::suggestCategory,
-        onNavigateHome = onNavigateHome
+        onNavigateHome = onNavigateHome,
+        requestedEntryId = requestedEntryId,
+        onRequestedEntryHandled = onRequestedEntryHandled
     )
 }
 

@@ -10,7 +10,8 @@ data class ReviewQueueUiState(
     val operation: ReviewQueueOperation = ReviewQueueOperation.Idle,
     val undoEvent: ReviewQueueUndoEvent? = null,
     val nowEpochMillis: Long,
-    val todayStartEpochMillis: Long
+    val todayStartEpochMillis: Long,
+    val isLoaded: Boolean = true
 ) {
     val sortedPendingEntries: List<ReviewEntryUiModel>
         get() = pendingEntries.sortedWith(
@@ -111,6 +112,7 @@ const val IGNORED_RETENTION_MILLIS: Long = 30L * 24L * 60L * 60L * 1000L
 
 internal fun emptyReviewQueueUiState(nowEpochMillis: Long, zoneId: ZoneId): ReviewQueueUiState =
     ReviewQueueUiState(
+        isLoaded = false,
         nowEpochMillis = nowEpochMillis,
         todayStartEpochMillis = Instant.ofEpochMilli(nowEpochMillis)
             .atZone(zoneId)

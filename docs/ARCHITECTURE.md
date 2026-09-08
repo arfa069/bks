@@ -188,7 +188,8 @@ Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/
 2. 500 ms 后通过 `AssistsCore.getAccessibilityRootNodes(ActiveWindow)` 复核包名与窗口，并受限采集可读节点文字。
 3. `BillPageParser` 在内存中执行通用完成态、金额、方向和上下文准入；商户优先取显式标签值，标签缺失时只在独立完成状态之后、首个交易上下文字段之前跳过金额并提取首个有效独立文本，且统一折叠空白。
 4. `BillSyncPipeline` 生成经已验证采集根节点包名映射的支付来源（当前支付宝采集生成 `ALIPAY`，保留 `OTHER` 回退）/ `ACCESSIBILITY_AUTO` / `NEEDS_REVIEW` 候选并执行既有去重。
-5. 本地分类规则应用后，`RoomReviewQueueRepository` 创建或合并待确认条目。
+5. 本地分类规则应用后，`RoomReviewQueueRepository` 仅插入不存在的稳定 ID，并返回实际新增的领域条目。
+6. `BillSyncCaptureProcessor` 在入库串行区退出后，将实际新增结果交给 `ReviewNotificationSink` 的非阻塞队列。`ReviewNotificationRuntime` 独立批处理并重读待确认状态；`ReviewNotificationPublisher` 管理系统通知分组、锁屏隐私和撤销。失败是旁路结果，不改变采集成功与去重状态。进程重启只校正已有活动通知，不重放历史记录；没有新增通知 outbox 或数据库迁移。
 6. 用户确认后仍由 `RoomReviewQueueRepository` 在单个 Room transaction 内写入当前账本并记录同步 outbox。
 
 核心规则：

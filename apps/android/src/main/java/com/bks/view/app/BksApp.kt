@@ -15,6 +15,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -70,7 +73,9 @@ data class BksAppBindings(
     val onOpenBillSyncAutoStartSettings: () -> Unit = {},
     val onOpenBillSyncPowerPolicySettings: () -> Unit = {},
     val wechatAuthCallback: WechatAuthCallback? = null,
-    val onWechatAuthCallbackConsumed: () -> Unit = {}
+    val onWechatAuthCallbackConsumed: () -> Unit = {},
+    val requestedReviewEntryId: String? = null,
+    val onReviewNotificationConsumed: () -> Unit = {}
 )
 
 data class BksAppOverrides(
@@ -107,6 +112,17 @@ fun BksApp(
     )
     val accountState by accountSessionCoordinator.state.collectAsStateWithLifecycle()
     val signedIn = accountState.session is AccountSession.SignedIn
+    var requestedReviewEntryId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(bindings.requestedReviewEntryId, accountState.session, accountState.isRestoring) {
+        val requested = bindings.requestedReviewEntryId ?: return@LaunchedEffect
+        if (accountState.isRestoring || accountState.session == null) return@LaunchedEffect
+        appState.manualEntryOpen.value = false
+        appState.profileDestination.value = null
+        appState.closeAccountEntry()
+        appState.selectedTab.value = AppTab.Review
+        requestedReviewEntryId = requested.takeIf(String::isNotEmpty)
+        bindings.onReviewNotificationConsumed()
+    }
 
     LaunchedEffect(accountState.session) {
         when (val session = accountState.session) {
@@ -188,7 +204,9 @@ fun BksApp(
                                     ledgerState = owners.ledgerUiState,
                                     onCategorizationRulesChange = owners.categorizationViewModel::updateRulesAndAwait,
                                     innerPadding = innerPadding,
-                                    onNavigateHome = onNavigateHome
+                                    onNavigateHome = onNavigateHome,
+                                    requestedEntryId = requestedReviewEntryId,
+                                    onRequestedEntryHandled = { requestedReviewEntryId = null }
                                 )
                                 AppTab.Ledger -> BksLedgerRoute(
                                     state = owners.ledgerUiState,
@@ -224,6 +242,13 @@ fun BksApp(
                                     }
                                 ) { destination, accountManagementViewModel ->
                                     when (destination) {
+                                        ProfileDestination.Notifications -> BksNotificationSettingsRoute(
+                                            innerPadding = innerPadding,
+                                            onNotice = { message ->
+                                                coroutineScope.launch { appState.snackbarHostState.showSnackbar(message) }
+                                            },
+                                            onBack = { appState.profileDestination.value = null }
+                                        )
                                         null -> BksProfileOverviewRoute(
                                             session = activeAccountSession,
                                             ledgerSyncEnabled = owners.ledgerSyncUiState.enabled,

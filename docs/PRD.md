@@ -63,6 +63,13 @@ Admission and output:
 
 ### 5.2 Review Queue
 
+New-entry notifications:
+- After automatic capture commits a genuinely new pending entry and calculates its local suggested category, send a best-effort local system notification containing merchant, amount, suggested category, capture time (labelled “识别时间”, to seconds) and source. Missing merchant/category use “商户待确认”/“未分类”.
+- Notification delivery runs asynchronously outside capture serialization; permission denial or delivery failure cannot fail or repeat capture. Duplicate inserts, startup snapshots, categorization backfill, restore and undo do not create new notifications.
+- Batch new entries for 750 ms and group them, with at most one audible alert in five seconds. Clicking a child opens that pending entry after account/session and queue loading; a group opens the queue. Stale targets show an unavailable message. Confirming, ignoring or clearing records withdraws their active notifications.
+- “我的 → 通知设置” exposes a local reminder switch, system-permission request/settings link and lock-screen detail control. Lock-screen details default to hidden. Android 13+ permission is requested only from that explicit user action; neither automatic bookkeeping nor app launch requests it automatically.
+- This phase implements new pending-entry reminders only. Service-interruption and backlog reminders are deferred. Delivery is not a persistent outbox: process death between commit and posting can lose a reminder; pending data remains the source of truth and is not replayed on restart.
+
 Review destination:
 - The review queue is the first tab and primary workflow.
 - The header shows the target ledger-book name and an ignored-records action.

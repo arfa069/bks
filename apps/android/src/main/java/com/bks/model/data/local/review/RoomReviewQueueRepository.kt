@@ -81,8 +81,8 @@ class RoomReviewQueueRepository(
     override suspend fun loadCategories(): List<Category> =
         database.categoryDao().getAllCategories().map { it.toDomain() }
 
-    override suspend fun insertCapturedEntries(entries: List<PendingEntry>): Int =
-        entries.count { entry -> insertPendingIfAbsent(entry.toEntity()) }
+    override suspend fun insertCapturedEntries(entries: List<PendingEntry>): List<PendingEntry> =
+        entries.filter { entry -> insertPendingIfAbsent(entry.toEntity()) }
 
     override suspend fun applyCategorizationRulesToUnclassified(
         rules: List<CategorizationRule>

@@ -86,7 +86,9 @@ internal fun ReviewQueueScreen(
     onCommand: (ReviewPersistenceCommand) -> Unit = {},
     onUndo: () -> Unit = {},
     onDismissUndo: () -> Unit = {},
-    onNavigateHome: () -> Unit = {}
+    onNavigateHome: () -> Unit = {},
+    requestedEntryId: String? = null,
+    onRequestedEntryHandled: () -> Unit = {}
 ) {
     var editingEntryId by rememberSaveable { mutableStateOf<String?>(null) }
     val editingEntry = remember(state.pendingEntries, editingEntryId) {
@@ -96,6 +98,18 @@ internal fun ReviewQueueScreen(
     var showIgnoredList by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(requestedEntryId, state.isLoaded, state.pendingEntries) {
+        val requested = requestedEntryId ?: return@LaunchedEffect
+        if (!state.isLoaded) return@LaunchedEffect
+        val exists = state.pendingEntries.any { it.id == requested }
+        if (exists) {
+            editingEntryId = requested
+            pendingRuleSave = null
+        }
+        onRequestedEntryHandled()
+        if (!exists) coroutineScope.launch { snackbarHostState.showSnackbar("该记录已处理或不存在") }
+    }
 
     fun confirmEdit(entry: ReviewEntryUiModel, edit: PendingReviewEdit) {
         onCommand(

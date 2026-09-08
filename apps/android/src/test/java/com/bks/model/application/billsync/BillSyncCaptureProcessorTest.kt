@@ -17,6 +17,9 @@ import com.bks.model.data.local.ledger.TestLedgerRepository
 import com.bks.model.data.local.settings.RoomPreferencesRepository
 import com.bks.model.domain.categorization.CategorizationRule
 import com.bks.model.domain.ledger.PaymentSource
+import com.bks.model.domain.ledger.PendingEntry
+import com.bks.model.domain.notifications.ReviewNotificationSink
+import com.bks.model.domain.review.ReviewQueueRepository
 import com.bks.model.data.local.review.RoomReviewQueueRepository
 import com.bks.model.domain.review.ReviewPersistenceCommand
 import java.time.ZoneId
@@ -64,6 +67,67 @@ class BillSyncCaptureProcessorTest {
     @After
     fun tearDown() {
         database.close()
+    }
+
+    @Test
+    fun notificationsContainOnlyActualNewEntriesAfterClassification() = runBlocking {
+        val notified = mutableListOf<PendingEntry>()
+        database.categoryDao().upsert(CategoryEntity(
+            id = "vegetables", name = "蔬菜", kind = com.bks.model.domain.ledger.TransactionKind.EXPENSE,
+            sortOrder = 1, isSystem = false, createdAtEpochMillis = NOW
+        ))
+        RoomPreferencesRepository(database).updateCategorizationRules { rules ->
+            rules + CategorizationRule(id = "notification-test", merchantContains = "测试便利店", category = "蔬菜")
+        }
+        val processorWithNotifications = BillSyncCaptureProcessor(
+            pipeline = BillSyncPipeline(), reviewQueuePersistence = persistence,
+            preferencesRepository = RoomPreferencesRepository(database), clock = { NOW },
+            notifications = ReviewNotificationSink { notified += it }
+        )
+        val result = processorWithNotifications.recognize("支付成功\n¥5.99\n商户：测试便利店", PaymentSource.ALIPAY)
+        val existing = result.createdEntries.single()
+        persistence.insertCapturedEntries(listOf(existing))
+        val fresh = existing.copy(id = "new-notification-capture")
+        val mixed = result.copy(createdEntries = listOf(existing, fresh))
+
+        assertEquals(1, processorWithNotifications.persist(mixed).insertedCount)
+        assertEquals(listOf(fresh.id), notified.map { it.id })
+        assertEquals("蔬菜", notified.single().suggestedCategoryLabel)
+        assertEquals(0, processorWithNotifications.persist(mixed).insertedCount)
+        assertEquals(1, notified.size)
+        assertEquals(2, database.pendingEntryDao().listPendingEntries().size)
+    }
+
+    @Test
+    fun notificationFailureCannotTurnSuccessfulFirstCaptureIntoPersistenceFailure() = runBlocking {
+        val processorWithBrokenNotifications = BillSyncCaptureProcessor(
+            pipeline = BillSyncPipeline(), reviewQueuePersistence = persistence,
+            preferencesRepository = RoomPreferencesRepository(database), clock = { NOW },
+            notifications = ReviewNotificationSink { throw SecurityException("notification denied") }
+        )
+        val result = processorWithBrokenNotifications.process("支付成功\n¥5.99\n商户：测试便利店", PaymentSource.ALIPAY)
+        assertTrue(result.recognized)
+        assertEquals(1, result.insertedCount)
+        assertEquals(1, database.pendingEntryDao().listPendingEntries().size)
+        assertEquals(0, processorWithBrokenNotifications.persist(result).insertedCount)
+    }
+
+    @Test
+    fun failedDatabaseInsertDoesNotNotify() = runBlocking {
+        var notified = false
+        val failing = object : ReviewQueueRepository by persistence {
+            override suspend fun insertCapturedEntries(entries: List<PendingEntry>): List<PendingEntry> =
+                error("insert failed")
+        }
+        val processorWithFailedInsert = BillSyncCaptureProcessor(
+            pipeline = BillSyncPipeline(), reviewQueuePersistence = failing,
+            preferencesRepository = RoomPreferencesRepository(database),
+            notifications = ReviewNotificationSink { notified = true }
+        )
+        assertTrue(runCatching {
+            processorWithFailedInsert.process("支付成功\n¥5.99\n商户：测试便利店", PaymentSource.ALIPAY)
+        }.isFailure)
+        assertTrue(!notified)
     }
 
     @Test

@@ -311,8 +311,8 @@ class RoomReviewQueueRepositoryTest {
             listOf(samplePending(id = "ignored-capture").toDomain())
         )
 
-        assertEquals(0, insertedAfterConfirm)
-        assertEquals(0, insertedAfterIgnore)
+        assertTrue(insertedAfterConfirm.isEmpty())
+        assertTrue(insertedAfterIgnore.isEmpty())
         assertNull(database.pendingEntryDao().getById("confirmed-capture"))
         assertNull(database.pendingEntryDao().getById("ignored-capture"))
         assertEquals(
@@ -498,7 +498,7 @@ class RoomReviewQueueRepositoryTest {
             )
         )
 
-        assertEquals(0, inserted)
+        assertTrue(inserted.isEmpty())
         assertEquals("first", database.pendingEntryDao().getById("stable-capture")?.note)
     }
 
