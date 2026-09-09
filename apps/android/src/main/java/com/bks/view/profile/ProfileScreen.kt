@@ -42,8 +42,7 @@ private val ProfileContentMaxWidth = 880.dp
 private val ProfileTwoColumnBreakpoint = 840.dp
 private val ProfileUtilityDestinations = listOf(
     ProfileDestination.AutomaticBookkeeping,
-    ProfileDestination.CategorizationRules,
-    ProfileDestination.Notifications
+    ProfileDestination.CategorizationRules
 )
 private val ProfileDataDestinations = listOf(
     ProfileDestination.DataAndBackup,

@@ -51,6 +51,7 @@ fun AutomaticBookkeepingScreen(
     onOpenAccessibilitySettings: () -> Unit = {},
     onOpenAutoStartSettings: () -> Unit = {},
     onOpenPowerPolicySettings: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
     onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -81,7 +82,8 @@ fun AutomaticBookkeepingScreen(
                 state = state,
                 onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                 onOpenAutoStartSettings = onOpenAutoStartSettings,
-                onOpenPowerPolicySettings = onOpenPowerPolicySettings
+                onOpenPowerPolicySettings = onOpenPowerPolicySettings,
+                onOpenNotificationSettings = onOpenNotificationSettings
             )
         }
     }
@@ -237,11 +239,10 @@ private fun BackgroundRuntimeSettingsSection(
     onOpenAccessibilitySettings: () -> Unit,
     onOpenAutoStartSettings: () -> Unit,
     onOpenPowerPolicySettings: () -> Unit,
-    modifier: Modifier = Modifier
+    onOpenNotificationSettings: () -> Unit
 ) {
     AutomaticBookkeepingSection(
-        title = "后台运行保障",
-        modifier = modifier
+        title = "后台运行保障"
     ) {
         Column {
             BackgroundSettingItem(
@@ -279,6 +280,17 @@ private fun BackgroundRuntimeSettingsSection(
                 statusTag = "automatic-bookkeeping-power-status",
                 actionTag = "automatic-bookkeeping-power-settings",
                 onClick = onOpenPowerPolicySettings
+            )
+            BackgroundSettingDivider()
+            BackgroundSettingItem(
+                iconLabel = "通",
+                title = "通知设置",
+                status = if (state.systemNotificationsAllowed) "已允许" else "未允许",
+                actionLabel = "设置",
+                rowTag = "automatic-bookkeeping-notifications-row",
+                statusTag = "automatic-bookkeeping-notifications-status",
+                actionTag = "automatic-bookkeeping-notifications-settings",
+                onClick = onOpenNotificationSettings
             )
         }
     }

@@ -5,5 +5,6 @@ data class AutomaticBookkeepingUiState(
     val writeInProgress: Boolean = false,
     val accessibilityAccessGranted: Boolean = false,
     val accessibilityServiceConnected: Boolean = false,
-    val batteryOptimizationIgnored: Boolean? = null
+    val batteryOptimizationIgnored: Boolean? = null,
+    val systemNotificationsAllowed: Boolean = false
 )

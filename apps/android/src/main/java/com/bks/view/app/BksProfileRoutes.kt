@@ -1,5 +1,12 @@
 package com.bks.view.app
 
+import android.app.NotificationManager
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+
 import com.bks.model.application.account.cloudWritesPaused
 import com.bks.model.application.account.settingsSyncInFlight
 import com.bks.BuildConfig
@@ -111,21 +118,35 @@ internal fun BksAutomaticBookkeepingRoute(
     onOpenAccessibilitySettings: () -> Unit,
     onOpenAutoStartSettings: () -> Unit,
     onOpenPowerPolicySettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
     onBack: () -> Unit,
     innerPadding: PaddingValues
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val manager = remember(context) { context.getSystemService(NotificationManager::class.java) }
+    var notificationsAllowed by remember(manager) { mutableStateOf(manager.areNotificationsEnabled()) }
+    DisposableEffect(lifecycleOwner, manager) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) notificationsAllowed = manager.areNotificationsEnabled()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     AutomaticBookkeepingScreen(
         state = AutomaticBookkeepingUiState(
             enabled = state.enabled,
             writeInProgress = state.writeInProgress,
             accessibilityAccessGranted = accessibilityAccessGranted,
             accessibilityServiceConnected = accessibilityServiceConnected,
-            batteryOptimizationIgnored = batteryOptimizationIgnored
+            batteryOptimizationIgnored = batteryOptimizationIgnored,
+            systemNotificationsAllowed = notificationsAllowed
         ),
         onEnabledChange = viewModel::setEnabled,
         onOpenAccessibilitySettings = onOpenAccessibilitySettings,
         onOpenAutoStartSettings = onOpenAutoStartSettings,
         onOpenPowerPolicySettings = onOpenPowerPolicySettings,
+        onOpenNotificationSettings = onOpenNotificationSettings,
         onBack = onBack,
         modifier = Modifier
             .padding(innerPadding)

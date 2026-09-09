@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.bks.R
+import com.bks.view.profile.ProfileDestination
 import com.bks.view.common.BksAppState
 import com.bks.view.common.components.AppBottomNavigationBar
 import com.bks.view.common.components.SlidePageTransition
@@ -40,7 +41,11 @@ internal fun BksRouteHost(
         selectedTab = null
     }
     BackHandler(enabled = selectedTab == AppTab.Profile && profileDestination != null) {
-        profileDestination = null
+        profileDestination = if (profileDestination == ProfileDestination.Notifications) {
+            ProfileDestination.AutomaticBookkeeping
+        } else {
+            null
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {

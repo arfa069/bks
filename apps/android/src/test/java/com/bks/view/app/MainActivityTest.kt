@@ -105,6 +105,32 @@ class MainActivityTest {
     }
 
     @Test
+    fun notificationSettingsReturnsToAutomaticBookkeepingAndRefreshesPermission() {
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        org.robolectric.Shadows.shadowOf(manager).setNotificationsEnabled(false)
+        val requested = mutableStateOf(true)
+        composeRule.setContent {
+            BksApp(bindings = BksAppBindings(
+                requestedAutomaticBookkeeping = requested.value,
+                onBookkeepingNotificationConsumed = { requested.value = false }
+            ))
+        }
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-status").assertTextContains("未允许")
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-settings").performScrollTo().performClick()
+        composeRule.onNodeWithTag("notifications-enabled").assertIsDisplayed()
+        composeRule.runOnIdle { org.robolectric.Shadows.shadowOf(manager).setNotificationsEnabled(true) }
+        composeRule.onNodeWithText("返回").performScrollTo().performClick()
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-status").assertTextContains("已允许")
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-settings").performScrollTo().performClick()
+        composeRule.onNodeWithTag("notifications-enabled").assertIsDisplayed()
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-settings").performScrollTo().assertIsDisplayed()
+        composeRule.runOnIdle { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithTag("profile-entry-AutomaticBookkeeping").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("profile-entry-Notifications").assertDoesNotExist()
+    }
+
+    @Test
     fun interruptionNotificationOpensSettingsWithoutEnablingBookkeeping() {
         val requested = mutableStateOf(true)
         val before = runBlocking { context.bksAppContainer.preferencesRepository.userPreferences.first().automaticBookkeepingEnabled }

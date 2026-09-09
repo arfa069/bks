@@ -40,15 +40,19 @@ class AutomaticBookkeepingScreenTest {
         var accessibilitySettingsOpened = false
         var autoStartSettingsOpened = false
         var powerPolicySettingsOpened = false
+        var notificationSettingsOpened = false
+        val notificationsAllowed = mutableStateOf(false)
         composeRule.setContent {
             AutomaticBookkeepingScreen(
                 state = AutomaticBookkeepingUiState(
                     accessibilityAccessGranted = true,
-                    batteryOptimizationIgnored = batteryOptimizationIgnored.value
+                    batteryOptimizationIgnored = batteryOptimizationIgnored.value,
+                    systemNotificationsAllowed = notificationsAllowed.value
                 ),
                 onOpenAccessibilitySettings = { accessibilitySettingsOpened = true },
                 onOpenAutoStartSettings = { autoStartSettingsOpened = true },
-                onOpenPowerPolicySettings = { powerPolicySettingsOpened = true }
+                onOpenPowerPolicySettings = { powerPolicySettingsOpened = true },
+                onOpenNotificationSettings = { notificationSettingsOpened = true }
             )
         }
 
@@ -86,6 +90,11 @@ class AutomaticBookkeepingScreenTest {
         assertTrue(accessibilitySettingsOpened)
         assertTrue(autoStartSettingsOpened)
         assertTrue(powerPolicySettingsOpened)
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-status").assertTextEquals("未允许")
+        composeRule.runOnIdle { notificationsAllowed.value = true }
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-status").assertTextEquals("已允许")
+        composeRule.onNodeWithTag("automatic-bookkeeping-notifications-settings").performScrollTo().performClick()
+        assertTrue(notificationSettingsOpened)
     }
 
     @Test
@@ -225,6 +234,9 @@ class AutomaticBookkeepingScreenTest {
                 .performScrollTo()
                 .assertIsDisplayed()
             composeRule.onNodeWithText("隐私说明").assertDoesNotExist()
+            composeRule.onNodeWithTag("automatic-bookkeeping-notifications-settings")
+                .performScrollTo()
+                .assertIsDisplayed()
         }
     }
 

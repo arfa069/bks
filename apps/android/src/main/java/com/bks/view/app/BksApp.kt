@@ -258,7 +258,9 @@ fun BksApp(
                                             onNotice = { message ->
                                                 coroutineScope.launch { appState.snackbarHostState.showSnackbar(message) }
                                             },
-                                            onBack = { appState.profileDestination.value = null }
+                                            onBack = {
+                                                appState.profileDestination.value = ProfileDestination.AutomaticBookkeeping
+                                            }
                                         )
                                         null -> BksProfileOverviewRoute(
                                             session = activeAccountSession,
@@ -306,6 +308,9 @@ fun BksApp(
                                                     bindings.onOpenBillSyncAutoStartSettings,
                                                 onOpenPowerPolicySettings =
                                                     bindings.onOpenBillSyncPowerPolicySettings,
+                                                onOpenNotificationSettings = {
+                                                    appState.profileDestination.value = ProfileDestination.Notifications
+                                                },
                                                 onBack = {
                                                     appState.profileDestination.value = null
                                                 },

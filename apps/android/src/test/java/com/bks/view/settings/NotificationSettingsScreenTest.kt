@@ -36,7 +36,7 @@ class NotificationSettingsScreenTest {
         }
         compose.waitForIdle()
         assertEquals(0, permissionRequests)
-        compose.onNodeWithText("系统通知未允许，仍会正常识别并保存到待确认").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("系统通知未允许，不影响识别和保存待确认。").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("开启系统通知").performScrollTo().performClick()
         assertEquals(1, permissionRequests)
         compose.onNodeWithTag("notifications-enabled").performScrollTo().performClick()
