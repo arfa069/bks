@@ -103,7 +103,7 @@ class AccountManagementScreenTest {
         composeRule.onAllNodesWithText("admin069", substring = true).assertCountEquals(1)
         composeRule.onNodeWithText("用户名登录").assertDoesNotExist()
         composeRule.onNodeWithTag("account-connection-status").assertDoesNotExist()
-        composeRule.onNodeWithTag("bind-phone").assertIsDisplayed()
+        composeRule.onNodeWithTag("bind-phone").performScrollTo().assertIsDisplayed()
     }
 
     @Test

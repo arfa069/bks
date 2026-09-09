@@ -18,6 +18,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -135,7 +137,10 @@ internal fun LocalBackupSection(
             "CSV 仅导出当前账本「$currentLedgerName」，且是明文表格；" +
                 "加密备份包含全部账本及本机设置。"
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.testTag("backup-actions").horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             CsvExportButton(
                 ledgerEntries = ledgerEntries,
                 currentLedgerName = currentLedgerName,
@@ -146,12 +151,12 @@ internal fun LocalBackupSection(
             OutlinedButton(
                 onClick = { showExportPasswordDialog = true },
                 enabled = !operationState.operationInProgress
-            ) { Text("导出加密备份") }
+            ) { Text("导出备份", maxLines = 1) }
+            OutlinedButton(
+                onClick = { openDocumentLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                enabled = !isReadingBackup && !operationState.operationInProgress
+            ) { Text("导入备份", maxLines = 1) }
         }
-        OutlinedButton(
-            onClick = { openDocumentLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
-            enabled = !isReadingBackup && !operationState.operationInProgress
-        ) { Text("导入加密备份") }
     }
 
     if (showExportPasswordDialog) {

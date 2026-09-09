@@ -109,13 +109,6 @@ private fun EnabledSyncContent(
     )
     Text("待上传 ${ledgerSyncState.pendingCount} 项 · 冲突 ${ledgerSyncState.conflicts.size} 项")
     ledgerSyncState.lastError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    if (ledgerSyncState.insecureHttpTestMode) {
-        Text(
-            "当前为局域网 HTTP 测试同步，账本内容未经过传输加密。",
-            color = MaterialTheme.colorScheme.error,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = {

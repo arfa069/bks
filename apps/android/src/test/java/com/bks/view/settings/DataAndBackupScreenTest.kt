@@ -154,8 +154,8 @@ class DataAndBackupScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("当前为局域网 HTTP 测试同步", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("云端：云端账本").assertIsDisplayed()
+        composeRule.onNodeWithText("当前为局域网 HTTP 测试同步", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("云端：云端账本").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("本机：本机账本").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("保留本机").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { resolvedChoice != null }
@@ -196,6 +196,9 @@ class DataAndBackupScreenTest {
             }
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("ledger-sync-now").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("backup-actions").performScrollTo()
+            composeRule.onNodeWithText("导出备份").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("导入备份").performScrollTo().assertIsDisplayed()
             composeRule.onNodeWithText("危险区").performScrollTo().assertIsDisplayed()
         }
     }
@@ -216,12 +219,13 @@ class DataAndBackupScreenTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("CSV 仅导出当前账本「家庭账本」", substring = true)
-            .assertIsDisplayed()
+            .performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("加密备份包含全部账本", substring = true)
             .assertIsDisplayed()
         composeRule.onAllNodesWithTag("backup-password-dialog-input").assertCountEquals(0)
-        composeRule.onNodeWithText("导出加密备份").assertIsDisplayed()
-        composeRule.onNodeWithText("导入加密备份").assertIsDisplayed()
+        composeRule.onNodeWithTag("backup-actions").performScrollTo()
+        composeRule.onNodeWithText("导出备份").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("导入备份").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -242,7 +246,8 @@ class DataAndBackupScreenTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("导出加密备份").performClick()
+        composeRule.onNodeWithTag("backup-actions").performScrollTo()
+        composeRule.onNodeWithText("导出备份").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("backup-password-dialog-input").performTextInput("12345678")
         composeRule.waitForIdle()
@@ -277,7 +282,8 @@ class DataAndBackupScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("导入加密备份").performClick()
+        composeRule.onNodeWithTag("backup-actions").performScrollTo()
+        composeRule.onNodeWithText("导入备份").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("backup-password-dialog-input")
@@ -331,7 +337,8 @@ class DataAndBackupScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("导入加密备份").performClick()
+        composeRule.onNodeWithTag("backup-actions").performScrollTo()
+        composeRule.onNodeWithText("导入备份").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             snackbarHostState.currentSnackbarData != null
@@ -360,7 +367,8 @@ class DataAndBackupScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("导入加密备份").performClick()
+        composeRule.onNodeWithTag("backup-actions").performScrollTo()
+        composeRule.onNodeWithText("导入备份").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("backup-password-dialog-input")

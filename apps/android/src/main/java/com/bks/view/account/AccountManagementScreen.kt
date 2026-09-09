@@ -10,12 +10,12 @@ import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import com.bks.R
+import com.bks.view.common.components.ProfileDetailPage
+import com.bks.view.common.components.ProfileDetailSummary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -71,7 +71,6 @@ internal fun AccountManagementScreen(
 ) {
     val session = screenState.session
     val runtimeState = screenState.runtimeState
-    val deletionState = screenState.deletionState
     val operationState = screenState.operationState
     var showDeletionConfirmation by remember { mutableStateOf(false) }
     val avatarCache = platform.avatarCacheOverride ?: rememberWechatAvatarCache()
@@ -82,31 +81,34 @@ internal fun AccountManagementScreen(
         if (!operationInProgress) showDeletionConfirmation = false
     }
 
-    Column(
+    ProfileDetailPage(
+        title = "账户管理",
+        subtitle = "管理个人信息与账户安全",
+        onBack = actions.onBack,
         modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        TextButton(onClick = actions.onBack) { Text("返回") }
-        Text(
-            text = "账户管理",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold
-        )
         when (session) {
             AccountSession.LocalMode -> {
-                Text("当前使用本地模式，账本仅保存在本机。")
-                Button(
-                    onClick = actions.onSignInOrRegister,
-                    modifier = Modifier.fillMaxWidth()
+                ProfileDetailSummary(
+                    title = "本地记账，安心记录",
+                    description = "当前使用本地模式，账本仅保存在本机。",
+                    artwork = R.drawable.aa_profile_account
                 ) {
-                    Text("登录或注册")
+                    Button(
+                        onClick = actions.onSignInOrRegister,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("登录或注册")
+                    }
                 }
             }
 
             is AccountSession.SignedIn -> {
+                ProfileDetailSummary(
+                    title = "我的账户",
+                    description = runtimeState.status.connectionLabel(),
+                    artwork = R.drawable.aa_profile_account
+                )
                 if (runtimeState.status == AccountRuntimeStatus.OfflineUnverified) {
                     OfflineAccountConnectionCard(
                         onRetry = {
@@ -127,23 +129,21 @@ internal fun AccountManagementScreen(
                     ),
                     actions = actions.wechat
                 )
-                OutlinedButton(
-                    onClick = actions.onSignOut,
-                    enabled = !operationInProgress,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("account-sign-out")
-                ) {
-                    Text(if (operationInProgress) "处理中…" else "退出登录")
-                }
                 AccountDeletionCard(
-                    state = deletionState,
-                    accountVerified = runtimeState.accountOperationsAllowed,
-                    operationEnabled = runtimeState.accountOperationsAllowed &&
-                        !operationInProgress,
+                    screenState = screenState,
                     onRequest = { showDeletionConfirmation = true },
                     onCancel = actions.onCancelDeletion
-                )
+                ) {
+                    OutlinedButton(
+                        onClick = actions.onSignOut,
+                        enabled = !operationInProgress,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("account-sign-out")
+                    ) {
+                        Text(if (operationInProgress) "处理中…" else "退出登录")
+                    }
+                }
             }
         }
         operationState.accountError?.let {
@@ -195,11 +195,12 @@ private fun OfflineAccountConnectionCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(8.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
@@ -215,22 +216,27 @@ private fun OfflineAccountConnectionCard(
 
 @Composable
 private fun AccountDeletionCard(
-    state: AccountDeletionState,
-    accountVerified: Boolean,
-    operationEnabled: Boolean,
+    screenState: AccountManagementScreenState,
     onRequest: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    signOutContent: @Composable () -> Unit
 ) {
+    val state = screenState.deletionState
+    val accountVerified = screenState.runtimeState.accountOperationsAllowed
+    val operationEnabled = accountVerified && !screenState.operationState.accountOperationInProgress &&
+        !screenState.operationState.identityOperationInProgress
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(8.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            signOutContent()
             Text("账户注销", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             if (state.isPending) {
                 Text("注销冷静期中，云端写入已暂停。")

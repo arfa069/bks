@@ -16,12 +16,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import com.bks.R
+import com.bks.view.common.components.ProfileDetailPage
+import com.bks.view.common.components.ProfileDetailSummary
 import androidx.compose.material3.AlertDialog
 import com.bks.view.common.components.Button
 import androidx.compose.material3.Card
@@ -65,15 +65,17 @@ internal fun DataAndBackupScreen(
         onAcknowledge = dataAndBackupActions.onAcknowledgeNotice
     )
 
-    Column(
+    ProfileDetailPage(
+        title = "数据与备份",
+        subtitle = "同步、导出与恢复你的记录",
+        onBack = onBack,
         modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        TextButton(onClick = onBack) { Text("返回") }
-        Text("数据与备份", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        ProfileDetailSummary(
+            title = "为记录留一份备份",
+            description = "当前账本 · $currentLedgerName",
+            artwork = R.drawable.aa_profile_backup
+        )
         LedgerSyncSettingsSection(
             ledgerSyncState = ledgerSyncState,
             actions = ledgerSyncActions,
@@ -185,13 +187,15 @@ internal fun CardSection(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             1.dp,
-            if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
+            if (danger) MaterialTheme.colorScheme.error.copy(alpha = 0.25f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
         ),
-        shape = RoundedCornerShape(8.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
                 title,
