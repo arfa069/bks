@@ -27,6 +27,7 @@ import com.bks.model.domain.account.WechatAuthGateway
 import com.bks.model.platform.billsync.BillSyncCaptureCoordinator
 import com.bks.model.platform.billsync.BillSyncCaptureOperations
 import com.bks.model.application.billsync.BillSyncCaptureProcessor
+import com.bks.model.application.billsync.BillBackfillCoordinator
 import com.bks.model.application.categorization.CategorizationRulesCoordinator
 import com.bks.model.domain.billsync.BillSyncPipeline
 import com.bks.model.data.remote.categorization.HttpAiCategorizationGateway
@@ -154,6 +155,9 @@ internal class BksAppContainer(context: Context) {
     val ledgerSyncRuntime: LedgerSyncRuntime by lazy {
         createLedgerSyncRuntime(accountSessionCoordinator)
     }
+    val billBackfillCoordinator: BillBackfillCoordinator by lazy {
+        BillBackfillCoordinator(billSyncCoordinatorScope, createBillSyncCaptureProcessor()::persist)
+    }
     val billSyncCaptureCoordinator: BillSyncCaptureCoordinator by lazy {
         val processor = createBillSyncCaptureProcessor()
         BillSyncCaptureCoordinator(
@@ -167,7 +171,15 @@ internal class BksAppContainer(context: Context) {
             ),
             applicationScope = billSyncCoordinatorScope,
             captureDispatcher = billSyncCaptureDispatcher,
-            diagnosticRecorder = diagnosticLogs
+            diagnosticRecorder = diagnosticLogs,
+            manualCaptureActive = { packageName ->
+                val state = billBackfillCoordinator.state.value
+                state.isBusy && when (state.source) {
+                    com.bks.model.domain.ledger.PaymentSource.ALIPAY -> packageName == "com.eg.android.AlipayGphone"
+                    com.bks.model.domain.ledger.PaymentSource.WECHAT -> packageName == "com.tencent.mm"
+                    com.bks.model.domain.ledger.PaymentSource.OTHER -> false
+                }
+            }
         )
     }
 

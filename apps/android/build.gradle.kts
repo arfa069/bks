@@ -277,6 +277,7 @@ dependencies {
         exclude(group = "com.google.mlkit", module = "text-recognition-chinese")
     }
     implementation(libs.wechat.sdk.android)
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 

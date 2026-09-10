@@ -44,7 +44,8 @@ internal class BillSyncCaptureCoordinator(
     private val runtimeProbeHandleFactory: () -> BillSyncRuntimeProbeHandle =
         ::createBillSyncRuntimeProbeHandle,
     private val rootsProvider: (AssistsCore.NodeLookupScope) -> List<AccessibilityNodeInfo> =
-        AssistsCore::getAccessibilityRootNodes
+        AssistsCore::getAccessibilityRootNodes,
+    private val manualCaptureActive: (String?) -> Boolean = { false }
 ) {
     private val applicationContext = context.applicationContext
     private val processStartElapsedMillis = runCatching(processStartElapsedProvider).getOrNull()
@@ -177,7 +178,7 @@ internal class BillSyncCaptureCoordinator(
                 packageName = event.packageName?.toString()?.takeIf(String::isNotBlank),
                 windowId = event.windowId
             )
-            val captureEnabled = automaticBookkeepingEnabled
+            val captureEnabled = automaticBookkeepingEnabled && !manualCaptureActive(trigger.packageName)
             BillSyncCaptureLog.capture(trigger.packageName, trigger.windowId, captureEnabled)
             val captureEligible = shouldCaptureEvent(
                 captureEnabled,
@@ -349,7 +350,7 @@ internal class BillSyncCaptureCoordinator(
         eventSnapshot: AccessibilityEvent?
     ) {
         val trigger = batch.trigger
-        val captureEnabled = automaticBookkeepingEnabled
+        val captureEnabled = automaticBookkeepingEnabled && !manualCaptureActive(trigger.packageName)
         val captureAllowed = batch.eventTypeCounts.keys.any { eventType ->
             shouldCaptureEvent(captureEnabled, eventType, trigger.packageName)
         }
@@ -439,6 +440,10 @@ internal class BillSyncCaptureCoordinator(
                 return
             }
             val activePackage = root.packageName?.toString().orEmpty()
+            if (manualCaptureActive(activePackage)) {
+                recordOutcome(BillSyncCaptureOutcome.Failed("manual_backfill_active"))
+                return
+            }
             if (activePackage != ALIPAY_PACKAGE_NAME) {
                 BillSyncCaptureLog.ignored("unexpected_package", "package=$activePackage")
                 recordOutcome(BillSyncCaptureOutcome.Failed("unexpected_package"))

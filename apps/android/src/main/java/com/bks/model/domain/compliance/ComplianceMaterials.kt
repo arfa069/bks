@@ -92,8 +92,15 @@ val BKS_COMPLIANCE = ComplianceMaterials(
         PersonalInformationItem(
             name = "其他应用当前活动窗口的可见文字",
             purpose = "在用户开启自动记账后识别已完成交易并生成待确认条目",
-            requiredState = "自动记账可选，默认关闭；需要用户授予无障碍服务权限",
-            processingMethod = "仅在设备内读取可见、非密码、非输入框文字；不截图、不操作其他应用、不上传。诊断日志关闭时原始文字不保存；用户开启诊断后，仅支付宝实际采集批次正文以明文写入本机诊断目录，其他应用只记录元数据"
+            requiredState = "自动记账可选且默认关闭，补录需用户逐次开始；均需要用户授予无障碍服务权限",
+            processingMethod = "仅在设备内读取可见、非密码、非输入框文字；自动采集不截图，补录截图边界见补录账单画面项；不操作其他应用、不上传。诊断日志关闭时原始文字不保存；用户开启诊断后，仅支付宝自动采集批次正文以明文写入本机诊断目录，其他应用只记录元数据"
+        ),
+        PersonalInformationItem(
+            name = "补录账单画面",
+            purpose = "手动补录历史账单时补足无法读取的交易字段",
+            requiredState = "仅用户在待确认中开始补录，且所选应用账单详情的可见文字不足时使用",
+            processingMethod = "优先读取无障碍文字，必要时使用 Android 截图和本机 ML Kit OCR；不截图输入框、锁屏或非账单页面，不绕过系统安全窗口限制",
+            retentionAndDeletion = "画面仅在内存中处理，不保存、不上传；结束、断连或十分钟超时后停止补录"
         ),
         PersonalInformationItem(
             name = "应用故障与自动记账诊断日志",
@@ -151,6 +158,13 @@ val BKS_COMPLIANCE = ComplianceMaterials(
             declarationTokens = setOf("okhttp")
         ),
         ThirdPartyService(
+            name = "Google ML Kit 本机文字识别",
+            purpose = "仅为手动补录提供账单截图文字识别兜底",
+            personalInformationCategory = "当前账单画面及识别出的交易字段",
+            processingMethod = "使用随 APK 打包的中文模型在本机处理，不上传图片或识别文字，不保存截图；SDK 可能发送设备和性能诊断等使用指标，详见 ML Kit 数据披露",
+            declarationTokens = setOf("mlkit")
+        ),
+        ThirdPartyService(
             name = "Assists 开源无障碍组件",
             purpose = "接入 Android 无障碍服务并读取当前活动窗口节点",
             personalInformationCategory = "其他应用当前活动窗口中可见、非密码、非输入框的文字",
@@ -168,8 +182,8 @@ val BKS_COMPLIANCE = ComplianceMaterials(
         PermissionExplanation(
             id = PermissionExplanationId.AccessibilityBillSync,
             title = "自动记账无障碍服务",
-            purpose = "用于用户开启自动记账后，在设备本地识别其他应用当前活动窗口中的已完成交易。",
-            boundary = "只读取可见、非密码、非输入框文字；不截图、不点击、不滚动、不启动其他应用、不上传。诊断关闭时不保存原始文字；诊断开启时仅保存支付宝实际采集批次正文，识别结果仍只进入待确认。"
+            purpose = "用于用户开启自动记账或开始补录后，在设备本地识别已完成交易。",
+            boundary = "自动记账只读可见、非密码、非输入框文字；手动补录仅在账单文字不足时使用本机截图识别，图片不保存、不上传。不点击、不滚动、不启动其他应用；补录结束、断连或十分钟超时后停止。诊断开启时仅自动采集的支付宝批次可保存正文，结果只进入待确认。"
         ),
         PermissionExplanation(
             id = PermissionExplanationId.CloudAi,
@@ -181,7 +195,7 @@ val BKS_COMPLIANCE = ComplianceMaterials(
     storeReviewNotes = listOf(
         StoreReviewNote(
             title = "无障碍审核说明",
-            body = "无障碍服务仅在用户主动开启自动记账后运行，读取其他应用当前活动窗口中可见、非密码、非输入框的文字，并只为明确完成的交易生成待确认项；不截图、不操作其他应用、不上传。诊断日志关闭时不保存原始文字，开启时仅保存支付宝实际采集批次正文。"
+            body = "用户主动开启自动记账或开始补录后才采集；自动记账仅读取可见、非密码、非输入框文字。补录优先读字，仅字段不足且确认是所选应用的安全账单详情时截图进行本机 OCR；截图不保存、不上传，不操作其他应用，不绕过安全窗口限制。补录最长十分钟，结束或断连后停止。诊断正文留存仅适用于自动采集的支付宝批次，所有结果需在待确认中审核。"
         ),
         StoreReviewNote(
             title = "诊断日志审核说明",

@@ -61,7 +61,8 @@ internal fun BksReviewRoute(
         onAiSuggest = reviewViewModel::suggestCategory,
         onNavigateHome = onNavigateHome,
         requestedEntryId = requestedEntryId,
-        onRequestedEntryHandled = onRequestedEntryHandled
+        onRequestedEntryHandled = onRequestedEntryHandled,
+        backfillContent = { BksBillBackfillRoute(it) }
     )
 }
 

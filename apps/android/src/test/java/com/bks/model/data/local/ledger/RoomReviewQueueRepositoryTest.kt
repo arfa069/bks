@@ -89,6 +89,24 @@ class RoomReviewQueueRepositoryTest {
     }
 
     @Test
+    fun backfillStableIdentitySurvivesNewSessionConfirmationAndIgnore() = runBlocking {
+        val parser = com.bks.model.domain.billsync.BillBackfillParser(ZoneId.of("UTC"))
+        val detail = com.bks.model.domain.billsync.BACKFILL_DETAIL
+        val entry = requireNotNull(parser.parse(detail, PaymentSource.ALIPAY, NOW))
+        assertEquals(1, persistence.insertCapturedEntries(listOf(entry)).size)
+        val nextSessionEntry = requireNotNull(parser.parse(detail, PaymentSource.ALIPAY, NOW + 60_000))
+        val recreatedRepository = RoomReviewQueueRepository(database)
+        assertTrue(recreatedRepository.insertCapturedEntries(listOf(nextSessionEntry)).isEmpty())
+        recreatedRepository.execute(ReviewPersistenceCommand.Confirm(entry.id, DEFAULT_LEDGER_BOOK_ID))
+        assertEquals(1, database.ledgerEntryDao().listLedgerEntries().size)
+        assertTrue(recreatedRepository.insertCapturedEntries(listOf(nextSessionEntry)).isEmpty())
+        val second = requireNotNull(parser.parse(detail.replace("202608190001", "202608190002"), PaymentSource.ALIPAY, NOW))
+        assertEquals(1, recreatedRepository.insertCapturedEntries(listOf(second)).size)
+        recreatedRepository.execute(ReviewPersistenceCommand.Ignore(second.id))
+        assertTrue(RoomReviewQueueRepository(database).insertCapturedEntries(listOf(second)).isEmpty())
+    }
+
+    @Test
     fun observeStateRestoresPendingAndIgnoredMetadataForReviewQueue() = runBlocking {
         repository.seedSystemCategories()
         val pendingFundingAccount = repository.createFundingAccount("支付宝余额", PaymentSource.ALIPAY)

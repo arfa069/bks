@@ -88,7 +88,8 @@ internal fun ReviewQueueScreen(
     onDismissUndo: () -> Unit = {},
     onNavigateHome: () -> Unit = {},
     requestedEntryId: String? = null,
-    onRequestedEntryHandled: () -> Unit = {}
+    onRequestedEntryHandled: () -> Unit = {},
+    backfillContent: @Composable (SnackbarHostState) -> Unit = {}
 ) {
     var editingEntryId by rememberSaveable { mutableStateOf<String?>(null) }
     val editingEntry = remember(state.pendingEntries, editingEntryId) {
@@ -148,6 +149,7 @@ internal fun ReviewQueueScreen(
         ) { innerPadding ->
             ReviewQueueListContent(
                 state = state,
+                backfillContent = { backfillContent(snackbarHostState) },
                 targetLedgerName = targetLedgerName,
                 actions = ReviewQueueListActions(
                     onConfirm = { entryId ->

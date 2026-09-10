@@ -53,7 +53,7 @@ Core jobs:
 Source and runtime:
 - One persisted automatic-bookkeeping switch defaults off and represents user intent only. Missing permission or a disconnected service changes runtime status without switching the intent off.
 - The Assists accessibility service listens only for window state, window content, and window-set changes. It waits 500 ms for stability, rechecks package/window identity, excludes BKS itself, and debounces the same package/fingerprint for 30 seconds.
-- Traversal is limited to 512 nodes, 24 levels, and 16 KiB of visible, non-password, non-editable text. The service does not click, scroll, launch apps, take screenshots, or use OCR.
+- Traversal is limited to 512 nodes, 24 levels, and 16 KiB of visible, non-password, non-editable text. The service does not click, scroll, or launch apps. Automatic capture never takes screenshots or uses OCR; explicit history backfill has a separate, bounded OCR fallback.
 
 Admission and output:
 - A page must contain an explicit completed state, one unique amount, one unconflicted inflow/outflow direction, and at least one transaction-context field.
@@ -62,6 +62,12 @@ Admission and output:
 - Candidates pass through existing categorization, deduplication, and `ReviewQueuePersistence`; they enter pending only and require user confirmation before ledger insertion.
 
 ### 5.2 Review Queue
+
+“补录历史账单”位于待确认页摘要下方，沿用圆角卡片、主题色和现有按钮。用户选择支付宝或微信并明确开始后，手动切换到对应应用，逐笔打开历史账单详情；无需开启自动记账总开关。会话显示实际新增数与跳过重复数，可随时结束，十分钟超时或无障碍服务断开后自动结束，进程重启不恢复采集。导入备份或删除本机数据前结束补录并等待已开始的写入完成。
+
+优先解析无障碍文字；仅字段不足且已确认是所选应用的账单详情、屏幕解锁且没有可见输入框时，使用随 APK 打包的中文 OCR。Android 14+ 截取当前账单窗口，Android 11–13 使用经前后台检查的屏幕截图，Android 10 仅支持读字。安全窗口限制不绕过。截图仅保留在内存，不保存或上传；页面切换、会话结束后的迟到结果不得写入。
+
+历史补录要求完成状态、明确金额和方向、商户及真实交易时间；不使用当前时间代替历史时间，不从账单列表或支付中页面推测交易。结果为 `BILL_SYNC / NEEDS_REVIEW`，经现有分类和待确认持久化流程入库。以来源和交易单号生成稳定 ID；无单号时使用来源、真实时间、金额、类型和商户生成稳定 ID，重复补录已待确认、已确认或已忽略的同 ID 记录不会再次入库。
 
 New-entry notifications:
 - After automatic capture commits a genuinely new pending entry and calculates its local suggested category, send a best-effort local system notification containing merchant, amount, suggested category, capture time (labelled “识别时间”, to seconds) and source. Missing merchant/category use “商户待确认”/“未分类”.

@@ -106,7 +106,7 @@ Room 数据库仍为 `bks.db`、schema 版本为 13；schema 历史位于 `apps/
   - `SmtpEmailProviderConfig` 与 `AliyunPnvsSmsConfig` 承载 SMTP/阿里云 PNVS 的不可变配置；`SmtpEmailProvider`、`AliyunPnvsSmsProvider` 保留原 public 构造器作为兼容转发入口，环境变量名称、短信 Provider 选择值、凭据回退顺序、TLS/超时和失败映射均不变。
   - `AiCategorizationService` 只负责请求编排、Provider 调用和成功日志写入；`AiCategorizationValidation.kt` 负责请求与增强上下文授权校验，`AiCategorizationResponseValidation.kt` 负责响应白名单、脱敏解释和异常映射。取消异常继续向上传播，未知运行时异常稳定映射为 `PROVIDER_ERROR`，任何失败都不写成功日志或泄露 Provider 文本。
   - 本轮未新增路由、共享 API、环境变量、数据库表或用户流程。Backend 全量测试 213 项（3 项环境门控跳过）和 backend Detekt 通过；baseline 现仅保留 `AccountRoutesTest` 的 `LargeClass` 历史项。Android 全量、`coverageReport`、根构建和真机验收未因本轮 backend-only 改动重复执行。
-- **通用页面识别（2026-08-21）**：`BillPageParser` 是唯一解析入口，要求完成态、唯一金额、无冲突方向和交易上下文；平台专用分类器、字段提取器、OCR 与手动会话已删除。
+- **通用页面识别（2026-08-21）**：自动采集使用 `BillPageParser`，要求完成态、唯一金额、无冲突方向和交易上下文；当时移除了旧平台分类器、OCR 和手动会话。2026-09-10 恢复的历史补录采用下述独立流程，不恢复旧 feature-first 结构。
 - **第八轮 分类规则页面职责拆分（2026-08-03）**：保持规则匹配语义、规则持久化、AI 同意状态与可见 UI 行为不变，只拆分 `CategorizationRulesScreen` 的页面职责：
   - 规则列表、规则编辑对话框和 AI 设置区段分别位于 `CategorizationRuleListContent.kt`、`CategorizationRuleDialog.kt`、`CategorizationAiSettingsSection.kt`，`CategorizationAiUiState.kt` 承载 AI 设置状态；`CategorizationRulesScreen` 保留页面状态与装配。
   - 本轮未新增共享 API、数据库表或后端路由，Detekt baseline 无变化。
@@ -329,7 +329,15 @@ Session 与传输边界：
 重要边界：
 - 现行判断条件统一记录在[通用交易识别规则](./PAYMENT-RECOGNITION-RULES.md)。
 - Service 排除 BKS 自身，只读取可见、非密码、非可编辑文字，限制 512 节点、24 层和 16 KiB。
-- Service 不截图、不执行 OCR、不点击、不滚动、不启动应用。当前候选事件与最终活动根节点都只接纳支付宝；验证后的根节点包名映射为待确认条目的支付来源，并继续决定诊断批次是否保存正文。交易正文解析仍使用通用规则，不依赖支付宝专属控件。
+- Service 不点击、不滚动、不启动应用。自动采集不截图、不执行 OCR，候选事件与最终活动根节点只接纳支付宝；验证后的根节点包名映射为支付来源，并继续决定诊断批次是否保存正文。手动补录采用下面的独立会话和读字优先流程。
+
+### 历史账单补录
+
+- `BksBillBackfillRoute → BillBackfillViewModel → BillBackfillGateway / BillBackfillCoordinator` 管理用户选择、开始、结束、计数和十分钟时限。会话仅存于应用进程内，无障碍断连即结束，不修改自动记账用户开关。
+- `BillBackfillCaptureRuntime` 属于服务生命周期，每 800 ms 检查当前所选来源窗口，优先使用 `BillBackfillParser` 解析可见文字。已能解析时绝不调用 OCR；不足时仅安全账单详情可调用 `BillBackfillOcr`，最多每五秒一次，同一页面修订成功识别后不重复截图。
+- 截图前后及 OCR 完成后检查会话、来源、窗口和页面修订；锁屏、可见输入框、非账单页面和安全窗口均不进入 OCR。Android 14+ 使用窗口截图，11–13 使用屏幕截图，10 仅读字。Bitmap / HardwareBuffer / TextRecognizer 在结束或异步任务完成时释放，图片和原文不落盘。
+- `BillBackfillParser` 必须取得真实交易时间、完成状态、商户、金额和无冲突方向，生成稳定 `backfill-` SHA-256 ID 和 `BILL_SYNC` 来源原因。`BillSyncCaptureProcessor.persist` 复用分类、串行采集锁、Room 去重和通知派发；结果只进入待确认。
+- 结束操作先关闭新采集准入，再等待已开始的持久化完成并汇总计数。旧 session 的识别结果不会写入新 session；本机数据替换开始前结束补录。补录所选来源暂不进入自动采集入口，避免两个流程同时采集同一页面。
 - 付款发起、密码输入、待支付、处理中、失败、取消以及金额/方向冲突优先拒绝。
 - Manifest 保持 `exported=false`，无 `packageNames` 和 `canTakeScreenshot`；微信包查询仅供微信登录。
 

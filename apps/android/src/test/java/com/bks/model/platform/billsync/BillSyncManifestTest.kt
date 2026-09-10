@@ -24,7 +24,7 @@ class BillSyncManifestTest {
         assertTrue(manifest.contains("com.ven.assists.utils.AssistsFileProvider"))
         assertTrue(manifest.contains("com.ven.assists.ui.ClipboardActivity"))
         assertFalse(service.contains("packageNames"))
-        assertFalse(service.contains("canTakeScreenshot"))
+        assertTrue(service.contains("android:canTakeScreenshot=\"true\""))
         assertTrue(
             service.contains(
                 "android:accessibilityEventTypes=\"typeViewClicked|typeWindowStateChanged|" +
@@ -34,6 +34,7 @@ class BillSyncManifestTest {
         assertFalse(service.contains("typeAllMask"))
         assertTrue(service.contains("flagRequestEnhancedWebAccessibility"))
         assertTrue(build.contains("io.github.ven-coder:assists-base:3.5.5"))
+        assertTrue(build.contains("com.google.mlkit:text-recognition-chinese:16.0.1"))
         assertFalse(build.contains("mlkit.text.recognition"))
         assertFalse(versions.contains("mlkit", ignoreCase = true))
         assertFalse(proguard.contains("mlkit", ignoreCase = true))

@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">阿喵记账</string>
     <string name="bill_sync_accessibility_label">自动记账</string>
-    <string name="bill_sync_accessibility_description">开启自动记账后，仅在本机读取其他应用当前活动窗口中可见、非输入框的文字，用于生成待确认交易；不会截图、操作其他应用、保存或上传原始页面文字</string>
+    <string name="bill_sync_accessibility_description">自动记账读取可见、非输入框文字；手动开始补录后，文字不足时可截图识别所选应用的账单详情。补录截图仅在本机内存中处理，不保存、不上传，不操作其他应用。结果需在待确认中审核；自动记账诊断日志的留存规则详见合规与隐私。</string>
 </resources>

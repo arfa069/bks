@@ -140,7 +140,10 @@ internal fun dataAndBackupFactory(
         serializeWithSync = container.ledgerSyncCoordinator::withLocalDataReplacement,
         runLocalDataReplacement = ledgerViewModel::runLocalDataReplacement,
         clearLocalData = ledgerViewModel::clearLocalData,
-        awaitReviewIdle = reviewQueueViewModel::awaitIdleAndResetForLocalDataReplacement,
+        awaitReviewIdle = {
+            container.billBackfillCoordinator.finish()
+            reviewQueueViewModel.awaitIdleAndResetForLocalDataReplacement()
+        },
         clearAvatarCache = clearAvatarCache,
         clearCloudSettingsLocalState = applicationOwners.cloudSettingsCoordinator::clearLocalState,
         disableSync = applicationOwners.ledgerSyncRuntime::disable,

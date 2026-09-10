@@ -62,7 +62,8 @@ internal fun ReviewQueueListContent(
     state: ReviewQueueUiState,
     targetLedgerName: String,
     actions: ReviewQueueListActions,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backfillContent: @Composable () -> Unit = {}
 ) {
     val sortedEntries = remember(state.pendingEntries) { state.sortedPendingEntries }
 
@@ -94,6 +95,10 @@ internal fun ReviewQueueListContent(
 
             item(key = "review-summary") {
                 ReviewSummaryCard(state)
+            }
+
+            item(key = "review-backfill") {
+                backfillContent()
             }
 
             item(key = "review-list-header") {
