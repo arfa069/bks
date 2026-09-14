@@ -1,6 +1,7 @@
 package com.bks.model.platform.billsync
 
 import android.os.Build
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ven.assists.AssistsCore
@@ -90,17 +91,17 @@ internal fun AccessibilityNodeInfo.collectReadableText(): String = collectReadab
 
 @Suppress("CyclomaticComplexMethod")
 internal fun AccessibilityNodeInfo.collectReadablePageCapture(): ReadablePageCapture {
-    val lines = linkedSetOf<String>()
+    val lines = linkedMapOf<String, Rect>()
     var visitedNodes = 0
     var collectedCharacters = 0
     var nodeLimitReached = false
 
-    fun add(value: CharSequence?) {
+    fun add(value: CharSequence?, bounds: Rect) {
         val line = value?.toString()?.trim()?.takeIf(String::isNotBlank) ?: return
         if (line in lines) return
         val addedCharacters = line.length + if (lines.isEmpty()) 0 else 1
         if (collectedCharacters + addedCharacters > MAX_CAPTURE_CHARACTERS) return
-        lines += line
+        lines[line] = bounds
         collectedCharacters += addedCharacters
     }
 
@@ -111,12 +112,13 @@ internal fun AccessibilityNodeInfo.collectReadablePageCapture(): ReadablePageCap
         visitedNodes += 1
         if (node.isPassword || node.isEditable) continue
         if (node.isVisibleToUser) {
-            add(node.text)
-            add(node.contentDescription)
-            add(node.hintText)
-            add(node.paneTitle)
-            add(node.tooltipText)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) add(node.stateDescription)
+            val bounds = Rect().also(node::getBoundsInScreen)
+            add(node.text, bounds)
+            add(node.contentDescription, bounds)
+            add(node.hintText, bounds)
+            add(node.paneTitle, bounds)
+            add(node.tooltipText, bounds)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) add(node.stateDescription, bounds)
         }
         if (depth == MAX_CAPTURE_DEPTH || collectedCharacters >= MAX_CAPTURE_CHARACTERS) continue
         for (index in 0 until node.childCount) {
@@ -129,7 +131,9 @@ internal fun AccessibilityNodeInfo.collectReadablePageCapture(): ReadablePageCap
     }
 
     return ReadablePageCapture(
-        pageText = lines.joinToString("\n"),
+        // Traverse breadth first to keep the node budget, then restore visual reading order.
+        pageText = lines.entries.sortedWith(compareBy({ it.value.top }, { it.value.left }))
+            .joinToString("\n") { it.key },
         visitedNodeCount = visitedNodes,
         nodeLimitReached = nodeLimitReached || pendingNodes.isNotEmpty()
     )

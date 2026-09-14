@@ -11,6 +11,19 @@ import org.junit.Test
 class BillPageParserTest {
     private val parser = BillPageParser()
 
+    @Test fun detailHeaderMerchantPrecedesAccessibleAmountAndWinsOverPaymentControls() {
+        val entry = parse("返回\n账单详情\n全部账单\n\ue642\n肯德基（测试咖啡店）\n支出9.7元\n交易成功\n" +
+            "管理极速付款\n极速付款\n支付时间\n2026-09-11 08:15:00\n付款方式\n上海银行信用购").single()
+        assertEquals("肯德基（测试咖啡店）", entry.merchantTitle)
+        assertEquals(970L, entry.amountMinor)
+        assertTrue(!entry.merchantTitleFromFallback)
+    }
+
+    @Test fun incompleteDetailHeaderDoesNotUsePaymentManagementAsMerchant() {
+        val entry = parse("账单详情\n支出9.7元\n交易成功\n管理极速付款\n极速付款\n付款方式\n上海银行信用购").single()
+        assertTrue(entry.merchantTitleFromFallback)
+    }
+
     @Test
     fun recognizesGenericOutflowAndExtractsMerchant() {
         val entry = parse("支付成功\n¥35.90\n商户：社区便利店\n交易时间 2026-08-21 09:12").single()

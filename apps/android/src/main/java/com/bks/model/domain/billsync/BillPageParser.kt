@@ -111,6 +111,14 @@ class BillPageParser {
                     ?.let { return it }
             }
         }
+        val detailTitleIndex = lines.indexOfFirst { it in BILL_DETAIL_TITLES }
+        if (detailTitleIndex >= 0) {
+            val header = lines.drop(detailTitleIndex + 1).takeWhile { line ->
+                !PLAIN_AMOUNT_REGEX.matches(line) && !DIRECTIONAL_AMOUNT_REGEX.matches(line) &&
+                    COMPLETED_STATUS.none(line::contains)
+            }
+            return header.map(String::normalizeMerchantValue).filter(::isStandaloneMerchantValue).singleOrNull()
+        }
         val completedStatusIndex = lines.indexOfFirst { line ->
             COMPLETED_STATUS.any { status -> line == status }
         }
@@ -124,6 +132,7 @@ class BillPageParser {
 
     private fun isMerchantValue(value: String): Boolean =
         value.isNotBlank() &&
+            value.any(Char::isLetter) &&
             value.length <= MAX_MERCHANT_LENGTH &&
             !PAYMENT_METHOD_REGEX.matches(value) &&
             MERCHANT_PROMOTION_TEXT.none(value::contains) &&
@@ -204,7 +213,9 @@ private val CONTEXT_LABELS = listOf(
     "支付方式", "交易时间", "创建时间", "账单", "交易方式"
 )
 private val MERCHANT_LABELS = listOf("商户名称", "商户", "收款方", "付款方", "交易对象", "对方", "商品")
-private val MERCHANT_NAVIGATION_LABELS = setOf("回首页", "完成")
+private val MERCHANT_NAVIGATION_LABELS = setOf("回首页", "完成", "返回", "全部账单", "账单详情", "交易详情", "账单明细", "支付凭证")
+private val BILL_DETAIL_TITLES = setOf("账单详情", "交易详情", "账单明细", "支付凭证")
+private val DIRECTIONAL_AMOUNT_REGEX = Regex("(?:支出|收入)\\s*[0-9]+(?:\\.[0-9]{1,2})?\\s*元")
 private val PAYMENT_METHOD_REGEX = Regex(
     "^(?:花呗(?:分期)?|余额宝|余额|支付宝余额|银行卡|信用卡|储蓄卡|借记卡|信用购|" +
         ".{1,24}银行(?:信用购|信用卡|储蓄卡|借记卡|贷记卡))(?:\\s*[（(][^()（）]{1,24}[）)])?$"

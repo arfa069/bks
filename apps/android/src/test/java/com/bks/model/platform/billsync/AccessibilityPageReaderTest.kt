@@ -199,6 +199,48 @@ class AccessibilityPageReaderTest {
         assertTrue(breadthFirstRoot.collectReadableText().contains("支付成功￥4.99"))
     }
 
+    @Test
+    fun nestedMerchantUsesVisualOrderForBothParsers() {
+        val root = node()
+        fun addAt(text: String, top: Int, parent: AccessibilityNodeInfo = root): AccessibilityNodeInfo =
+            node(text).also {
+                it.setBoundsInScreen(android.graphics.Rect(0, top, 300, top + 30))
+                shadowOf(parent).addChild(it)
+            }
+        addAt("账单详情", 10)
+        addAt("支出10.2元", 200)
+        addAt("交易成功", 240)
+        addAt("付款方式", 300)
+        addAt("上海银行信用购", 340)
+        addAt("支付时间", 380)
+        addAt("2026-09-14 08:23:53", 420)
+        val nested = addAt("", 100)
+        addAt("肯德基（测试咖啡店）", 150, nested)
+        val text = root.collectReadableText()
+        assertTrue(text.indexOf("肯德基") < text.indexOf("支出10.2元"))
+        assertEquals("肯德基（测试咖啡店）", com.bks.model.domain.billsync.BillPageParser()
+            .parse(text, "2026-09-14 09:00").single().merchantTitle)
+        assertEquals("肯德基（测试咖啡店）", com.bks.model.domain.billsync.BillBackfillParser()
+            .parse(text, com.bks.model.domain.ledger.PaymentSource.ALIPAY, 1)?.merchantTitle)
+    }
+
+    @Test
+    fun paymentResultFindsNestedMerchantBeforeFundingLabelOnFirstRead() {
+        val root = node()
+        val status = node("支付成功￥9.70").apply { setBoundsInScreen(android.graphics.Rect(0, 10, 300, 40)) }
+        val completed = node("支付成功").apply { setBoundsInScreen(android.graphics.Rect(0, 50, 300, 80)) }
+        val funding = node("交易方式").apply { setBoundsInScreen(android.graphics.Rect(0, 300, 300, 330)) }
+        val container = node()
+        listOf(status, completed, funding, container).forEach { shadowOf(root).addChild(it) }
+        shadowOf(container).addChild(node("肯德基（测试咖啡店）").apply {
+            setBoundsInScreen(android.graphics.Rect(0, 200, 300, 230))
+        })
+        val entry = com.bks.model.domain.billsync.BillPageParser()
+            .parse(root.collectReadableText(), "2026-09-11 08:15").single()
+        assertEquals("肯德基（测试咖啡店）", entry.merchantTitle)
+        assertFalse(entry.merchantTitleFromFallback)
+    }
+
     @Suppress("DEPRECATION")
     private fun node(
         text: String = "",

@@ -13,6 +13,17 @@ import org.junit.Test
 class BillBackfillParserTest {
     private val parser = BillBackfillParser(ZoneId.of("Asia/Shanghai"))
 
+    @Test fun alipayAccessibleDirectionAmountAndUnlabeledMerchantAreAccepted() {
+        val text = "账单详情\n肯德基（测试咖啡店）\n支出10.2元\n交易成功\n管理极速付款\n极速付款\n" +
+            "支付时间\n2026-09-14 08:23:53\n付款方式\n上海银行信用购\n商品说明\nKFC_TEST_ORDER"
+        val entry = requireNotNull(parser.parse(text, PaymentSource.ALIPAY, 1))
+        assertEquals("肯德基（测试咖啡店）", entry.merchantTitle)
+        assertEquals(1020L, entry.amountMinor)
+        assertEquals(TransactionKind.EXPENSE, entry.transactionKind)
+        assertEquals(TransactionKind.INCOME, parser.parse(text.replace("支出", "收入"), PaymentSource.ALIPAY, 1)?.transactionKind)
+        assertNull(parser.parse(text.replace("交易成功", "收款成功"), PaymentSource.ALIPAY, 1))
+    }
+
     @Test fun detailUsesHistoricalTimeSourceAndStableOrderIdentity() {
         val entry = requireNotNull(parser.parse(BACKFILL_DETAIL, PaymentSource.ALIPAY, 1))
         assertEquals(1234L, entry.amountMinor)

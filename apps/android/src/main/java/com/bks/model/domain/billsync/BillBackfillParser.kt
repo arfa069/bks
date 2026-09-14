@@ -28,7 +28,7 @@ class BillBackfillParser(private val zoneId: ZoneId = ZoneId.systemDefault()) {
             field(lines, listOf(label))?.let { TIME.find(it)?.value }
         } ?: TIME.findAll(text).map { it.value }.distinct().toList().singleOrNull() ?: return null
         val transactionTime = parseTime(date) ?: return null
-        val signedAmounts = lines.mapNotNull { SIGNED_AMOUNT.matchEntire(it)?.groupValues?.get(1) }.distinct()
+        val signedAmounts = lines.mapNotNull(::backfillSignedAmount).distinct()
         val labeledAmount = field(lines, AMOUNT_LABELS)?.let { AMOUNT.matchEntire(it)?.groupValues?.get(1) }
         val amountText = labeledAmount ?: signedAmounts.singleOrNull() ?: return null
         val amount = parseAmountMinor(amountText.removePrefix("-")) ?: return null
@@ -42,7 +42,7 @@ class BillBackfillParser(private val zoneId: ZoneId = ZoneId.systemDefault()) {
             listOf("支付成功", "付款成功", "已支付", "扣款成功").any { status == it || lines.contains(it) }
         if (inflow == outflow) return null
         val merchant = field(lines, MERCHANT_LABELS)?.takeIf(::isMerchant)
-            ?: lines.indexOfFirst { SIGNED_AMOUNT.matches(it) }.takeIf { it > 0 }
+            ?: lines.indexOfFirst { backfillSignedAmount(it) != null }.takeIf { it > 0 }
                 ?.let { lines[it - 1] }?.takeIf(::isMerchant)
             ?: return null
         val kind = when {
@@ -129,3 +129,11 @@ private val TIME = Regex("\\d{4}[-/.年]\\d{1,2}[-/.月]\\d{1,2}日?\\s+\\d{1,2}
 private val SIGNED_AMOUNT = Regex("(?:[¥￥]\\s*)?([+-]\\d{1,9}(?:,\\d{3})*(?:\\.\\d{1,2})?)(?:\\s*元)?")
 private val AMOUNT = Regex("(?:[¥￥]\\s*)?([+-]?\\d{1,9}(?:,\\d{3})*(?:\\.\\d{1,2})?)(?:\\s*元)?")
 private val ORDER = Regex("[A-Za-z0-9_-]{6,80}")
+
+private fun backfillSignedAmount(line: String): String? =
+    SIGNED_AMOUNT.matchEntire(line)?.groupValues?.get(1)
+        ?: DIRECTIONAL_AMOUNT.matchEntire(line)?.let {
+            (if (it.groupValues[1] == "支出") "-" else "+") + it.groupValues[2]
+        }
+
+private val DIRECTIONAL_AMOUNT = Regex("(支出|收入)\\s*([0-9]{1,9}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)\\s*元")
