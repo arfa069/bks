@@ -14,7 +14,8 @@ data class BillSyncResult(
     val recognized: Boolean,
     val createdEntries: List<PendingEntry>,
     val failureReason: BillSyncFailureReason? = null,
-    val insertedCount: Int = 0
+    val insertedCount: Int = 0,
+    val merchantMissing: Boolean = false
 )
 
 class BillSyncPipeline(
@@ -40,6 +41,7 @@ class BillSyncPipeline(
 
         return BillSyncResult(
             recognized = true,
+            merchantMissing = parseResult.entries.any { it.merchantTitleFromFallback },
             createdEntries = parseResult.entries.map {
                 it.toPendingEntry(capturedAtEpochMillis, paymentSource)
             }

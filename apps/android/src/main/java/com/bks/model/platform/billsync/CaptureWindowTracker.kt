@@ -1,5 +1,6 @@
 package com.bks.model.platform.billsync
 
+@Suppress("TooManyFunctions")
 internal class CaptureWindowTracker {
     private val accepted = mutableMapOf<Pair<String, Int>, AcceptedWindow>()
     private val deferredCaptures = mutableMapOf<Pair<String, Int>, BillSyncCaptureBatch>()
@@ -14,6 +15,10 @@ internal class CaptureWindowTracker {
         accepted[key] = AcceptedWindow(persistenceInFlight = true)
         return true
     }
+
+    @Synchronized
+    fun canCompleteMerchant(packageName: String, windowId: Int): Boolean =
+        accepted[packageName to windowId]?.let { it.persistenceInFlight && !it.releaseRequested } == true
 
     @Synchronized
     fun deferIfPersistenceInFlight(batch: BillSyncCaptureBatch): Boolean {

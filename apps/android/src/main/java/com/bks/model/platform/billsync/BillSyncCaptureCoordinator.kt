@@ -465,7 +465,12 @@ internal class BillSyncCaptureCoordinator(
                         recognizeWithTiming(pageText, paymentSource) { recognizeMillis = it }
                     },
                     persist = { result ->
-                        persistWithTiming(result) { persistMillis = it }
+                        val complete = completeMissingMerchant(result) {
+                            withContext(captureDispatcher) {
+                                readMerchantRetry(session, activePackage, requireNotNull(capturedWindowId))
+                            }
+                        }
+                        persistWithTiming(complete) { persistMillis = it }
                     },
                     launch = { block ->
                         session.scope.launch {
@@ -496,6 +501,16 @@ internal class BillSyncCaptureCoordinator(
             recordOutcome(BillSyncCaptureOutcome.Failed("capture_failed"))
             BillSyncCaptureLog.failed(trigger.packageName, trigger.windowId, error)
         }
+    }
+
+    private fun readMerchantRetry(session: BillSyncCaptureSession, packageName: String, windowId: Int): BillSyncResult? {
+        val sessionActive = synchronized(this) { captureSession === session && automaticBookkeepingEnabled }
+        if (!sessionActive || manualCaptureActive(packageName) ||
+            !windowTracker.canCompleteMerchant(packageName, windowId)) return null
+        val root = rootsProvider(AssistsCore.NodeLookupScope.ActiveWindow).firstOrNull {
+            it.packageName?.toString() == packageName && it.windowId == windowId
+        } ?: return null
+        return processor.recognize(pageReader.read(root).pageText, paymentSourceForPackage(packageName))
     }
 
     private fun recognizeWithTiming(
